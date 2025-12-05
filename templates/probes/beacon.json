@@ -1,0 +1,47 @@
+{
+  "id": "beacon",
+  "name": "Beacon Eddy Current Probe",
+  "manufacturer": "Beacon3D",
+  "type": "eddy_current",
+  "connection": "USB",
+  "source": "https://beacon3d.com/",
+  "description": "High-precision eddy current probe with integrated accelerometer. Requires Beacon Klipper plugin.",
+
+  "features": {
+    "contact_mode": true,
+    "accelerometer": true,
+    "temperature_compensation": true,
+    "mesh_calibration": true
+  },
+
+  "klipper_config": {
+    "beacon": {
+      "serial": "/dev/serial/by-id/usb-Beacon_Beacon_RevH_XXXXXXXX-if00",
+      "x_offset": 0,
+      "y_offset": 0,
+      "mesh_main_direction": "x",
+      "mesh_runs": 2,
+      "contact_max_hotend_temperature": 180
+    },
+    "stepper_z": {
+      "endstop_pin": "probe:z_virtual_endstop",
+      "homing_retract_dist": 0
+    },
+    "safe_z_home": {
+      "z_hop": 10
+    }
+  },
+
+  "installation_notes": [
+    "Beacon requires the Beacon Klipper plugin to be installed",
+    "Install via: cd ~ && git clone https://github.com/beacon3d/beacon_klipper.git",
+    "Then run: ./beacon_klipper/install.sh",
+    "Beacon Contact mode requires Rev H or later hardware"
+  ],
+
+  "versions": {
+    "rev_d": "Original version",
+    "rev_h": "Contact mode support, improved accuracy"
+  }
+}
+

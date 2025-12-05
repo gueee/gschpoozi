@@ -1,0 +1,114 @@
+{
+  "extruders": {
+    "sherpa-mini": {
+      "name": "Sherpa Mini",
+      "manufacturer": "Annex Engineering",
+      "type": "direct_drive",
+      "gear_ratio": "50:10",
+      "rotation_distance": 22.67895,
+      "microsteps": 32,
+      "full_steps_per_rotation": 200,
+      "pressure_advance": 0.04,
+      "notes": "Calibrate rotation_distance for your specific unit"
+    },
+
+    "orbiter-v2": {
+      "name": "Orbiter v2.0",
+      "manufacturer": "Orbiter Projects / LDO",
+      "type": "direct_drive",
+      "gear_ratio": "7.5:1",
+      "rotation_distance": 4.637,
+      "microsteps": 16,
+      "full_steps_per_rotation": 200,
+      "pressure_advance": 0.025,
+      "notes": "Planetary gear extruder"
+    },
+
+    "orbiter-v2.5": {
+      "name": "Orbiter v2.5",
+      "manufacturer": "Orbiter Projects / LDO",
+      "type": "direct_drive",
+      "gear_ratio": "7.5:1",
+      "rotation_distance": 4.637,
+      "microsteps": 16,
+      "full_steps_per_rotation": 200,
+      "pressure_advance": 0.025,
+      "run_current": 0.85,
+      "notes": "Updated version with improved gears. Same rotation_distance as v2.0"
+    },
+
+    "smart-orbiter-v3": {
+      "name": "Smart Orbiter v3 (SO3)",
+      "manufacturer": "Orbiter Projects / LDO",
+      "type": "direct_drive",
+      "gear_ratio": "7.5:1",
+      "rotation_distance": 4.69,
+      "microsteps": 32,
+      "full_steps_per_rotation": 200,
+      "pressure_advance": 0.015,
+      "run_current": 0.8,
+      "notes": "All-in-one extruder with integrated electronics"
+    },
+
+    "clockwork-2": {
+      "name": "Clockwork 2 (CW2)",
+      "manufacturer": "Voron Design",
+      "type": "direct_drive",
+      "gear_ratio": "50:10",
+      "rotation_distance": 22.6789511,
+      "microsteps": 32,
+      "full_steps_per_rotation": 200,
+      "pressure_advance": 0.04,
+      "notes": "Standard Voron Stealthburner extruder"
+    },
+
+    "galileo-2": {
+      "name": "Galileo 2",
+      "manufacturer": "JaredC01",
+      "type": "direct_drive",
+      "gear_ratio": "9:1",
+      "rotation_distance": 47.088,
+      "microsteps": 16,
+      "full_steps_per_rotation": 200,
+      "pressure_advance": 0.035,
+      "notes": "High-torque planetary extruder"
+    },
+
+    "lgx-lite": {
+      "name": "LGX Lite",
+      "manufacturer": "Bondtech",
+      "type": "direct_drive",
+      "gear_ratio": "44:8",
+      "rotation_distance": 8,
+      "microsteps": 16,
+      "full_steps_per_rotation": 200,
+      "pressure_advance": 0.04,
+      "notes": "Compact Bondtech dual-drive extruder"
+    },
+
+    "bmg": {
+      "name": "BMG / BMG Clone",
+      "manufacturer": "Bondtech / Various",
+      "type": "direct_drive",
+      "gear_ratio": "50:17",
+      "rotation_distance": 22.6789511,
+      "microsteps": 16,
+      "full_steps_per_rotation": 200,
+      "pressure_advance": 0.05,
+      "notes": "Popular dual-drive extruder"
+    },
+
+    "ww-bmg": {
+      "name": "Worm Wheel BMG (WW-BMG)",
+      "manufacturer": "Community",
+      "type": "direct_drive",
+      "gear_ratio": "50:17",
+      "rotation_distance": 22.6789511,
+      "microsteps": 16,
+      "full_steps_per_rotation": 200,
+      "pressure_advance": 0.05,
+      "notes": "BMG variant with worm wheel design"
+    }
+  }
+}
+

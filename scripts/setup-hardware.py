@@ -633,16 +633,22 @@ def get_required_motor_functions() -> List[str]:
     Calculate required motor functions based on wizard state and toolboard selection.
     
     Returns list like: ['stepper_x', 'stepper_y', 'stepper_z', 'stepper_z1', 'extruder']
+    For AWD: ['stepper_x', 'stepper_x1', 'stepper_y', 'stepper_y1', 'stepper_z', ...]
     
     Extruder is ONLY included if NO toolboard is selected (extruder on toolboard otherwise).
     """
     wizard_state = load_wizard_state()
+    kinematics = wizard_state.get('kinematics', 'corexy')
     
-    # Start with X and Y (always needed)
+    # Start with X and Y
     functions = ['stepper_x', 'stepper_y']
     
+    # AWD kinematics needs X1 and Y1 as well
+    if kinematics == 'corexy-awd':
+        functions = ['stepper_x', 'stepper_x1', 'stepper_y', 'stepper_y1']
+    
     # Add Z steppers based on count
-    z_count = int(wizard_state.get('z_stepper_count', '1'))
+    z_count = int(wizard_state.get('z_stepper_count', '1') or '1')
     functions.append('stepper_z')
     for i in range(1, z_count):
         functions.append(f'stepper_z{i}')

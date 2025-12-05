@@ -239,6 +239,28 @@ def generate_hardware_cfg(
     lines.append("homing_retract_dist: 5")
     lines.append("")
     
+    # AWD: Add X1 and Y1 steppers
+    if kinematics == 'corexy-awd':
+        x1_port = assignments.get('stepper_x1', 'MOTOR_2')
+        x1_pins = get_motor_pins(board, x1_port)
+        lines.append(f"[stepper_x1]")
+        lines.append(f"step_pin: {x1_pins['step_pin']}      # {x1_port}")
+        lines.append(f"dir_pin: {x1_pins['dir_pin']}       # {x1_port}")
+        lines.append(f"enable_pin: !{x1_pins['enable_pin']}  # {x1_port}")
+        lines.append("microsteps: 16")
+        lines.append("rotation_distance: 40")
+        lines.append("")
+        
+        y1_port = assignments.get('stepper_y1', 'MOTOR_3')
+        y1_pins = get_motor_pins(board, y1_port)
+        lines.append(f"[stepper_y1]")
+        lines.append(f"step_pin: {y1_pins['step_pin']}      # {y1_port}")
+        lines.append(f"dir_pin: {y1_pins['dir_pin']}       # {y1_port}")
+        lines.append(f"enable_pin: !{y1_pins['enable_pin']}  # {y1_port}")
+        lines.append("microsteps: 16")
+        lines.append("rotation_distance: 40")
+        lines.append("")
+    
     # Stepper Z (and Z1, Z2, Z3 if multi-Z)
     for z_idx in range(z_count):
         suffix = "" if z_idx == 0 else str(z_idx)

@@ -200,46 +200,76 @@ is_probe_installed() {
 install_probe_module() {
     local probe="$1"
     
+    # Disable exit-on-error for installation (we handle errors ourselves)
+    set +e
+    
     case "$probe" in
         beacon)
             echo -e "\n${CYAN}Installing Beacon Klipper module...${NC}"
             if [[ -d "${HOME}/beacon_klipper" ]]; then
-                echo -e "${YELLOW}Beacon already installed, updating...${NC}"
-                cd "${HOME}/beacon_klipper" && git pull
+                echo -e "${YELLOW}Beacon directory exists, updating...${NC}"
+                cd "${HOME}/beacon_klipper"
+                git fetch --all
+                git reset --hard origin/main || git reset --hard origin/master
+                git pull || true
             else
                 cd "${HOME}"
-                git clone https://github.com/beacon3d/beacon_klipper.git
+                if ! git clone https://github.com/beacon3d/beacon_klipper.git; then
+                    echo -e "${RED}Failed to clone Beacon repository${NC}"
+                    set -e
+                    return 1
+                fi
             fi
             echo -e "${CYAN}Running Beacon install script...${NC}"
-            "${HOME}/beacon_klipper/install.sh"
+            if [[ -x "${HOME}/beacon_klipper/install.sh" ]]; then
+                "${HOME}/beacon_klipper/install.sh" || echo -e "${YELLOW}Install script returned non-zero (may be OK)${NC}"
+            fi
             add_probe_update_manager "beacon"
             echo -e "${GREEN}Beacon installation complete!${NC}"
             ;;
         cartographer)
             echo -e "\n${CYAN}Installing Cartographer Klipper module...${NC}"
             if [[ -d "${HOME}/cartographer-klipper" ]]; then
-                echo -e "${YELLOW}Cartographer already installed, updating...${NC}"
-                cd "${HOME}/cartographer-klipper" && git pull
+                echo -e "${YELLOW}Cartographer directory exists, updating...${NC}"
+                cd "${HOME}/cartographer-klipper"
+                git fetch --all
+                git reset --hard origin/main || git reset --hard origin/master
+                git pull || true
             else
                 cd "${HOME}"
-                git clone https://github.com/Cartographer3D/cartographer-klipper.git
+                if ! git clone https://github.com/Cartographer3D/cartographer-klipper.git; then
+                    echo -e "${RED}Failed to clone Cartographer repository${NC}"
+                    set -e
+                    return 1
+                fi
             fi
             echo -e "${CYAN}Running Cartographer install script...${NC}"
-            "${HOME}/cartographer-klipper/install.sh"
+            if [[ -x "${HOME}/cartographer-klipper/install.sh" ]]; then
+                "${HOME}/cartographer-klipper/install.sh" || echo -e "${YELLOW}Install script returned non-zero (may be OK)${NC}"
+            fi
             add_probe_update_manager "cartographer"
             echo -e "${GREEN}Cartographer installation complete!${NC}"
             ;;
         btt-eddy)
             echo -e "\n${CYAN}Installing BTT Eddy module...${NC}"
             if [[ -d "${HOME}/Eddy" ]]; then
-                echo -e "${YELLOW}BTT Eddy already installed, updating...${NC}"
-                cd "${HOME}/Eddy" && git pull
+                echo -e "${YELLOW}BTT Eddy directory exists, updating...${NC}"
+                cd "${HOME}/Eddy"
+                git fetch --all
+                git reset --hard origin/main || git reset --hard origin/master
+                git pull || true
             else
                 cd "${HOME}"
-                git clone https://github.com/bigtreetech/Eddy.git
+                if ! git clone https://github.com/bigtreetech/Eddy.git; then
+                    echo -e "${RED}Failed to clone BTT Eddy repository${NC}"
+                    set -e
+                    return 1
+                fi
             fi
             echo -e "${CYAN}Running BTT Eddy install script...${NC}"
-            "${HOME}/Eddy/install.sh"
+            if [[ -x "${HOME}/Eddy/install.sh" ]]; then
+                "${HOME}/Eddy/install.sh" || echo -e "${YELLOW}Install script returned non-zero (may be OK)${NC}"
+            fi
             add_probe_update_manager "btt-eddy"
             echo -e "${GREEN}BTT Eddy installation complete!${NC}"
             ;;
@@ -247,6 +277,9 @@ install_probe_module() {
             echo -e "${YELLOW}No installation required for ${probe}${NC}"
             ;;
     esac
+    
+    # Re-enable exit-on-error
+    set -e
 }
 
 # Add probe update manager entry to moonraker.conf

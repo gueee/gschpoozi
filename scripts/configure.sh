@@ -446,6 +446,204 @@ install_script: tools/install.sh"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MCU SERIAL DETECTION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Detect USB MCUs by scanning /dev/serial/by-id/
+# Returns array of paths, one per line
+detect_usb_mcus() {
+    local devices=()
+    
+    if [[ -d "/dev/serial/by-id" ]]; then
+        for device in /dev/serial/by-id/*; do
+            if [[ -e "$device" ]]; then
+                # Filter for Klipper-flashed devices (contain "Klipper" or common MCU names)
+                local basename=$(basename "$device")
+                if [[ "$basename" == *Klipper* ]] || \
+                   [[ "$basename" == *stm32* ]] || \
+                   [[ "$basename" == *rp2040* ]] || \
+                   [[ "$basename" == *BIGTREETECH* ]] || \
+                   [[ "$basename" == *Mellow* ]] || \
+                   [[ "$basename" == *Katapult* ]]; then
+                    echo "$device"
+                fi
+            fi
+        done
+    fi
+}
+
+# Get human-readable description from serial path
+get_mcu_description() {
+    local serial_path="$1"
+    local basename=$(basename "$serial_path")
+    
+    # Extract useful info from the serial ID
+    # Format: usb-Klipper_stm32h723xx_SERIALNUM-if00
+    local desc=""
+    
+    if [[ "$basename" == *Klipper* ]]; then
+        # Extract MCU type (e.g., stm32h723xx, rp2040)
+        if [[ "$basename" =~ Klipper_([^_]+) ]]; then
+            desc="${BASH_REMATCH[1]}"
+        fi
+    elif [[ "$basename" == *BIGTREETECH* ]]; then
+        desc="BTT device"
+    elif [[ "$basename" == *Mellow* ]]; then
+        desc="Mellow device"
+    elif [[ "$basename" == *Katapult* ]]; then
+        desc="Katapult bootloader"
+    else
+        desc="USB device"
+    fi
+    
+    echo "$desc"
+}
+
+# Detect CAN MCUs using canbus_query.py
+# Returns UUIDs, one per line
+detect_can_mcus() {
+    local can_interface="${1:-can0}"
+    local query_script="${HOME}/klipper/scripts/canbus_query.py"
+    local python_env="${HOME}/klippy-env/bin/python"
+    
+    # Check if CAN interface exists
+    if ! ip link show "$can_interface" &>/dev/null; then
+        return
+    fi
+    
+    # Check if query script exists
+    if [[ ! -f "$query_script" ]]; then
+        return
+    fi
+    
+    # Run canbus query and parse UUIDs
+    if [[ -x "$python_env" ]]; then
+        "$python_env" "$query_script" "$can_interface" 2>/dev/null | \
+            grep -oE '[0-9a-f]{12}' || true
+    fi
+}
+
+# Interactive menu to select MCU serial
+select_mcu_serial() {
+    local role="$1"  # "main" or "toolboard"
+    local connection_type="${2:-usb}"  # "usb" or "can"
+    
+    clear_screen
+    print_header "Select ${role^} MCU"
+    
+    if [[ "$connection_type" == "can" ]]; then
+        echo -e "${BCYAN}${BOX_V}${NC}  Scanning CAN bus for devices..."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        
+        local -a uuids
+        mapfile -t uuids < <(detect_can_mcus)
+        
+        if [[ ${#uuids[@]} -eq 0 ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}No CAN devices found.${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}  Make sure:"
+            echo -e "${BCYAN}${BOX_V}${NC}  - CAN interface is up (can0)"
+            echo -e "${BCYAN}${BOX_V}${NC}  - Device is powered and connected"
+            echo -e "${BCYAN}${BOX_V}${NC}  - Device has Klipper/Katapult firmware"
+            print_footer
+            wait_for_key
+            return 1
+        fi
+        
+        local num=1
+        for uuid in "${uuids[@]}"; do
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} ${uuid}"
+            ((num++))
+        done
+        
+        print_separator
+        print_action_item "M" "Enter manually"
+        print_action_item "B" "Back"
+        print_footer
+        
+        echo -en "${BYELLOW}Select device${NC}: "
+        read -r choice
+        
+        if [[ "$choice" == [mM] ]]; then
+            echo -en "${BYELLOW}Enter canbus_uuid${NC}: "
+            read -r manual_uuid
+            if [[ "$role" == "main" ]]; then
+                WIZARD_STATE[mcu_canbus_uuid]="$manual_uuid"
+            else
+                WIZARD_STATE[toolboard_canbus_uuid]="$manual_uuid"
+            fi
+        elif [[ "$choice" == [bB] ]]; then
+            return 1
+        else
+            local idx=$((choice - 1))
+            if [[ $idx -ge 0 && $idx -lt ${#uuids[@]} ]]; then
+                if [[ "$role" == "main" ]]; then
+                    WIZARD_STATE[mcu_canbus_uuid]="${uuids[$idx]}"
+                else
+                    WIZARD_STATE[toolboard_canbus_uuid]="${uuids[$idx]}"
+                fi
+            fi
+        fi
+    else
+        # USB device selection
+        echo -e "${BCYAN}${BOX_V}${NC}  Scanning USB for Klipper MCUs..."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        
+        local -a devices
+        mapfile -t devices < <(detect_usb_mcus)
+        
+        if [[ ${#devices[@]} -eq 0 ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}No Klipper USB devices found.${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}  Make sure:"
+            echo -e "${BCYAN}${BOX_V}${NC}  - MCU is connected via USB"
+            echo -e "${BCYAN}${BOX_V}${NC}  - MCU has Klipper firmware flashed"
+            print_footer
+            wait_for_key
+            return 1
+        fi
+        
+        local num=1
+        for device in "${devices[@]}"; do
+            local desc=$(get_mcu_description "$device")
+            local basename=$(basename "$device")
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} ${CYAN}${desc}${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}      ${WHITE}${basename}${NC}"
+            ((num++))
+        done
+        
+        print_separator
+        print_action_item "M" "Enter path manually"
+        print_action_item "B" "Back"
+        print_footer
+        
+        echo -en "${BYELLOW}Select device${NC}: "
+        read -r choice
+        
+        if [[ "$choice" == [mM] ]]; then
+            echo -en "${BYELLOW}Enter serial path${NC}: "
+            read -r manual_path
+            if [[ "$role" == "main" ]]; then
+                WIZARD_STATE[mcu_serial]="$manual_path"
+            else
+                WIZARD_STATE[toolboard_serial]="$manual_path"
+            fi
+        elif [[ "$choice" == [bB] ]]; then
+            return 1
+        else
+            local idx=$((choice - 1))
+            if [[ $idx -ge 0 && $idx -lt ${#devices[@]} ]]; then
+                if [[ "$role" == "main" ]]; then
+                    WIZARD_STATE[mcu_serial]="${devices[$idx]}"
+                else
+                    WIZARD_STATE[toolboard_serial]="${devices[$idx]}"
+                fi
+            fi
+        fi
+    fi
+    
+    return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # STATE MANAGEMENT
 # ═══════════════════════════════════════════════════════════════════════════════
 

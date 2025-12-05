@@ -14,9 +14,11 @@ https://github.com/gueee/gschpoozi
 
 import json
 import os
+import re
+import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -170,6 +172,240 @@ def load_available_toolboards() -> Dict[str, Dict]:
     return toolboards
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MCU SERIAL DETECTION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def detect_usb_mcus() -> List[Tuple[str, str]]:
+    """
+    Detect USB MCUs by scanning /dev/serial/by-id/.
+    Returns list of (serial_path, description) tuples.
+    """
+    devices = []
+    serial_dir = Path("/dev/serial/by-id")
+    
+    if not serial_dir.exists():
+        return devices
+    
+    for device in serial_dir.iterdir():
+        name = device.name
+        # Filter for Klipper-related devices
+        if any(x in name.lower() for x in ['klipper', 'stm32', 'rp2040', 'bigtreetech', 'mellow', 'katapult']):
+            # Extract description from device name
+            desc = "USB device"
+            if 'klipper' in name.lower():
+                # Extract MCU type: usb-Klipper_stm32h723xx_...
+                match = re.search(r'Klipper_([^_]+)', name)
+                if match:
+                    desc = match.group(1)
+            elif 'bigtreetech' in name.lower():
+                desc = "BTT device"
+            elif 'mellow' in name.lower():
+                desc = "Mellow device"
+            elif 'katapult' in name.lower():
+                desc = "Katapult bootloader"
+            
+            devices.append((str(device), desc))
+    
+    return devices
+
+def detect_can_mcus(interface: str = "can0") -> List[str]:
+    """
+    Detect CAN MCUs using canbus_query.py.
+    Returns list of canbus UUIDs.
+    """
+    uuids = []
+    
+    # Check if CAN interface exists
+    try:
+        result = subprocess.run(
+            ["ip", "link", "show", interface],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return uuids
+    except FileNotFoundError:
+        return uuids
+    
+    # Find canbus_query.py
+    query_script = Path.home() / "klipper" / "scripts" / "canbus_query.py"
+    python_env = Path.home() / "klippy-env" / "bin" / "python"
+    
+    if not query_script.exists() or not python_env.exists():
+        return uuids
+    
+    try:
+        result = subprocess.run(
+            [str(python_env), str(query_script), interface],
+            capture_output=True, text=True, timeout=10
+        )
+        # Parse UUIDs from output (12-character hex strings)
+        uuids = re.findall(r'[0-9a-f]{12}', result.stdout.lower())
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    
+    return uuids
+
+def select_mcu_serial(role: str = "main", connection: str = "usb") -> Optional[str]:
+    """
+    Interactive menu to select MCU serial ID.
+    role: "main" or "toolboard"
+    connection: "usb" or "can"
+    Returns selected serial path or UUID, or None if cancelled.
+    """
+    clear_screen()
+    print_header(f"Select {role.title()} MCU Serial")
+    
+    if connection == "can":
+        print_info("Scanning CAN bus for devices...")
+        print_info("")
+        
+        uuids = detect_can_mcus()
+        
+        if not uuids:
+            print_info(f"{Colors.YELLOW}No CAN devices found.{Colors.NC}")
+            print_info("Make sure:")
+            print_info("  - CAN interface (can0) is up")
+            print_info("  - Device is powered and connected")
+            print_info("  - Device has Klipper/Katapult firmware")
+            print_separator()
+            print_action("M", "Enter UUID manually")
+            print_action("B", "Back")
+            print_footer()
+            
+            choice = prompt("Select option").strip().lower()
+            if choice == 'm':
+                return prompt("Enter canbus_uuid").strip()
+            return None
+        
+        # Display found UUIDs
+        for i, uuid in enumerate(uuids, 1):
+            print_menu_item(str(i), f"UUID: {uuid}", "", "")
+        
+        print_separator()
+        print_action("M", "Enter UUID manually")
+        print_action("B", "Back")
+        print_footer()
+        
+        choice = prompt("Select device").strip()
+        
+        if choice.lower() == 'b':
+            return None
+        if choice.lower() == 'm':
+            return prompt("Enter canbus_uuid").strip()
+        
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(uuids):
+                return uuids[idx]
+        except ValueError:
+            pass
+        
+        return None
+    
+    else:  # USB
+        print_info("Scanning USB for Klipper MCUs...")
+        print_info("")
+        
+        devices = detect_usb_mcus()
+        
+        if not devices:
+            print_info(f"{Colors.YELLOW}No Klipper USB devices found.{Colors.NC}")
+            print_info("Make sure:")
+            print_info("  - MCU is connected via USB")
+            print_info("  - MCU has Klipper firmware flashed")
+            print_separator()
+            print_action("M", "Enter path manually")
+            print_action("B", "Back")
+            print_footer()
+            
+            choice = prompt("Select option").strip().lower()
+            if choice == 'm':
+                return prompt("Enter serial path").strip()
+            return None
+        
+        # Display found devices
+        for i, (path, desc) in enumerate(devices, 1):
+            basename = Path(path).name
+            print_info(f"{Colors.BWHITE}{i}){Colors.NC} {Colors.CYAN}{desc}{Colors.NC}")
+            print_info(f"    {Colors.WHITE}{basename}{Colors.NC}")
+        
+        print_separator()
+        print_action("M", "Enter path manually")
+        print_action("B", "Back")
+        print_footer()
+        
+        choice = prompt("Select device").strip()
+        
+        if choice.lower() == 'b':
+            return None
+        if choice.lower() == 'm':
+            return prompt("Enter serial path").strip()
+        
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(devices):
+                return devices[idx][0]
+        except ValueError:
+            pass
+        
+        return None
+
+def assign_mcu_serials():
+    """Interactive menu to assign MCU serial IDs."""
+    toolboards = load_available_toolboards()
+    has_toolboard = state.toolboard_id and state.toolboard_id != "none"
+    toolboard = toolboards.get(state.toolboard_id) if has_toolboard else None
+    
+    while True:
+        clear_screen()
+        print_header("MCU Serial Configuration")
+        
+        # Show current assignments
+        mcu_status = "done" if state.mcu_serial else ""
+        mcu_display = state.mcu_serial or "not configured"
+        if state.mcu_serial and len(state.mcu_serial) > 50:
+            mcu_display = "..." + state.mcu_serial[-47:]
+        print_menu_item("1", "Main MCU (USB)", mcu_display, mcu_status)
+        
+        if has_toolboard:
+            tb_connection = toolboard.get('connection', 'USB').upper() if toolboard else 'USB'
+            
+            if tb_connection == 'CAN':
+                tb_status = "done" if state.toolboard_canbus_uuid else ""
+                tb_display = state.toolboard_canbus_uuid or "not configured"
+                print_menu_item("2", f"Toolboard ({tb_connection})", tb_display, tb_status)
+            else:
+                tb_status = "done" if state.toolboard_serial else ""
+                tb_display = state.toolboard_serial or "not configured"
+                if state.toolboard_serial and len(state.toolboard_serial) > 50:
+                    tb_display = "..." + state.toolboard_serial[-47:]
+                print_menu_item("2", f"Toolboard ({tb_connection})", tb_display, tb_status)
+        
+        print_separator()
+        print_action("D", "Done")
+        print_action("B", "Back")
+        print_footer()
+        
+        choice = prompt("Select option").strip().lower()
+        
+        if choice == '1':
+            result = select_mcu_serial("main", "usb")
+            if result:
+                state.mcu_serial = result
+        elif choice == '2' and has_toolboard:
+            tb_connection = toolboard.get('connection', 'USB').upper() if toolboard else 'USB'
+            if tb_connection == 'CAN':
+                result = select_mcu_serial("toolboard", "can")
+                if result:
+                    state.toolboard_canbus_uuid = result
+            else:
+                result = select_mcu_serial("toolboard", "usb")
+                if result:
+                    state.toolboard_serial = result
+        elif choice in ('d', 'b'):
+            return
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # STATE MANAGEMENT
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -183,6 +419,10 @@ class HardwareState:
         self.toolboard_name: Optional[str] = None
         self.port_assignments: Dict[str, str] = {}  # function -> port
         self.toolboard_assignments: Dict[str, str] = {}
+        # MCU serial IDs
+        self.mcu_serial: Optional[str] = None
+        self.toolboard_serial: Optional[str] = None
+        self.toolboard_canbus_uuid: Optional[str] = None
         
     def save(self, filepath: Path = STATE_FILE):
         """Save state to JSON file."""
@@ -193,6 +433,9 @@ class HardwareState:
             'toolboard_name': self.toolboard_name,
             'port_assignments': self.port_assignments,
             'toolboard_assignments': self.toolboard_assignments,
+            'mcu_serial': self.mcu_serial,
+            'toolboard_serial': self.toolboard_serial,
+            'toolboard_canbus_uuid': self.toolboard_canbus_uuid,
         }
         with open(filepath, 'w') as f:
             json.dump(data, f, indent=2)
@@ -212,6 +455,9 @@ class HardwareState:
             self.toolboard_name = data.get('toolboard_name')
             self.port_assignments = data.get('port_assignments', {})
             self.toolboard_assignments = data.get('toolboard_assignments', {})
+            self.mcu_serial = data.get('mcu_serial')
+            self.toolboard_serial = data.get('toolboard_serial')
+            self.toolboard_canbus_uuid = data.get('toolboard_canbus_uuid')
             return True
         except (json.JSONDecodeError, KeyError):
             return False
@@ -815,6 +1061,24 @@ def main_menu():
             if not has_toolboard:
                 fan_info += " + part cooling + hotend"
             print_menu_item("6", "Fan Ports", fan_info, fans_status)
+            
+            # MCU Serial configuration
+            mcu_status = "done" if state.mcu_serial else ""
+            tb_serial_status = ""
+            if has_toolboard:
+                toolboards = load_available_toolboards()
+                tb = toolboards.get(state.toolboard_id)
+                tb_conn = tb.get('connection', 'USB').upper() if tb else 'USB'
+                if tb_conn == 'CAN':
+                    tb_serial_status = "done" if state.toolboard_canbus_uuid else ""
+                else:
+                    tb_serial_status = "done" if state.toolboard_serial else ""
+            
+            serial_status = "done" if mcu_status == "done" and (not has_toolboard or tb_serial_status == "done") else ""
+            serial_info = "main MCU"
+            if has_toolboard:
+                serial_info += " + toolboard"
+            print_menu_item("7", "MCU Serial IDs", serial_info, serial_status)
         else:
             print_info(f"  {Colors.YELLOW}Select a board first to configure ports{Colors.NC}")
         
@@ -847,6 +1111,8 @@ def main_menu():
             board = boards.get(state.board_id)
             if board:
                 assign_fan_ports(board)
+        elif choice == '7' and state.board_id:
+            assign_mcu_serials()
         elif choice == 's':
             state.save()
             print(f"\n{Colors.GREEN}Configuration saved to {STATE_FILE}{Colors.NC}")

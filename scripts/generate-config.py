@@ -162,8 +162,14 @@ def generate_hardware_cfg(
     lines.append("# MCU")
     lines.append("# " + "─" * 77)
     lines.append("[mcu]")
-    lines.append("serial: /dev/serial/by-id/REPLACE_WITH_YOUR_MCU_ID")
-    lines.append("# Run: ls /dev/serial/by-id/* to find your MCU")
+    
+    # Use stored serial if available, otherwise placeholder
+    mcu_serial = hardware_state.get('mcu_serial')
+    if mcu_serial:
+        lines.append(f"serial: {mcu_serial}")
+    else:
+        lines.append("serial: /dev/serial/by-id/REPLACE_WITH_YOUR_MCU_ID")
+        lines.append("# Run: ls /dev/serial/by-id/* to find your MCU")
     lines.append("")
     
     # Toolboard MCU if present
@@ -173,12 +179,22 @@ def generate_hardware_cfg(
         lines.append(f"[mcu toolboard]")
         
         if tb_connection == 'CAN':
-            lines.append("canbus_uuid: REPLACE_WITH_CANBUS_UUID")
-            lines.append("# Run: ~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0")
-            lines.append("# to find your toolboard's canbus_uuid")
+            # Use stored canbus_uuid if available
+            canbus_uuid = hardware_state.get('toolboard_canbus_uuid')
+            if canbus_uuid:
+                lines.append(f"canbus_uuid: {canbus_uuid}")
+            else:
+                lines.append("canbus_uuid: REPLACE_WITH_CANBUS_UUID")
+                lines.append("# Run: ~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0")
+                lines.append("# to find your toolboard's canbus_uuid")
         else:
-            lines.append("serial: /dev/serial/by-id/REPLACE_WITH_TOOLBOARD_ID")
-            lines.append("# Run: ls /dev/serial/by-id/* to find your toolboard")
+            # Use stored serial if available
+            tb_serial = hardware_state.get('toolboard_serial')
+            if tb_serial:
+                lines.append(f"serial: {tb_serial}")
+            else:
+                lines.append("serial: /dev/serial/by-id/REPLACE_WITH_TOOLBOARD_ID")
+                lines.append("# Run: ls /dev/serial/by-id/* to find your toolboard")
         
         lines.append(f"# {tb_name} ({tb_connection})")
         lines.append("")

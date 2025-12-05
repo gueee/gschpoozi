@@ -281,14 +281,24 @@ def generate_hardware_cfg(
             probe_type = wizard_state.get('probe_type', '')
             if probe_type == 'beacon':
                 lines.append("endstop_pin: beacon:z_virtual_endstop")
+                lines.append("homing_retract_dist: 0  # Beacon requires this")
+                lines.append("position_endstop: 0")
             elif probe_type == 'cartographer':
                 lines.append("endstop_pin: cartographer:z_virtual_endstop")
+                lines.append("homing_retract_dist: 0  # Cartographer requires this")
+                lines.append("position_endstop: 0")
             elif probe_type == 'btt-eddy':
                 lines.append("endstop_pin: btt_eddy:z_virtual_endstop")
+                lines.append("homing_retract_dist: 0  # Eddy probe requires this")
+                lines.append("position_endstop: 0")
             elif probe_type in ('bltouch', 'klicky', 'inductive'):
                 lines.append("endstop_pin: probe:z_virtual_endstop")
+                lines.append("position_endstop: 0")
+                lines.append("homing_retract_dist: 5")
             else:
                 lines.append("endstop_pin: REPLACE_PIN  # Physical Z endstop")
+                lines.append("position_endstop: 0  # Adjust after homing")
+                lines.append("homing_retract_dist: 5")
             lines.append("position_min: -5")
             lines.append(f"position_max: {bed_z}")
             lines.append("homing_speed: 15")

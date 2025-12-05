@@ -1,9 +1,18 @@
 {
   "id": "btt-sb2209-v1-0",
-  "name": "BTT SB2209 v1.0",
+  "name": "BTT SB2209 v1.0 (CAN)",
   "manufacturer": "BigTreeTech",
-  "source": "Extracted from Klippain (GPL-3.0)",
-  "motor_ports": {},
+  "connection": "CAN",
+  "source": "Extracted from Klippain (GPL-3.0) + BTT documentation",
+  "motor_ports": {
+    "EXTRUDER": {
+      "label": "Extruder (TMC2209)",
+      "step_pin": "PD0",
+      "dir_pin": "PD1",
+      "enable_pin": "PD2",
+      "uart_pin": "PA15"
+    }
+  },
   "heater_ports": {
     "HE0": {
       "label": "Heater 0",
@@ -55,6 +64,22 @@
     "NEOPIXEL": {
       "label": "NeoPixel/RGB LED",
       "pin": "PD3"
+    },
+    "ADXL345_CS": {
+      "label": "ADXL345 Chip Select",
+      "pin": "PB12"
     }
+  },
+  "accelerometer": {
+    "type": "ADXL345",
+    "cs_pin": "PB12",
+    "spi_bus": "spi2"
+  },
+  "default_assignments": {
+    "extruder": "EXTRUDER",
+    "heater_extruder": "HE0",
+    "thermistor_extruder": "TH0",
+    "fan_part_cooling": "FAN1_PWM",
+    "fan_hotend": "FAN2_PWM"
   }
 }

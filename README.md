@@ -4,14 +4,15 @@
 
 **gschpoozi** makes setting up Klipper easy. Instead of copying and editing complex config files, run the wizard, answer questions about your printer, and get a clean, working configuration.
 
-## Why gschpoozi?
+Inspired by [Klippain](https://github.com/Frix-x/klippain), but built from the ground up with simplicity as the #1 priority.
 
-| Problem | gschpoozi Solution |
-|---------|-------------------|
-| Klippain is complex with nested includes | Flat, readable config files |
-| Hard to know what to configure | Wizard guides you step by step |
-| Updates can break customizations | Your `printer.cfg` is never touched |
-| Config files are overwhelming | Only generates what you need |
+## Features
+
+- **Interactive Wizard** - Step-by-step setup, no config editing required
+- **Port-Based Hardware Setup** - Visual pin assignment for any board
+- **Clean Output** - Generates readable, well-commented config files
+- **Safe Updates** - Your customizations are never overwritten
+- **Modular Design** - Only generates what you actually need
 
 ## Quick Start
 
@@ -29,22 +30,22 @@ cd ~ && git clone https://github.com/gueee/gschpoozi.git
 
 ## How It Works
 
-The wizard asks about your hardware:
-1. **Board/MCU** - What controller board?
-2. **Kinematics** - CoreXY, Cartesian, etc.
-3. **Steppers** - Motor drivers
-4. **Extruder** - Direct drive or Bowden
-5. **Bed** - Size and thermistor
-6. **Probe** - BLTouch, Beacon, etc.
-7. **Extras** - Filament sensor, LEDs
+The wizard guides you through your hardware setup:
+
+1. **Toolhead Board** - Optional (EBB36, SHT36, etc.)
+2. **Kinematics** - CoreXY, Cartesian + Z motor count
+3. **Stepper Drivers** - Per-axis driver selection
+4. **Main Board** - Controller board with port assignment
+5. **Extruder, Bed, Probe** - Temperature and sensor config
+6. **Extras** - Filament sensor, LEDs, chamber heating
 
 Then generates clean config files:
 
 ```
 ~/printer_data/config/
 ├── printer.cfg           # Your file - includes + overrides + SAVE_CONFIG
-└── gschpoozi/            # Generated configs (read-only)
-    ├── hardware.cfg      # MCU, steppers, heaters
+└── gschpoozi/            # Generated configs (managed by wizard)
+    ├── hardware.cfg      # MCU, steppers, heaters, fans
     ├── macros.cfg        # PRINT_START, PRINT_END, etc.
     └── homing.cfg        # Homing and bed mesh
 ```
@@ -112,13 +113,16 @@ variable_my_var: 100       # Add your own variables
 
 ## Supported Hardware
 
-### Boards
+### Controller Boards
 - BTT Octopus v1.1 / Pro
 - BTT Manta M8P v2.0
 - BTT SKR Mini E3 v3
-- Creality v4.2.7
-- MKS Robin Nano v3
 - More coming...
+
+### Toolhead Boards
+- BTT EBB36 / EBB42
+- Mellow SHT36 / SHT42
+- Huvud
 
 ### Probes
 - BLTouch / 3DTouch
@@ -144,10 +148,3 @@ Contributions are welcome! Feel free to:
 ## License
 
 GPL-3.0 - See [LICENSE](LICENSE)
-
-## Credits
-
-Inspired by [Klippain](https://github.com/Frix-x/klippain) but designed to be simpler.
-
-Built with the help of the Klipper community.
-

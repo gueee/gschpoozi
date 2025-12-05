@@ -221,9 +221,16 @@ def generate_hardware_cfg(
     else:
         lines.append(f"endstop_pin: ^REPLACE_PIN  # Configure X endstop port")
     
-    lines.append("position_min: 0")
-    lines.append(f"position_max: {bed_x}")
-    lines.append(f"position_endstop: {bed_x}")
+    # Homing position - check wizard state for endstop location
+    x_home = wizard_state.get('home_x', 'max')  # 'min' or 'max'
+    if x_home == 'min':
+        lines.append("position_min: 0")
+        lines.append(f"position_max: {bed_x}")
+        lines.append("position_endstop: 0")
+    else:
+        lines.append("position_min: 0")
+        lines.append(f"position_max: {bed_x}")
+        lines.append(f"position_endstop: {bed_x}")
     lines.append("homing_speed: 80")
     lines.append("homing_retract_dist: 5")
     lines.append("")
@@ -247,9 +254,16 @@ def generate_hardware_cfg(
     else:
         lines.append(f"endstop_pin: ^REPLACE_PIN  # Configure Y endstop port")
     
-    lines.append("position_min: 0")
-    lines.append(f"position_max: {bed_y}")
-    lines.append(f"position_endstop: {bed_y}")
+    # Homing position - check wizard state for endstop location
+    y_home = wizard_state.get('home_y', 'max')  # 'min' or 'max'
+    if y_home == 'min':
+        lines.append("position_min: 0")
+        lines.append(f"position_max: {bed_y}")
+        lines.append("position_endstop: 0")
+    else:
+        lines.append("position_min: 0")
+        lines.append(f"position_max: {bed_y}")
+        lines.append(f"position_endstop: {bed_y}")
     lines.append("homing_speed: 80")
     lines.append("homing_retract_dist: 5")
     lines.append("")

@@ -741,6 +741,50 @@ menu_z_config() {
         [bB]) return ;;
         *) ;;
     esac
+    
+    # Now ask about homing direction
+    menu_homing
+}
+
+menu_homing() {
+    clear_screen
+    print_header "Homing Direction"
+    
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Where are your X/Y endstops located?${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  (This determines homing direction)"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    
+    print_menu_item "1" "" "X=MAX, Y=MAX (back-right corner) - Voron style"
+    print_menu_item "2" "" "X=MIN, Y=MIN (front-left corner) - Prusa/Ender style"
+    print_menu_item "3" "" "X=MIN, Y=MAX (back-left corner)"
+    print_menu_item "4" "" "X=MAX, Y=MIN (front-right corner)"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+    
+    echo -en "${BYELLOW}Select endstop location${NC}: "
+    read -r choice
+    
+    case "$choice" in
+        1) 
+            WIZARD_STATE[home_x]="max"
+            WIZARD_STATE[home_y]="max"
+            ;;
+        2) 
+            WIZARD_STATE[home_x]="min"
+            WIZARD_STATE[home_y]="min"
+            ;;
+        3) 
+            WIZARD_STATE[home_x]="min"
+            WIZARD_STATE[home_y]="max"
+            ;;
+        4) 
+            WIZARD_STATE[home_x]="max"
+            WIZARD_STATE[home_y]="min"
+            ;;
+        [bB]) return ;;
+        *) ;;
+    esac
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════

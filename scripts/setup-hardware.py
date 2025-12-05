@@ -795,81 +795,136 @@ def assign_endstop_ports(board: Dict):
         wait_for_key()
         return
     
-    clear_screen()
-    print_header("Assign Endstop Ports")
-    
     endstop_list = list(endstop_ports.keys())
     wizard_state = load_wizard_state()
-    kinematics = wizard_state.get('kinematics', 'corexy')
     probe_type = wizard_state.get('probe_type', '')
     
     # Determine required endstops
     required_endstops = ['endstop_x', 'endstop_y']
     
-    # AWD may need X1 and Y1 endstops for sensorless homing
-    # (but typically CoreXY AWD uses shared endstops)
-    
     # Z endstop only needed if NOT using a probe with virtual endstop
     if probe_type in ('', 'none', 'endstop'):
         required_endstops.append('endstop_z')
     
-    for endstop_func in required_endstops:
+    while True:
         clear_screen()
-        print_header(f"Select Port for: {endstop_func.replace('_', ' ').title()}")
+        print_header("Assign Endstop Ports")
         
-        print_info(f"Available endstop/GPIO ports:")
+        # Show current assignments
+        print_info(f"{Colors.BWHITE}Current Endstop Assignments:{Colors.NC}")
         print_info("")
         
         num = 1
-        for port_name in endstop_list:
-            port = endstop_ports[port_name]
-            label = port.get('label', port_name)
-            
-            # Check if already used
-            used_by = None
-            for func, assigned_port in state.port_assignments.items():
-                if assigned_port == port_name and func != endstop_func:
-                    used_by = func
-                    break
-            
-            if used_by:
-                status_text = f"{Colors.YELLOW}(used by {used_by}){Colors.NC}"
+        for endstop_func in required_endstops:
+            current_port = state.port_assignments.get(endstop_func, "")
+            if current_port == "sensorless":
+                display = "Sensorless (DIAG pin)"
+            elif current_port:
+                port_info = endstop_ports.get(current_port, {})
+                label = port_info.get('label', current_port)
+                display = f"{current_port} - {label}"
             else:
-                status_text = ""
+                display = "not assigned"
             
-            current = state.port_assignments.get(endstop_func, "")
-            status = "done" if current == port_name else ""
-            print_menu_item(str(num), f"{port_name} - {label}", status_text, status)
+            status = "done" if current_port else ""
+            axis_name = endstop_func.replace('endstop_', '').upper()
+            print_menu_item(str(num), f"{axis_name} Endstop", display, status)
             num += 1
         
-        # Option for sensorless homing (uses DIAG pin from driver)
         print_info("")
-        print_menu_item(str(num), "Sensorless homing (DIAG pin)", "Uses TMC driver", "")
+        print_info(f"{Colors.BWHITE}Available Ports:{Colors.NC}")
+        for port_name in endstop_list[:6]:  # Show first 6
+            port = endstop_ports[port_name]
+            label = port.get('label', port_name)
+            # Check if used
+            used_by = [k for k, v in state.port_assignments.items() if v == port_name]
+            if used_by:
+                print_info(f"  {port_name}: {label} {Colors.YELLOW}({used_by[0]}){Colors.NC}")
+            else:
+                print_info(f"  {port_name}: {label}")
+        if len(endstop_list) > 6:
+            print_info(f"  ... and {len(endstop_list) - 6} more")
         
         print_separator()
-        print_action("S", "Skip this endstop")
+        print_action("D", "Done")
         print_action("B", "Back")
         print_footer()
         
-        choice = prompt("Select port").strip()
+        choice = prompt("Select endstop to configure (1-3), or action").strip().lower()
         
-        if choice.lower() == 'b':
+        if choice == 'd' or choice == 'b':
             return
-        elif choice.lower() == 's':
-            continue
         
         try:
             idx = int(choice) - 1
-            if 0 <= idx < len(endstop_list):
-                state.port_assignments[endstop_func] = endstop_list[idx]
-            elif idx == len(endstop_list):
-                # Sensorless homing
-                state.port_assignments[endstop_func] = "sensorless"
+            if 0 <= idx < len(required_endstops):
+                endstop_func = required_endstops[idx]
+                select_endstop_port(endstop_func, endstop_ports, endstop_list)
         except ValueError:
             pass
+
+def select_endstop_port(endstop_func: str, endstop_ports: Dict, endstop_list: List):
+    """Select a specific port for an endstop function."""
+    clear_screen()
+    axis_name = endstop_func.replace('endstop_', '').upper()
+    print_header(f"Select Port for {axis_name} Endstop")
     
-    print(f"\n{Colors.GREEN}Endstop assignments saved!{Colors.NC}")
-    wait_for_key()
+    print_info(f"Available ports:")
+    print_info("")
+    
+    num = 1
+    for port_name in endstop_list:
+        port = endstop_ports[port_name]
+        label = port.get('label', port_name)
+        
+        # Check if already used by another function
+        used_by = None
+        for func, assigned_port in state.port_assignments.items():
+            if assigned_port == port_name and func != endstop_func:
+                used_by = func
+                break
+        
+        if used_by:
+            status_text = f"{Colors.YELLOW}(used by {used_by}){Colors.NC}"
+        else:
+            status_text = ""
+        
+        current = state.port_assignments.get(endstop_func, "")
+        status = "done" if current == port_name else ""
+        print_menu_item(str(num), f"{port_name} - {label}", status_text, status)
+        num += 1
+    
+    # Sensorless homing option
+    print_info("")
+    current = state.port_assignments.get(endstop_func, "")
+    sensorless_status = "done" if current == "sensorless" else ""
+    print_menu_item(str(num), "Sensorless homing (DIAG pin)", "Uses TMC driver", sensorless_status)
+    sensorless_idx = num
+    
+    # Clear option
+    print_menu_item(str(num + 1), "Clear assignment", "", "")
+    
+    print_separator()
+    print_action("B", "Back")
+    print_footer()
+    
+    choice = prompt("Select port").strip()
+    
+    if choice.lower() == 'b':
+        return
+    
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(endstop_list):
+            state.port_assignments[endstop_func] = endstop_list[idx]
+        elif idx == sensorless_idx - 1:
+            state.port_assignments[endstop_func] = "sensorless"
+        elif idx == sensorless_idx:
+            # Clear assignment
+            if endstop_func in state.port_assignments:
+                del state.port_assignments[endstop_func]
+    except ValueError:
+        pass
 
 def assign_fan_ports(board: Dict):
     """Assign fan ports."""

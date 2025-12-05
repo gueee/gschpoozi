@@ -1,0 +1,32 @@
+{
+  "id": "mellow-fly-utoc-1",
+  "name": "Mellow Fly UTOC-1",
+  "manufacturer": "Mellow",
+  "type": "usb-can-adapter",
+  "description": "USB to CAN adapter with single CAN output, based on STM32F072",
+  "source": "https://github.com/Mellow-3D/Fly-UTOC",
+
+  "can_interface": "can0",
+  "default_bitrate": 1000000,
+  
+  "setup_instructions": [
+    "1. Connect UTOC-1 to Pi via USB",
+    "2. Flash with CAN bridge firmware if not pre-flashed",
+    "3. Create /etc/network/interfaces.d/can0 with:",
+    "   allow-hotplug can0",
+    "   iface can0 can static",
+    "       bitrate 1000000",
+    "       up ifconfig $IFACE txqueuelen 1024",
+    "4. Reboot or run: sudo ip link set can0 up type can bitrate 1000000",
+    "5. Check with: ip -s link show can0"
+  ],
+  
+  "find_uuid_command": "~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0",
+  
+  "notes": [
+    "Single CAN output - suitable for one toolboard",
+    "Ensure 120 ohm termination at each end of CAN bus",
+    "Default firmware may use 500000 bitrate - check your toolboard settings"
+  ]
+}
+

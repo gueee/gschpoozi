@@ -1,0 +1,104 @@
+{
+  "id": "orbitool-so3",
+  "name": "Orbitool SO3",
+  "manufacturer": "Orbiter Projects / LDO Motors",
+  "mcu": "stm32f042x6",
+  "mcu_name": "SO3",
+  "connection": "USB",
+  "source": "https://github.com/RobertLorincz/Orbiter-Toolboards",
+  "description": "USB toolhead board with TMC2209, LIS2DW12 accelerometer, fans with tachometer",
+
+  "motor_ports": {
+    "EXTRUDER": {
+      "label": "Extruder (TMC2209)",
+      "step_pin": "PB7",
+      "dir_pin": "PB6",
+      "enable_pin": "PB4",
+      "uart_pin": "PB5"
+    }
+  },
+
+  "heater_ports": {
+    "HE": {
+      "label": "Hotend Heater",
+      "pin": "PA0"
+    }
+  },
+
+  "thermistor_ports": {
+    "TH0": {
+      "label": "Hotend Thermistor",
+      "pin": "PA2",
+      "pullup": "4.7K"
+    },
+    "TH1": {
+      "label": "Extruder Body Thermistor",
+      "pin": "PB1",
+      "pullup": "4.7K"
+    }
+  },
+
+  "fan_ports": {
+    "FAN0": {
+      "label": "Part Cooling Fan",
+      "pin": "PA14",
+      "pwm": true
+    },
+    "FAN1": {
+      "label": "Hotend Fan",
+      "pin": "PA8",
+      "pwm": true,
+      "inverted": true,
+      "tachometer_pin": "PA3"
+    }
+  },
+
+  "endstop_ports": {
+    "X_STOP": {
+      "label": "X Endstop",
+      "pin": "PB0"
+    },
+    "PROBE": {
+      "label": "Z Probe Input",
+      "pin": "PA15"
+    }
+  },
+
+  "misc_ports": {
+    "SERVO": {
+      "label": "Probe Servo",
+      "pin": "PB3"
+    },
+    "RGB": {
+      "label": "NeoPixel RGB",
+      "pin": "PB8"
+    },
+    "HOTEND_LED": {
+      "label": "Hotend Light",
+      "pin": "PA9"
+    },
+    "FILAMENT_SENSOR": {
+      "label": "Filament Sensor",
+      "pin": "PA13"
+    },
+    "FILAMENT_UNLOAD": {
+      "label": "Unload Button",
+      "pin": "PA10"
+    }
+  },
+
+  "accelerometer": {
+    "type": "LIS2DW12",
+    "cs_pin": "PA4",
+    "spi_bus": "spi1"
+  },
+
+  "default_assignments": {
+    "extruder": "EXTRUDER",
+    "heater_extruder": "HE",
+    "thermistor_extruder": "TH0",
+    "fan_part_cooling": "FAN0",
+    "fan_hotend": "FAN1"
+  }
+}
+

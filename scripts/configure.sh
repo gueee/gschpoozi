@@ -374,6 +374,24 @@ info_tags:
     fi
 }
 
+# Add Crowsnest update manager entry to moonraker.conf
+add_crowsnest_update_manager() {
+    local moonraker_conf="${DEFAULT_CONFIG_DIR}/moonraker.conf"
+    
+    if ! grep -q "\[update_manager crowsnest" "$moonraker_conf" 2>/dev/null; then
+        local entry="
+[update_manager crowsnest]
+type: git_repo
+path: ~/crowsnest
+origin: https://github.com/mainsail-crew/crowsnest.git
+managed_services: crowsnest
+install_script: tools/pkglist.sh"
+        
+        echo -e "${CYAN}Adding Crowsnest to Moonraker update manager...${NC}"
+        echo "$entry" | sudo tee -a "$moonraker_conf" > /dev/null
+    fi
+}
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # STATE MANAGEMENT
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1196,6 +1214,13 @@ menu_extras() {
     echo -e "${BCYAN}${BOX_V}${NC}  5) ${led_status} Status LEDs (NeoPixel on toolhead)"
     echo -e "${BCYAN}${BOX_V}${NC}  6) ${cl_status} Case Lighting"
     
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Camera:${NC}"
+    
+    local cam_status=$([[ "${WIZARD_STATE[has_camera]}" == "yes" ]] && echo "[x]" || echo "[ ]")
+    
+    echo -e "${BCYAN}${BOX_V}${NC}  7) ${cam_status} Webcam (Crowsnest)"
+    
     print_separator
     print_action_item "B" "Back to Main Menu"
     print_footer
@@ -1258,6 +1283,16 @@ menu_extras() {
             fi
             menu_extras  # Refresh
             ;;
+        7)
+            if [[ "${WIZARD_STATE[has_camera]}" == "yes" ]]; then
+                WIZARD_STATE[has_camera]=""
+                WIZARD_STATE[camera_type]=""
+            else
+                WIZARD_STATE[has_camera]="yes"
+                select_camera_type
+            fi
+            menu_extras  # Refresh
+            ;;
         [bB]) return ;;
         *) ;;
     esac
@@ -1278,6 +1313,35 @@ select_filament_sensor_type() {
         1) WIZARD_STATE[filament_sensor_type]="switch" ;;
         2) WIZARD_STATE[filament_sensor_type]="motion" ;;
     esac
+}
+
+select_camera_type() {
+    clear_screen
+    print_header "Camera Type"
+    
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}What type of camera?${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  1) USB Webcam (Logitech, generic)"
+    echo -e "${BCYAN}${BOX_V}${NC}  2) Raspberry Pi Camera (CSI)"
+    echo -e "${BCYAN}${BOX_V}${NC}  3) IP Camera (RTSP stream)"
+    print_footer
+    
+    echo -en "${BYELLOW}Select camera type${NC}: "
+    read -r choice
+    
+    case "$choice" in
+        1) WIZARD_STATE[camera_type]="usb" ;;
+        2) WIZARD_STATE[camera_type]="picam" ;;
+        3) WIZARD_STATE[camera_type]="ipcam" ;;
+        *) return ;;
+    esac
+    
+    # Add Crowsnest to update manager
+    add_crowsnest_update_manager
+    
+    echo -e "\n${CYAN}Crowsnest will be configured for webcam streaming.${NC}"
+    echo -e "${CYAN}You may need to adjust ~/printer_data/config/crowsnest.conf${NC}"
+    sleep 2
 }
 
 select_klipperscreen_type() {

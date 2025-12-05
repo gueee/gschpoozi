@@ -1,0 +1,109 @@
+{
+  "id": "ldo-nitehawk-36",
+  "name": "LDO Nitehawk-36",
+  "manufacturer": "LDO Motors",
+  "mcu": "rp2040",
+  "mcu_name": "nhk",
+  "connection": "USB",
+  "source": "https://github.com/MotorDynamicsLab/Nitehawk-36",
+  "description": "RP2040 USB toolhead board with TMC2209, ADXL345, tachometer fan, RGBW LEDs",
+
+  "motor_ports": {
+    "EXTRUDER": {
+      "label": "Extruder (TMC2209)",
+      "step_pin": "gpio23",
+      "dir_pin": "gpio24",
+      "enable_pin": "gpio25",
+      "uart_pin": "gpio0",
+      "tx_pin": "gpio1"
+    }
+  },
+
+  "heater_ports": {
+    "HE": {
+      "label": "Hotend Heater",
+      "pin": "gpio9"
+    }
+  },
+
+  "thermistor_ports": {
+    "TH0": {
+      "label": "Hotend Thermistor",
+      "pin": "gpio29",
+      "pullup": "2.2K"
+    }
+  },
+
+  "fan_ports": {
+    "FAN0": {
+      "label": "Part Cooling Fan",
+      "pin": "gpio6",
+      "pwm": true
+    },
+    "FAN1": {
+      "label": "Hotend Fan",
+      "pin": "gpio5",
+      "pwm": true,
+      "tachometer_pin": "gpio16",
+      "tachometer_ppr": 2
+    }
+  },
+
+  "endstop_ports": {
+    "X_STOP": {
+      "label": "X Endstop",
+      "pin": "gpio13"
+    },
+    "PROBE": {
+      "label": "Probe Input",
+      "pin": "gpio10"
+    },
+    "FILAMENT": {
+      "label": "Filament Sensor",
+      "pin": "gpio3"
+    }
+  },
+
+  "misc_ports": {
+    "RGB": {
+      "label": "Stealthburner LEDs (RGBW)",
+      "pin": "gpio7",
+      "chain_count": 3,
+      "color_order": "GRBW"
+    },
+    "ACT_LED": {
+      "label": "Activity LED",
+      "pin": "gpio8",
+      "inverted": true
+    }
+  },
+
+  "accelerometer": {
+    "type": "ADXL345",
+    "cs_pin": "gpio27",
+    "spi_software_sclk_pin": "gpio18",
+    "spi_software_mosi_pin": "gpio20",
+    "spi_software_miso_pin": "gpio19"
+  },
+
+  "klipper_config": {
+    "mcu": {
+      "serial": "/dev/serial/by-id/usb-Klipper_rp2040_XXXX-if00",
+      "restart_method": "command"
+    },
+    "tmc2209": {
+      "sense_resistor": 0.100,
+      "interpolate": false,
+      "run_current_max": 0.7
+    }
+  },
+
+  "default_assignments": {
+    "extruder": "EXTRUDER",
+    "heater_extruder": "HE",
+    "thermistor_extruder": "TH0",
+    "fan_part_cooling": "FAN0",
+    "fan_hotend": "FAN1"
+  }
+}
+

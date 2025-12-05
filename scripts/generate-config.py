@@ -277,7 +277,14 @@ def generate_hardware_cfg(
         lines.append("rotation_distance: 8")
         
         if z_idx == 0:
-            lines.append("endstop_pin: probe:z_virtual_endstop")
+            # Use correct virtual endstop based on probe type
+            probe_type = wizard_state.get('probe_type', '')
+            if probe_type == 'beacon':
+                lines.append("endstop_pin: beacon:z_virtual_endstop")
+            elif probe_type and probe_type not in ('none', 'endstop'):
+                lines.append("endstop_pin: probe:z_virtual_endstop")
+            else:
+                lines.append("endstop_pin: REPLACE_PIN  # Physical Z endstop")
             lines.append("position_min: -5")
             lines.append(f"position_max: {bed_z}")
             lines.append("homing_speed: 15")

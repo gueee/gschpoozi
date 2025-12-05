@@ -1,0 +1,154 @@
+{
+  "id": "inductive",
+  "name": "Inductive Probe",
+  "manufacturer": "Various",
+  "type": "inductive",
+  "connection": "3-pin (signal + power)",
+  "source": "https://www.klipper3d.org/Config_Reference.html#probe",
+  "description": "Non-contact inductive proximity sensor. Detects metal surfaces only. Common on Prusa printers (PINDA/SuperPINDA) and many others.",
+
+  "features": {
+    "non_contact": true,
+    "no_moving_parts": true,
+    "metal_beds_only": true,
+    "fast_probing": true,
+    "temperature_sensitive": true
+  },
+
+  "variants": {
+    "pinda_v1": {
+      "name": "PINDA V1",
+      "manufacturer": "Prusa",
+      "thermistor": false,
+      "description": "Original Prusa inductive probe"
+    },
+    "pinda_v2": {
+      "name": "PINDA V2 (SuperPINDA)",
+      "manufacturer": "Prusa",
+      "thermistor": true,
+      "description": "Includes thermistor for temperature compensation"
+    },
+    "lj12a3_4_z_bx": {
+      "name": "LJ12A3-4-Z/BX",
+      "manufacturer": "Various",
+      "type": "NPN NO",
+      "sensing_distance": "4mm",
+      "description": "Common 12mm inductive sensor, NPN normally open"
+    },
+    "lj18a3_8_z_bx": {
+      "name": "LJ18A3-8-Z/BX",
+      "manufacturer": "Various",
+      "type": "NPN NO",
+      "sensing_distance": "8mm",
+      "description": "18mm inductive sensor, longer sensing distance"
+    },
+    "omron_tl_q5mc2": {
+      "name": "Omron TL-Q5MC2",
+      "manufacturer": "Omron",
+      "type": "NPN NC",
+      "description": "High quality industrial sensor"
+    },
+    "pl_08n": {
+      "name": "PL-08N",
+      "manufacturer": "Various",
+      "type": "NPN NO",
+      "sensing_distance": "8mm",
+      "description": "8mm flat inductive sensor"
+    }
+  },
+
+  "electrical_types": {
+    "npn_no": {
+      "name": "NPN Normally Open",
+      "output": "Sinks to ground when triggered",
+      "klipper_pin": "^!ASSIGN_IN_WIZARD",
+      "notes": "Most common type, needs pullup and invert"
+    },
+    "npn_nc": {
+      "name": "NPN Normally Closed",
+      "output": "Sinks to ground when NOT triggered",
+      "klipper_pin": "^ASSIGN_IN_WIZARD",
+      "notes": "Needs pullup only"
+    },
+    "pnp_no": {
+      "name": "PNP Normally Open",
+      "output": "Sources voltage when triggered",
+      "klipper_pin": "!ASSIGN_IN_WIZARD",
+      "notes": "Needs voltage divider for 3.3V MCUs"
+    },
+    "pnp_nc": {
+      "name": "PNP Normally Closed",
+      "output": "Sources voltage when NOT triggered",
+      "klipper_pin": "ASSIGN_IN_WIZARD",
+      "notes": "May need voltage divider"
+    }
+  },
+
+  "klipper_config": {
+    "probe": {
+      "pin": "^!ASSIGN_IN_WIZARD",
+      "x_offset": 0,
+      "y_offset": 0,
+      "z_offset": 0,
+      "speed": 5,
+      "samples": 3,
+      "sample_retract_dist": 2.0,
+      "samples_result": "median",
+      "samples_tolerance": 0.01,
+      "samples_tolerance_retries": 3
+    },
+    "safe_z_home": {
+      "home_xy_position": "ASSIGN_IN_WIZARD",
+      "z_hop": 10,
+      "z_hop_speed": 5
+    }
+  },
+
+  "klipper_config_superpinda": {
+    "_comment": "SuperPINDA with temperature compensation",
+    "probe": {
+      "pin": "^!ASSIGN_IN_WIZARD",
+      "x_offset": 0,
+      "y_offset": 0,
+      "z_offset": 0,
+      "speed": 5,
+      "samples": 3
+    },
+    "temperature_probe pinda": {
+      "sensor_type": "Generic 3950",
+      "sensor_pin": "ASSIGN_IN_WIZARD",
+      "min_temp": 0,
+      "max_temp": 100
+    }
+  },
+
+  "installation_notes": [
+    "Only works with metal print surfaces (steel PEI, aluminum)",
+    "Does NOT detect glass, G10, or non-metallic surfaces",
+    "Sensing distance varies by model (typically 2-8mm)",
+    "Mount probe so it triggers 1-2mm above bed surface",
+    "NPN sensors need pullup resistor (^ in Klipper)",
+    "PNP sensors may need voltage divider for 3.3V boards",
+    "Temperature affects trigger point - probe when bed is at printing temp"
+  ],
+
+  "calibration_commands": [
+    "PROBE_CALIBRATE",
+    "PROBE_ACCURACY"
+  ],
+
+  "troubleshooting": {
+    "not_triggering": "Check if bed is metal, verify sensing distance",
+    "always_triggered": "Probe too close to bed, wrong pin configuration",
+    "inconsistent_results": "Temperature drift - probe at consistent temp",
+    "z_varies_across_bed": "Bed may have height variations or probe mount flex"
+  },
+
+  "limitations": [
+    "Metal beds only - no glass or textured PEI on non-metal",
+    "Temperature sensitive - trigger point changes with temp",
+    "Requires consistent bed material thickness",
+    "Cannot detect bed surface defects"
+  ]
+}
+

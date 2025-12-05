@@ -1,0 +1,75 @@
+{
+  "id": "cr-touch",
+  "name": "CR-Touch",
+  "manufacturer": "Creality",
+  "type": "servo_optical",
+  "connection": "5-pin (servo + signal)",
+  "source": "https://www.creality.com/",
+  "description": "Creality's auto bed leveling sensor with metal probe and optical sensor. More durable than BLTouch, uses same Klipper configuration.",
+
+  "features": {
+    "retractable_pin": true,
+    "metal_probe": true,
+    "optical_sensor": true,
+    "self_test": true,
+    "works_on_any_surface": true
+  },
+
+  "wiring": {
+    "servo_connector": {
+      "brown": "GND",
+      "red": "5V",
+      "orange": "Control signal (PWM)"
+    },
+    "probe_connector": {
+      "black": "GND",
+      "white": "Z probe signal"
+    }
+  },
+
+  "klipper_config": {
+    "bltouch": {
+      "_comment": "CR-Touch uses same [bltouch] section as BLTouch",
+      "sensor_pin": "^ASSIGN_IN_WIZARD",
+      "control_pin": "ASSIGN_IN_WIZARD",
+      "x_offset": 0,
+      "y_offset": 0,
+      "z_offset": 0,
+      "speed": 5,
+      "samples": 2,
+      "sample_retract_dist": 3.0,
+      "samples_tolerance": 0.01,
+      "samples_tolerance_retries": 3,
+      "stow_on_each_sample": false,
+      "probe_with_touch_mode": true
+    },
+    "safe_z_home": {
+      "home_xy_position": "ASSIGN_IN_WIZARD",
+      "z_hop": 10,
+      "z_hop_speed": 5
+    }
+  },
+
+  "calibration_commands": [
+    "BLTOUCH_DEBUG COMMAND=pin_down",
+    "BLTOUCH_DEBUG COMMAND=pin_up",
+    "BLTOUCH_DEBUG COMMAND=self_test",
+    "PROBE_CALIBRATE"
+  ],
+
+  "installation_notes": [
+    "CR-Touch is compatible with BLTouch configuration in Klipper",
+    "Metal probe tip is more durable than BLTouch plastic pin",
+    "Optical sensor provides reliable triggering",
+    "probe_with_touch_mode: true often works better for CR-Touch",
+    "Common on Creality Ender 3 S1, CR-10 Smart, and newer models"
+  ],
+
+  "troubleshooting": {
+    "red_led_solid": "Normal standby state",
+    "red_led_flashing": "Error or triggered state",
+    "blue_led": "Probe deployed",
+    "inconsistent_results": "Clean probe tip, check mounting rigidity"
+  }
+}
+

@@ -1,0 +1,103 @@
+{
+  "id": "voron-tap",
+  "name": "Voron TAP",
+  "manufacturer": "VoronDesign",
+  "type": "nozzle_contact",
+  "connection": "3-pin (optical sensor)",
+  "source": "https://github.com/VoronDesign/Voron-Tap",
+  "description": "Nozzle contact probe that uses the nozzle itself as the probe. Optical sensor detects toolhead movement when nozzle touches bed. Eliminates probe offset issues.",
+
+  "features": {
+    "nozzle_as_probe": true,
+    "zero_xy_offset": true,
+    "high_accuracy": true,
+    "no_probe_offset": true,
+    "works_on_any_surface": true,
+    "temperature_independent": true
+  },
+
+  "compatible_printers": [
+    "Voron V2.4",
+    "Voron Trident",
+    "Other CoreXY with compatible toolhead"
+  ],
+
+  "variants": {
+    "tap_v1": {
+      "name": "TAP V1",
+      "description": "Original design"
+    },
+    "tap_v2": {
+      "name": "TAP V2",
+      "description": "Improved design with better reliability"
+    },
+    "chaoticlab_cnc_tap": {
+      "name": "ChaoticlabCNC TAP",
+      "description": "CNC machined version, higher quality"
+    }
+  },
+
+  "optical_sensor": {
+    "recommended": "Omron EE-SX398",
+    "alternatives": ["Omron EE-SX498", "Generic slot optical sensor"],
+    "notes": "Sensor detects when toolhead moves up slightly on contact"
+  },
+
+  "klipper_config": {
+    "probe": {
+      "pin": "^ASSIGN_IN_WIZARD",
+      "x_offset": 0,
+      "y_offset": 0,
+      "z_offset": 0,
+      "speed": 5,
+      "lift_speed": 10,
+      "samples": 3,
+      "sample_retract_dist": 2.0,
+      "samples_result": "median",
+      "samples_tolerance": 0.006,
+      "samples_tolerance_retries": 3,
+      "activate_gcode": "",
+      "deactivate_gcode": ""
+    },
+    "stepper_z": {
+      "endstop_pin": "probe:z_virtual_endstop",
+      "homing_retract_dist": 0
+    },
+    "safe_z_home": {
+      "home_xy_position": "ASSIGN_IN_WIZARD",
+      "z_hop": 10,
+      "z_hop_speed": 10
+    }
+  },
+
+  "installation_notes": [
+    "Requires specific toolhead design (Stealthburner/Afterburner compatible)",
+    "X and Y offsets are 0 since nozzle IS the probe",
+    "Z offset calibrated with PROBE_CALIBRATE",
+    "Optical sensor must be properly aligned",
+    "Uses probe:z_virtual_endstop for Z homing",
+    "Nozzle should be clean when probing",
+    "Works at any nozzle temperature"
+  ],
+
+  "calibration_commands": [
+    "PROBE_CALIBRATE",
+    "PROBE_ACCURACY"
+  ],
+
+  "troubleshooting": {
+    "not_triggering": "Check optical sensor alignment and wiring",
+    "inconsistent_results": "Clean nozzle, check for debris on bed",
+    "false_triggers": "Sensor may be too sensitive, adjust position",
+    "toolhead_crashes": "Verify probe:z_virtual_endstop is configured"
+  },
+
+  "advantages": [
+    "No XY offset to calibrate",
+    "Probes exactly where nozzle will print",
+    "Works on any bed surface",
+    "No temperature drift issues",
+    "High repeatability"
+  ]
+}
+

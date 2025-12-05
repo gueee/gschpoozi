@@ -1,0 +1,104 @@
+{
+  "id": "klicky",
+  "name": "Klicky Probe",
+  "manufacturer": "Community (jlas1)",
+  "type": "dockable_microswitch",
+  "connection": "2-pin (microswitch)",
+  "source": "https://github.com/jlas1/Klicky-Probe",
+  "description": "Dockable microswitch probe with magnetic attachment. Designed for CoreXY printers, especially Voron. Probe docks when not in use, reducing toolhead weight.",
+
+  "features": {
+    "magnetic_attachment": true,
+    "dockable": true,
+    "no_soldering": true,
+    "high_repeatability": true,
+    "works_on_any_surface": true,
+    "low_cost": true
+  },
+
+  "compatible_printers": [
+    "Voron V2.4",
+    "Voron V1.8",
+    "Voron Trident",
+    "Voron V0",
+    "Voron Switchwire",
+    "Other CoreXY printers"
+  ],
+
+  "variants": {
+    "klicky": {
+      "name": "Klicky (Original)",
+      "description": "Standard Klicky probe"
+    },
+    "unklicky": {
+      "name": "Unklicky",
+      "description": "Simplified version, easier to print"
+    },
+    "klicky_ng": {
+      "name": "Klicky NG",
+      "description": "Next generation, improved design"
+    }
+  },
+
+  "klipper_config": {
+    "probe": {
+      "pin": "^ASSIGN_IN_WIZARD",
+      "x_offset": 0,
+      "y_offset": 19.75,
+      "z_offset": 6.42,
+      "speed": 5,
+      "samples": 3,
+      "sample_retract_dist": 2.0,
+      "samples_result": "median",
+      "samples_tolerance": 0.01,
+      "samples_tolerance_retries": 3
+    }
+  },
+
+  "required_macros": {
+    "description": "Klicky requires macros for dock/undock operations",
+    "source": "https://github.com/jlas1/Klicky-Probe/tree/main/Klipper_macros",
+    "key_macros": [
+      "Attach_Probe",
+      "Dock_Probe",
+      "QUAD_GANTRY_LEVEL (modified)",
+      "BED_MESH_CALIBRATE (modified)",
+      "G28 (modified for safe homing)"
+    ]
+  },
+
+  "dock_configuration": {
+    "description": "Dock position must be configured based on your printer",
+    "variables": {
+      "docklocation_x": "Dock X position",
+      "docklocation_y": "Dock Y position",
+      "docklocation_z": "Dock Z position",
+      "attachmove_x": "X move to attach probe",
+      "attachmove_y": "Y move to attach probe",
+      "attachmove_z": "Z move to attach probe"
+    }
+  },
+
+  "installation_notes": [
+    "Requires printing dock and probe body",
+    "Uses 6x3mm magnets for attachment",
+    "Microswitch: Omron D2F-5 or similar recommended",
+    "Download macros from Klicky-Probe GitHub repository",
+    "Configure dock position for your specific printer",
+    "Test attach/detach sequence before enabling in macros"
+  ],
+
+  "calibration_commands": [
+    "PROBE_CALIBRATE",
+    "Attach_Probe",
+    "Dock_Probe"
+  ],
+
+  "troubleshooting": {
+    "probe_not_attaching": "Check magnet polarity and dock alignment",
+    "probe_falls_off": "Magnets may be too weak or misaligned",
+    "inconsistent_triggering": "Check microswitch, clean contacts",
+    "dock_collision": "Adjust dock position or approach speed"
+  }
+}
+

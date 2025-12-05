@@ -1,0 +1,93 @@
+{
+  "id": "bltouch",
+  "name": "BLTouch / 3DTouch",
+  "manufacturer": "ANTCLABS / Various",
+  "type": "servo_microswitch",
+  "connection": "5-pin (servo + signal)",
+  "source": "https://www.antclabs.com/bltouch",
+  "description": "Servo-controlled retractable pin probe. Most popular auto bed leveling sensor. 3DTouch is a compatible clone.",
+
+  "features": {
+    "retractable_pin": true,
+    "self_test": true,
+    "stow_on_sample": true,
+    "touch_mode": true,
+    "works_on_any_surface": true
+  },
+
+  "variants": {
+    "bltouch_v3": {
+      "name": "BLTouch V3.x",
+      "manufacturer": "ANTCLABS",
+      "notes": "Original, highest quality"
+    },
+    "bltouch_v3_1": {
+      "name": "BLTouch V3.1",
+      "manufacturer": "ANTCLABS",
+      "notes": "Latest version with improved firmware"
+    },
+    "3dtouch": {
+      "name": "3DTouch",
+      "manufacturer": "Various (clone)",
+      "notes": "Budget alternative, may not support QUERY_PROBE command"
+    }
+  },
+
+  "wiring": {
+    "servo_connector": {
+      "brown": "GND",
+      "red": "5V",
+      "orange": "Control signal (PWM)"
+    },
+    "probe_connector": {
+      "black": "GND",
+      "white": "Z probe signal (open drain)"
+    }
+  },
+
+  "klipper_config": {
+    "bltouch": {
+      "sensor_pin": "^ASSIGN_IN_WIZARD",
+      "control_pin": "ASSIGN_IN_WIZARD",
+      "x_offset": 0,
+      "y_offset": 0,
+      "z_offset": 0,
+      "speed": 5,
+      "samples": 2,
+      "sample_retract_dist": 3.0,
+      "samples_tolerance": 0.01,
+      "samples_tolerance_retries": 3,
+      "stow_on_each_sample": false,
+      "probe_with_touch_mode": false
+    },
+    "safe_z_home": {
+      "home_xy_position": "ASSIGN_IN_WIZARD",
+      "z_hop": 10,
+      "z_hop_speed": 5
+    }
+  },
+
+  "calibration_commands": [
+    "BLTOUCH_DEBUG COMMAND=pin_down",
+    "BLTOUCH_DEBUG COMMAND=pin_up",
+    "BLTOUCH_DEBUG COMMAND=touch_mode",
+    "BLTOUCH_DEBUG COMMAND=self_test",
+    "PROBE_CALIBRATE"
+  ],
+
+  "installation_notes": [
+    "Mount probe so pin is ~2mm above nozzle when stowed",
+    "Sensor pin typically needs pullup (^) prefix",
+    "Run self-test after installation: BLTOUCH_DEBUG COMMAND=self_test",
+    "If probe triggers randomly, try probe_with_touch_mode: true",
+    "3DTouch clones may not respond to QUERY_PROBE but still work for probing"
+  ],
+
+  "troubleshooting": {
+    "led_flashing": "Probe triggered or error - check wiring and pin height",
+    "pin_not_retracting": "Check servo power (5V) and control pin",
+    "inconsistent_results": "Enable stow_on_each_sample or increase samples",
+    "probe_triggered_before_move": "Increase sample_retract_dist"
+  }
+}
+

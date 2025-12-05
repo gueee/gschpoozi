@@ -80,12 +80,18 @@
 | **LDO Nitehawk-36** | RP2040 | USB | Manual |
 | **Orbitool SO3** | STM32F042 | USB | Manual |
 
-### Probes (3 total)
+### Probes (9 total)
 | Probe | Type | Connection | Source |
 |-------|------|------------|--------|
 | Beacon | Eddy Current | USB | Manual |
 | Cartographer 3D | Eddy Current | USB/CAN | Manual |
 | BTT Eddy | Eddy Current | USB/I2C | Manual |
+| BLTouch/3DTouch | Servo + Microswitch | 5-pin | Manual |
+| CR-Touch | Servo + Optical | 5-pin | Manual |
+| Klicky Probe | Dockable Microswitch | 2-pin | Manual |
+| Euclid Probe | Dockable Microswitch | 2-pin | Manual |
+| Voron TAP | Nozzle Contact | 3-pin | Manual |
+| Inductive (PINDA) | Inductive Sensor | 3-pin | Manual |
 
 ### Extruder Profiles (9 total)
 | Extruder | Gear Ratio | Rotation Distance |
@@ -167,7 +173,7 @@ gschpoozi/
 ├── templates/
 │   ├── boards/                # 27 main boards
 │   ├── toolboards/            # 17 toolhead boards
-│   ├── probes/                # Probe templates (3)
+│   ├── probes/                # Probe templates (9)
 │   ├── extruders/             # Extruder profiles (9)
 │   └── hardware/              # Generic hardware (fans, lights, sensors)
 ├── README.md

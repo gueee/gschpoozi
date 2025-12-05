@@ -1,0 +1,86 @@
+{
+  "id": "euclid",
+  "name": "Euclid Probe",
+  "manufacturer": "Community (nionio6915)",
+  "type": "dockable_microswitch",
+  "connection": "2-pin (microswitch)",
+  "source": "https://github.com/nionio6915/Euclid_Probe",
+  "description": "Dockable microswitch probe similar to Klicky. Uses magnetic attachment for reliable docking. High precision and repeatability.",
+
+  "features": {
+    "magnetic_attachment": true,
+    "dockable": true,
+    "high_repeatability": true,
+    "works_on_any_surface": true,
+    "pcb_based": true
+  },
+
+  "variants": {
+    "euclid_v1": {
+      "name": "Euclid V1",
+      "description": "Original PCB-based design"
+    },
+    "euclid_v2": {
+      "name": "Euclid V2",
+      "description": "Improved design with better mounting"
+    }
+  },
+
+  "klipper_config": {
+    "probe": {
+      "pin": "^ASSIGN_IN_WIZARD",
+      "x_offset": 0,
+      "y_offset": 25.0,
+      "z_offset": 8.0,
+      "speed": 5,
+      "samples": 3,
+      "sample_retract_dist": 2.0,
+      "samples_result": "median",
+      "samples_tolerance": 0.006,
+      "samples_tolerance_retries": 3
+    }
+  },
+
+  "required_macros": {
+    "description": "Euclid requires macros for dock/undock operations",
+    "source": "https://github.com/nionio6915/Euclid_Probe/tree/main/Firmware_Examples/Klipper",
+    "key_macros": [
+      "DEPLOY_PROBE",
+      "STOW_PROBE",
+      "M401 (deploy)",
+      "M402 (stow)",
+      "QUAD_GANTRY_LEVEL (modified)",
+      "BED_MESH_CALIBRATE (modified)"
+    ]
+  },
+
+  "dock_configuration": {
+    "description": "Dock position configured via variables",
+    "variables": {
+      "EuclidX": "Dock X position",
+      "EuclidY": "Dock Y position", 
+      "EuclidZ": "Safe Z height for docking"
+    }
+  },
+
+  "installation_notes": [
+    "PCB-based probe with integrated microswitch",
+    "Uses magnets for attachment (typically 6x3mm)",
+    "Download macros from Euclid_Probe GitHub repository",
+    "Configure dock position based on your setup",
+    "Probe body can be purchased or self-assembled"
+  ],
+
+  "calibration_commands": [
+    "PROBE_CALIBRATE",
+    "DEPLOY_PROBE",
+    "STOW_PROBE"
+  ],
+
+  "troubleshooting": {
+    "probe_not_docking": "Check dock alignment and magnet strength",
+    "inconsistent_z": "Verify probe is fully seated when attached",
+    "false_triggers": "Check wiring and microswitch contacts"
+  }
+}
+

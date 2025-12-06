@@ -3125,6 +3125,9 @@ gcode:
 # ─────────────────────────────────────────────────────────────────────────────
 # PAUSE / RESUME / CANCEL
 # ─────────────────────────────────────────────────────────────────────────────
+[pause_resume]
+# Enables PAUSE, RESUME, and CANCEL_PRINT commands
+
 [gcode_macro PAUSE]
 description: Pause the print
 rename_existing: BASE_PAUSE

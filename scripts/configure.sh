@@ -183,7 +183,7 @@ is_probe_installed() {
     case "$probe" in
         beacon)
             # Check both repo exists AND symlink in Klipper extras
-            [[ -d "${HOME}/beacon" ]] && [[ -L "${klipper_extras}/beacon.py" || -f "${klipper_extras}/beacon.py" ]]
+            [[ -d "${HOME}/beacon_klipper" ]] && [[ -L "${klipper_extras}/beacon.py" || -f "${klipper_extras}/beacon.py" ]]
             ;;
         cartographer)
             # Check both repo exists AND symlink in Klipper extras
@@ -212,39 +212,39 @@ install_probe_module() {
         beacon)
             echo -e "\n${CYAN}Installing Beacon Klipper module...${NC}"
             cd "${HOME}"
-            if [[ -d "${HOME}/beacon" ]]; then
+            if [[ -d "${HOME}/beacon_klipper" ]]; then
                 # Check if it's a valid git repo
-                if [[ -d "${HOME}/beacon/.git" ]]; then
+                if [[ -d "${HOME}/beacon_klipper/.git" ]]; then
                     echo -e "${YELLOW}Beacon directory exists, updating...${NC}"
-                    cd "${HOME}/beacon"
+                    cd "${HOME}/beacon_klipper"
                     git fetch --all
                     git reset --hard origin/main || git reset --hard origin/master
                     git pull || true
                 else
                     # Directory exists but not a valid git repo - remove and re-clone
                     echo -e "${YELLOW}Beacon directory exists but is not a valid git repo, removing...${NC}"
-                    rm -rf "${HOME}/beacon"
-                    if ! git clone https://github.com/beacon3d/beacon_klipper.git beacon; then
+                    rm -rf "${HOME}/beacon_klipper"
+                    if ! git clone https://github.com/beacon3d/beacon_klipper.git; then
                         echo -e "${RED}Failed to clone Beacon repository${NC}"
                         set -e
                         return 1
                     fi
                 fi
             else
-                if ! git clone https://github.com/beacon3d/beacon_klipper.git beacon; then
+                if ! git clone https://github.com/beacon3d/beacon_klipper.git; then
                     echo -e "${RED}Failed to clone Beacon repository${NC}"
                     set -e
                     return 1
                 fi
             fi
             echo -e "${CYAN}Running Beacon install script...${NC}"
-            if [[ -x "${HOME}/beacon/install.sh" ]]; then
-                "${HOME}/beacon/install.sh" || echo -e "${YELLOW}Install script returned non-zero (may be OK)${NC}"
+            if [[ -x "${HOME}/beacon_klipper/install.sh" ]]; then
+                "${HOME}/beacon_klipper/install.sh" || echo -e "${YELLOW}Install script returned non-zero (may be OK)${NC}"
             fi
             # Verify symlink was created, create manually if not
             if [[ ! -L "${klipper_extras}/beacon.py" ]]; then
                 echo -e "${YELLOW}Symlink not found, creating manually...${NC}"
-                ln -sf "${HOME}/beacon/beacon.py" "${klipper_extras}/beacon.py"
+                ln -sf "${HOME}/beacon_klipper/beacon.py" "${klipper_extras}/beacon.py"
             fi
             if [[ -L "${klipper_extras}/beacon.py" ]]; then
                 echo -e "${GREEN}✓ Beacon module linked to Klipper${NC}"
@@ -378,7 +378,7 @@ add_probe_update_manager() {
 [update_manager beacon]
 type: git_repo
 channel: dev
-path: ~/beacon
+path: ~/beacon_klipper
 origin: https://github.com/beacon3d/beacon_klipper.git
 env: ~/klippy-env/bin/python
 requirements: requirements.txt

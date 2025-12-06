@@ -590,15 +590,17 @@ update_linux_mcu() {
     
     cd "$klipper_dir"
     
-    # Stop Klipper
-    echo -e "${CYAN}Stopping Klipper service...${NC}"
+    # Stop Klipper and linux MCU service
+    echo -e "${CYAN}Stopping services...${NC}"
     sudo systemctl stop klipper 2>/dev/null || true
+    sudo systemctl stop klipper_mcu 2>/dev/null || sudo systemctl stop klipper-mcu 2>/dev/null || true
     
     # Clean previous builds
     echo -e "${CYAN}Cleaning previous build...${NC}"
     make clean 2>/dev/null || true
     
-    # Create config for linux process
+    # Create complete config for linux process MCU
+    # This config includes all necessary options for GPIO, SPI, I2C, etc.
     echo -e "${CYAN}Configuring for Linux process...${NC}"
     cat > .config << 'EOF'
 CONFIG_LOW_LEVEL_OPTIONS=y
@@ -606,16 +608,20 @@ CONFIG_MACH_LINUX=y
 CONFIG_BOARD_DIRECTORY="linux"
 CONFIG_CLOCK_FREQ=50000000
 CONFIG_LINUX_SELECT=y
-CONFIG_USB_VENDOR_ID=0x1d50
-CONFIG_USB_DEVICE_ID=0x614e
-CONFIG_USB_SERIAL_NUMBER="12345"
-CONFIG_WANT_GPIO_BITBANGING=y
-CONFIG_WANT_DISPLAYS=y
-CONFIG_WANT_SENSORS=y
-CONFIG_WANT_SOFTWARE_I2C=y
-CONFIG_WANT_SOFTWARE_SPI=y
-CONFIG_CANBUS_FREQUENCY=1000000
+CONFIG_HAVE_GPIO=y
+CONFIG_HAVE_GPIO_ADC=y
+CONFIG_HAVE_GPIO_SPI=y
+CONFIG_HAVE_GPIO_I2C=y
+CONFIG_HAVE_GPIO_HARD_PWM=y
+CONFIG_HAVE_STRICT_TIMING=y
+CONFIG_HAVE_CHIPID=y
+CONFIG_HAVE_STEPPER_BOTH_EDGE=y
+CONFIG_HAVE_BOOTLOADER_REQUEST=y
+CONFIG_INLINE_STEPPER_HACK=y
 EOF
+    
+    # Run olddefconfig to fill in remaining defaults
+    make olddefconfig 2>/dev/null || true
     
     # Build
     echo -e "${CYAN}Building firmware...${NC}"
@@ -625,15 +631,40 @@ EOF
         return 1
     fi
     
-    # Flash (for linux process, this installs the klipper_mcu service)
+    # Install the linux MCU service using Klipper's script
     echo -e "${CYAN}Installing Linux MCU service...${NC}"
-    sudo make flash 2>&1 || true
+    
+    # Use Klipper's flash script if available
+    if [[ -f "${klipper_dir}/scripts/flash-linux.sh" ]]; then
+        sudo "${klipper_dir}/scripts/flash-linux.sh"
+    else
+        # Manual installation
+        sudo cp out/klipper.elf /usr/local/bin/klipper_mcu
+        
+        # Create systemd service if not exists
+        if [[ ! -f /etc/systemd/system/klipper_mcu.service ]]; then
+            sudo tee /etc/systemd/system/klipper_mcu.service > /dev/null << 'SVCEOF'
+[Unit]
+Description=Klipper MCU for Linux
+After=local-fs.target
+
+[Service]
+ExecStart=/usr/local/bin/klipper_mcu -r
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+            sudo systemctl daemon-reload
+            sudo systemctl enable klipper_mcu
+        fi
+    fi
     
     # Start the linux MCU service
-    if systemctl list-unit-files | grep -q "klipper_mcu\|klipper-mcu"; then
-        echo -e "${CYAN}Starting Linux MCU service...${NC}"
-        sudo systemctl start klipper_mcu 2>/dev/null || sudo systemctl start klipper-mcu 2>/dev/null || true
-    fi
+    echo -e "${CYAN}Starting Linux MCU service...${NC}"
+    sudo systemctl start klipper_mcu 2>/dev/null || sudo systemctl start klipper-mcu 2>/dev/null || true
+    sleep 1
     
     # Restart Klipper
     echo -e "${CYAN}Starting Klipper service...${NC}"

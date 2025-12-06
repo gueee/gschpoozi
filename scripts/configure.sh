@@ -3125,6 +3125,9 @@ gcode:
 # ─────────────────────────────────────────────────────────────────────────────
 # PAUSE / RESUME / CANCEL
 # ─────────────────────────────────────────────────────────────────────────────
+[pause_resume]
+# Required for PAUSE/RESUME functionality
+
 [gcode_macro PAUSE]
 description: Pause the print
 rename_existing: BASE_PAUSE

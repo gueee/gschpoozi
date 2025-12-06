@@ -511,9 +511,9 @@ def generate_hardware_cfg(
     pc_on_toolboard = toolboard and tb_assignments.get('fan_part_cooling', '') not in ('', 'none')
     hf_on_toolboard = toolboard and tb_assignments.get('fan_hotend', '') not in ('', 'none')
     
-    # Multi-pin part cooling support
+    # Multi-pin part cooling - if second port is assigned
     pc2_port = assignments.get('fan_part_cooling_pin2', '')
-    if pc2_port and fan_pc_multipin == 'yes':
+    if pc2_port:
         pc2_pin = get_fan_pin(board, pc2_port)
         
         if pc_on_toolboard:
@@ -577,14 +577,14 @@ def generate_hardware_cfg(
             lines.append("heater_temp: 50.0")
             lines.append("")
     
-    # Controller fan on main board
+    # Controller fan on main board - generated if port is assigned
     cf_port = assignments.get('fan_controller')
     cf2_port = assignments.get('fan_controller_pin2', '')
-    if cf_port and fan_controller != 'none':
+    if cf_port:
         cf_pin = get_fan_pin(board, cf_port)
         
-        # Multi-pin controller fan
-        if cf2_port and fan_controller_multipin == 'yes':
+        # Multi-pin if second port is assigned
+        if cf2_port:
             cf2_pin = get_fan_pin(board, cf2_port)
             lines.extend(generate_multipin('controller', cf_pin, cf2_pin, cf_port, cf2_port))
             lines.append("[controller_fan electronics_fan]")
@@ -600,14 +600,14 @@ def generate_hardware_cfg(
         lines.append("idle_speed: 0.5")
         lines.append("")
     
-    # Exhaust fan (fan_generic)
+    # Exhaust fan (fan_generic) - generated if port is assigned
     ex_port = assignments.get('fan_exhaust')
     ex2_port = assignments.get('fan_exhaust_pin2', '')
-    if ex_port and fan_exhaust not in ('', 'none'):
+    if ex_port:
         ex_pin = get_fan_pin(board, ex_port)
         
-        # Multi-pin exhaust fan
-        if ex2_port and fan_exhaust_multipin == 'yes':
+        # Multi-pin if second port is assigned
+        if ex2_port:
             ex2_pin = get_fan_pin(board, ex2_port)
             lines.extend(generate_multipin('exhaust', ex_pin, ex2_pin, ex_port, ex2_port))
             lines.append("[fan_generic exhaust_fan]")
@@ -623,14 +623,14 @@ def generate_hardware_cfg(
         lines.append("# Control with: SET_FAN_SPEED FAN=exhaust_fan SPEED=0.5")
         lines.append("")
     
-    # Chamber fan (fan_generic or temperature_fan)
+    # Chamber fan (fan_generic or temperature_fan) - generated if port is assigned
     ch_port = assignments.get('fan_chamber')
     ch2_port = assignments.get('fan_chamber_pin2', '')
-    if ch_port and fan_chamber not in ('', 'none'):
+    if ch_port:
         ch_pin = get_fan_pin(board, ch_port)
         
-        # Generate multi_pin if needed
-        if ch2_port and fan_chamber_multipin == 'yes':
+        # Multi-pin if second port is assigned
+        if ch2_port:
             ch2_pin = get_fan_pin(board, ch2_port)
             lines.extend(generate_multipin('chamber', ch_pin, ch2_pin, ch_port, ch2_port))
             pin_value = "multi_pin:chamber_pins"
@@ -656,7 +656,7 @@ def generate_hardware_cfg(
             lines.append("control: watermark")
             lines.append("gcode_id: C")
         else:
-            # Manual chamber fan
+            # Manual chamber fan (default)
             lines.append("[fan_generic chamber_fan]")
             lines.append(f"pin: {pin_value}")
             lines.append("max_power: 1.0")
@@ -666,14 +666,14 @@ def generate_hardware_cfg(
             lines.append("# Control with: SET_FAN_SPEED FAN=chamber_fan SPEED=0.5")
         lines.append("")
     
-    # RSCS/Filter fan (fan_generic)
+    # RSCS/Filter fan (fan_generic) - generated if port is assigned
     rs_port = assignments.get('fan_rscs')
     rs2_port = assignments.get('fan_rscs_pin2', '')
-    if rs_port and fan_rscs not in ('', 'none'):
+    if rs_port:
         rs_pin = get_fan_pin(board, rs_port)
         
-        # Multi-pin RSCS fan
-        if rs2_port and fan_rscs_multipin == 'yes':
+        # Multi-pin if second port is assigned
+        if rs2_port:
             rs2_pin = get_fan_pin(board, rs2_port)
             lines.extend(generate_multipin('rscs', rs_pin, rs2_pin, rs_port, rs2_port))
             lines.append("[fan_generic rscs_fan]")
@@ -690,14 +690,14 @@ def generate_hardware_cfg(
         lines.append("# Control with: SET_FAN_SPEED FAN=rscs_fan SPEED=0.5")
         lines.append("")
     
-    # Radiator fan (heater_fan - for water cooling)
+    # Radiator fan (heater_fan - for water cooling) - generated if port is assigned
     rd_port = assignments.get('fan_radiator')
     rd2_port = assignments.get('fan_radiator_pin2', '')
-    if rd_port and fan_radiator not in ('', 'none'):
+    if rd_port:
         rd_pin = get_fan_pin(board, rd_port)
         
-        # Multi-pin radiator fan
-        if rd2_port and fan_radiator_multipin == 'yes':
+        # Multi-pin if second port is assigned
+        if rd2_port:
             rd2_pin = get_fan_pin(board, rd2_port)
             lines.extend(generate_multipin('radiator', rd_pin, rd2_pin, rd_port, rd2_port))
             lines.append("[heater_fan radiator_fan]")

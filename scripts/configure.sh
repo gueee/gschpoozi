@@ -510,9 +510,71 @@ get_klipper_host_version() {
     fi
 }
 
+# Check if Klipper is dirty (uncommitted changes, often from linux MCU build)
+is_klipper_dirty() {
+    local version=$(get_klipper_host_version)
+    [[ "$version" == *"-dirty"* ]]
+}
+
 # Check if linux MCU service is installed
 is_linux_mcu_installed() {
     systemctl list-unit-files 2>/dev/null | grep -q "klipper_mcu\|klipper-mcu"
+}
+
+# Check for MCU version mismatches and offer to fix
+check_mcu_versions() {
+    local host_version=$(get_klipper_host_version)
+    local has_issues=false
+    local is_dirty=false
+    
+    # Check if dirty
+    if [[ "$host_version" == *"-dirty"* ]]; then
+        is_dirty=true
+        has_issues=true
+    fi
+    
+    if $has_issues; then
+        clear_screen
+        print_header "MCU Version Check"
+        
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Potential MCU issues detected!${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Host Version: ${BWHITE}${host_version}${NC}"
+        
+        if $is_dirty; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}⚠ Klipper marked as 'dirty'${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}  ${WHITE}This usually means the Linux MCU needs updating.${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}  ${WHITE}The Linux MCU runs on the Pi for GPIO/sensors.${NC}"
+        fi
+        
+        print_separator
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Recommended: Update Linux Process MCU${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  This will rebuild and reinstall the host MCU service."
+        print_footer
+        
+        if confirm "Update Linux MCU now to fix version mismatch?"; then
+            update_linux_mcu
+            wait_for_key
+            return 0
+        fi
+        
+        return 1
+    fi
+    
+    return 0
+}
+
+# Auto-check MCU versions on config generation
+pre_generate_mcu_check() {
+    local host_version=$(get_klipper_host_version)
+    
+    # If dirty, warn but don't block
+    if is_klipper_dirty; then
+        echo -e "${YELLOW}Warning: Klipper marked as 'dirty' - Linux MCU may need update${NC}"
+        echo -e "${YELLOW}Use 'F' from main menu to update MCU firmware${NC}"
+        echo ""
+    fi
 }
 
 # Update the linux process MCU (runs on Pi, no hardware access needed)
@@ -3176,6 +3238,11 @@ main() {
     if load_state; then
         echo -e "${CYAN}Loaded previous configuration...${NC}"
         sleep 1
+    fi
+    
+    # Check for MCU version issues (dirty flag usually means linux MCU needs update)
+    if is_klipper_dirty; then
+        check_mcu_versions
     fi
     
     # Main loop

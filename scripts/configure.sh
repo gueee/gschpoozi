@@ -179,16 +179,20 @@ wait_for_key() {
 # Check if a probe module is installed
 is_probe_installed() {
     local probe="$1"
+    local klipper_extras="${HOME}/klipper/klippy/extras"
     case "$probe" in
         beacon)
-            [[ -d "${HOME}/beacon_klipper" ]]
+            # Check both repo exists AND symlink in Klipper extras
+            [[ -d "${HOME}/beacon_klipper" ]] && [[ -L "${klipper_extras}/beacon.py" || -f "${klipper_extras}/beacon.py" ]]
             ;;
         cartographer)
-            [[ -d "${HOME}/cartographer-klipper" ]]
+            # Check both repo exists AND symlink in Klipper extras
+            [[ -d "${HOME}/cartographer-klipper" ]] && [[ -L "${klipper_extras}/cartographer.py" || -f "${klipper_extras}/cartographer.py" ]]
             ;;
         btt-eddy)
-            # BTT Eddy is built into recent Klipper, check for config support
-            [[ -f "${HOME}/klipper/klippy/extras/eddyprobe.py" ]] || [[ -d "${HOME}/Eddy" ]]
+            # BTT Eddy may be built into recent Klipper or installed separately
+            [[ -f "${klipper_extras}/eddyprobe.py" ]] || [[ -f "${klipper_extras}/btt_eddy.py" ]] || \
+            ([[ -d "${HOME}/Eddy" ]] && [[ -L "${klipper_extras}/btt_eddy.py" || -L "${klipper_extras}/eddy.py" ]])
             ;;
         *)
             return 1
@@ -199,6 +203,7 @@ is_probe_installed() {
 # Install probe module
 install_probe_module() {
     local probe="$1"
+    local klipper_extras="${HOME}/klipper/klippy/extras"
     
     # Disable exit-on-error for installation (we handle errors ourselves)
     set +e
@@ -236,6 +241,16 @@ install_probe_module() {
             if [[ -x "${HOME}/beacon_klipper/install.sh" ]]; then
                 "${HOME}/beacon_klipper/install.sh" || echo -e "${YELLOW}Install script returned non-zero (may be OK)${NC}"
             fi
+            # Verify symlink was created, create manually if not
+            if [[ ! -L "${klipper_extras}/beacon.py" ]]; then
+                echo -e "${YELLOW}Symlink not found, creating manually...${NC}"
+                ln -sf "${HOME}/beacon_klipper/beacon.py" "${klipper_extras}/beacon.py"
+            fi
+            if [[ -L "${klipper_extras}/beacon.py" ]]; then
+                echo -e "${GREEN}✓ Beacon module linked to Klipper${NC}"
+            else
+                echo -e "${RED}✗ Failed to link Beacon module${NC}"
+            fi
             add_probe_update_manager "beacon"
             echo -e "${GREEN}Beacon installation complete!${NC}"
             ;;
@@ -268,6 +283,16 @@ install_probe_module() {
             echo -e "${CYAN}Running Cartographer install script...${NC}"
             if [[ -x "${HOME}/cartographer-klipper/install.sh" ]]; then
                 "${HOME}/cartographer-klipper/install.sh" || echo -e "${YELLOW}Install script returned non-zero (may be OK)${NC}"
+            fi
+            # Verify symlink was created, create manually if not
+            if [[ ! -L "${klipper_extras}/cartographer.py" ]]; then
+                echo -e "${YELLOW}Symlink not found, creating manually...${NC}"
+                ln -sf "${HOME}/cartographer-klipper/cartographer.py" "${klipper_extras}/cartographer.py"
+            fi
+            if [[ -L "${klipper_extras}/cartographer.py" ]]; then
+                echo -e "${GREEN}✓ Cartographer module linked to Klipper${NC}"
+            else
+                echo -e "${RED}✗ Failed to link Cartographer module${NC}"
             fi
             add_probe_update_manager "cartographer"
             echo -e "${GREEN}Cartographer installation complete!${NC}"
@@ -302,6 +327,22 @@ install_probe_module() {
             if [[ -x "${HOME}/Eddy/install.sh" ]]; then
                 "${HOME}/Eddy/install.sh" || echo -e "${YELLOW}Install script returned non-zero (may be OK)${NC}"
             fi
+            # BTT Eddy uses different file names - check for them
+            local eddy_linked=false
+            for eddy_file in btt_eddy.py eddy.py; do
+                if [[ -f "${HOME}/Eddy/${eddy_file}" ]] && [[ ! -L "${klipper_extras}/${eddy_file}" ]]; then
+                    echo -e "${YELLOW}Symlink for ${eddy_file} not found, creating manually...${NC}"
+                    ln -sf "${HOME}/Eddy/${eddy_file}" "${klipper_extras}/${eddy_file}"
+                fi
+                if [[ -L "${klipper_extras}/${eddy_file}" ]]; then
+                    eddy_linked=true
+                fi
+            done
+            if $eddy_linked; then
+                echo -e "${GREEN}✓ BTT Eddy module linked to Klipper${NC}"
+            else
+                echo -e "${RED}✗ Failed to link BTT Eddy module${NC}"
+            fi
             add_probe_update_manager "btt-eddy"
             echo -e "${GREEN}BTT Eddy installation complete!${NC}"
             ;;
@@ -309,6 +350,16 @@ install_probe_module() {
             echo -e "${YELLOW}No installation required for ${probe}${NC}"
             ;;
     esac
+    
+    # Restart Klipper to load the new module
+    if [[ "$probe" == "beacon" || "$probe" == "cartographer" || "$probe" == "btt-eddy" ]]; then
+        echo -e "${CYAN}Restarting Klipper to load module...${NC}"
+        sudo systemctl restart klipper 2>/dev/null || echo -e "${YELLOW}Could not restart Klipper (may need manual restart)${NC}"
+        sleep 2
+        if systemctl is-active --quiet klipper 2>/dev/null; then
+            echo -e "${GREEN}✓ Klipper restarted successfully${NC}"
+        fi
+    fi
     
     # Re-enable exit-on-error
     set -e

@@ -1161,6 +1161,7 @@ def assign_toolboard_ports(toolboard: Dict):
         tb_name = toolboard.get('name', 'Toolboard')
         print_info(f"Toolboard: {Colors.CYAN}{tb_name}{Colors.NC}")
         print_info(f"{Colors.WHITE}Pins will be prefixed with 'toolboard:' in config{Colors.NC}")
+        print_info(f"{Colors.WHITE}Use 'none' to skip ports not used on toolboard{Colors.NC}")
         print_info("")
         
         # Show current assignments
@@ -1169,18 +1170,33 @@ def assign_toolboard_ports(toolboard: Dict):
         therm_port = state.toolboard_assignments.get('thermistor_extruder', '')
         pc_fan_port = state.toolboard_assignments.get('fan_part_cooling', '')
         he_fan_port = state.toolboard_assignments.get('fan_hotend', '')
+        endstop_x_port = state.toolboard_assignments.get('endstop_x', '')
         
-        # Status indicators
+        # Status indicators (done = assigned, partial = some assigned)
         motor_status = "done" if extruder_port else ""
-        heater_status = "done" if heater_port and therm_port else ""
-        fan_status = "done" if pc_fan_port and he_fan_port else ""
+        heater_status = "done" if heater_port or therm_port else ""
+        fan_status = "done" if pc_fan_port or he_fan_port else ""
+        endstop_status = "done" if endstop_x_port else ""
         
-        print_menu_item("1", "Extruder Motor", extruder_port or "not assigned", motor_status)
-        print_menu_item("2", "Hotend Heater & Thermistor", f"{heater_port}/{therm_port}" if heater_port else "not assigned", heater_status)
-        print_menu_item("3", "Fans (Part Cooling + Hotend)", f"{pc_fan_port}/{he_fan_port}" if pc_fan_port else "not assigned", fan_status)
+        # Display with "none" shown explicitly
+        def display_port(port):
+            if port == 'none':
+                return f"{Colors.YELLOW}none (on mainboard){Colors.NC}"
+            return port or "not configured"
+        
+        print_menu_item("1", "Extruder Motor", display_port(extruder_port), motor_status)
+        
+        heater_display = f"{display_port(heater_port)} / {display_port(therm_port)}" if heater_port or therm_port else "not configured"
+        print_menu_item("2", "Hotend Heater & Thermistor", heater_display, heater_status)
+        
+        fan_display = f"PC:{display_port(pc_fan_port)} HE:{display_port(he_fan_port)}" if pc_fan_port or he_fan_port else "not configured"
+        print_menu_item("3", "Fans (Part Cooling + Hotend)", fan_display, fan_status)
+        
+        print_menu_item("4", "X Endstop", display_port(endstop_x_port), endstop_status)
         
         print_separator()
         print_action("A", "Auto-assign from defaults")
+        print_action("C", "Clear all toolboard assignments")
         print_action("D", "Done")
         print_action("B", "Back")
         print_footer()
@@ -1193,12 +1209,19 @@ def assign_toolboard_ports(toolboard: Dict):
             assign_toolboard_heater(toolboard)
         elif choice == '3':
             assign_toolboard_fans(toolboard)
+        elif choice == '4':
+            assign_toolboard_endstop(toolboard)
         elif choice == 'a':
             # Auto-assign from defaults
             defaults = toolboard.get('default_assignments', {})
             for func, port in defaults.items():
                 state.toolboard_assignments[func] = port
             print(f"\n{Colors.GREEN}Auto-assigned from toolboard defaults{Colors.NC}")
+            wait_for_key()
+        elif choice == 'c':
+            # Clear all assignments
+            state.toolboard_assignments.clear()
+            print(f"\n{Colors.GREEN}All toolboard assignments cleared{Colors.NC}")
             wait_for_key()
         elif choice in ('d', 'b'):
             return
@@ -1207,11 +1230,6 @@ def assign_toolboard_motor(toolboard: Dict):
     """Assign toolboard extruder motor port."""
     motor_ports = toolboard.get('motor_ports', {})
     
-    if not motor_ports:
-        print(f"{Colors.YELLOW}No motor ports defined for this toolboard{Colors.NC}")
-        wait_for_key()
-        return
-    
     clear_screen()
     print_header("Toolboard Extruder Motor")
     
@@ -1219,14 +1237,19 @@ def assign_toolboard_motor(toolboard: Dict):
     print_info("")
     
     num = 1
-    port_list = list(motor_ports.keys())
+    port_list = list(motor_ports.keys()) if motor_ports else []
+    
+    # "None" option first - extruder on mainboard
+    current = state.toolboard_assignments.get('extruder', '')
+    none_status = "done" if current == 'none' else ""
+    print_menu_item(str(num), "None", "Extruder motor on mainboard", none_status)
+    num += 1
     
     for port_name in port_list:
         port = motor_ports[port_name]
         label = port.get('label', port_name)
         step_pin = port.get('step_pin', '?')
         
-        current = state.toolboard_assignments.get('extruder', '')
         status = "done" if current == port_name else ""
         print_menu_item(str(num), f"{port_name}", f"{label} (step: {step_pin})", status)
         num += 1
@@ -1242,9 +1265,13 @@ def assign_toolboard_motor(toolboard: Dict):
     
     try:
         idx = int(choice) - 1
-        if 0 <= idx < len(port_list):
-            state.toolboard_assignments['extruder'] = port_list[idx]
-            print(f"\n{Colors.GREEN}Extruder assigned to {port_list[idx]}{Colors.NC}")
+        if idx == 0:
+            state.toolboard_assignments['extruder'] = 'none'
+            print(f"\n{Colors.GREEN}Extruder set to mainboard (not on toolboard){Colors.NC}")
+            wait_for_key()
+        elif 1 <= idx < len(port_list) + 1:
+            state.toolboard_assignments['extruder'] = port_list[idx - 1]
+            print(f"\n{Colors.GREEN}Extruder assigned to {port_list[idx - 1]}{Colors.NC}")
             wait_for_key()
     except ValueError:
         pass
@@ -1258,54 +1285,64 @@ def assign_toolboard_heater(toolboard: Dict):
     print_header("Toolboard Hotend Heater & Thermistor")
     
     # Heater selection
-    if heater_ports:
-        print_info(f"{Colors.BWHITE}Hotend Heater:{Colors.NC}")
-        num = 1
-        heater_list = list(heater_ports.keys())
-        for port_name in heater_list:
-            port = heater_ports[port_name]
-            label = port.get('label', port_name)
-            pin = port.get('pin', '?')
-            current = state.toolboard_assignments.get('heater_extruder', '')
-            status = "done" if current == port_name else ""
-            print_menu_item(str(num), f"{port_name}", f"{label} (pin: {pin})", status)
-            num += 1
-        
-        choice = prompt("Select heater port for hotend").strip()
-        try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(heater_list):
-                state.toolboard_assignments['heater_extruder'] = heater_list[idx]
-        except ValueError:
-            pass
-    else:
-        print_info(f"{Colors.YELLOW}No heater ports defined{Colors.NC}")
+    print_info(f"{Colors.BWHITE}Hotend Heater:{Colors.NC}")
+    num = 1
+    heater_list = list(heater_ports.keys()) if heater_ports else []
+    
+    # "None" option first
+    current = state.toolboard_assignments.get('heater_extruder', '')
+    none_status = "done" if current == 'none' else ""
+    print_menu_item(str(num), "None", "Heater on mainboard", none_status)
+    num += 1
+    
+    for port_name in heater_list:
+        port = heater_ports[port_name]
+        label = port.get('label', port_name)
+        pin = port.get('pin', '?')
+        status = "done" if current == port_name else ""
+        print_menu_item(str(num), f"{port_name}", f"{label} (pin: {pin})", status)
+        num += 1
+    
+    choice = prompt("Select heater port for hotend").strip()
+    try:
+        idx = int(choice) - 1
+        if idx == 0:
+            state.toolboard_assignments['heater_extruder'] = 'none'
+        elif 1 <= idx < len(heater_list) + 1:
+            state.toolboard_assignments['heater_extruder'] = heater_list[idx - 1]
+    except ValueError:
+        pass
     
     print_info("")
     
     # Thermistor selection
-    if therm_ports:
-        print_info(f"{Colors.BWHITE}Hotend Thermistor:{Colors.NC}")
-        num = 1
-        therm_list = list(therm_ports.keys())
-        for port_name in therm_list:
-            port = therm_ports[port_name]
-            label = port.get('label', port_name)
-            pin = port.get('pin', '?')
-            current = state.toolboard_assignments.get('thermistor_extruder', '')
-            status = "done" if current == port_name else ""
-            print_menu_item(str(num), f"{port_name}", f"{label} (pin: {pin})", status)
-            num += 1
-        
-        choice = prompt("Select thermistor port for hotend").strip()
-        try:
-            idx = int(choice) - 1
-            if 0 <= idx < len(therm_list):
-                state.toolboard_assignments['thermistor_extruder'] = therm_list[idx]
-        except ValueError:
-            pass
-    else:
-        print_info(f"{Colors.YELLOW}No thermistor ports defined{Colors.NC}")
+    print_info(f"{Colors.BWHITE}Hotend Thermistor:{Colors.NC}")
+    num = 1
+    therm_list = list(therm_ports.keys()) if therm_ports else []
+    
+    # "None" option first
+    current = state.toolboard_assignments.get('thermistor_extruder', '')
+    none_status = "done" if current == 'none' else ""
+    print_menu_item(str(num), "None", "Thermistor on mainboard", none_status)
+    num += 1
+    
+    for port_name in therm_list:
+        port = therm_ports[port_name]
+        label = port.get('label', port_name)
+        pin = port.get('pin', '?')
+        status = "done" if current == port_name else ""
+        print_menu_item(str(num), f"{port_name}", f"{label} (pin: {pin})", status)
+        num += 1
+    
+    choice = prompt("Select thermistor port for hotend").strip()
+    try:
+        idx = int(choice) - 1
+        if idx == 0:
+            state.toolboard_assignments['thermistor_extruder'] = 'none'
+        elif 1 <= idx < len(therm_list) + 1:
+            state.toolboard_assignments['thermistor_extruder'] = therm_list[idx - 1]
+    except ValueError:
+        pass
     
     wait_for_key()
 
@@ -1313,24 +1350,28 @@ def assign_toolboard_fans(toolboard: Dict):
     """Assign toolboard fan ports."""
     fan_ports = toolboard.get('fan_ports', {})
     
-    if not fan_ports:
-        print(f"{Colors.YELLOW}No fan ports defined for this toolboard{Colors.NC}")
-        wait_for_key()
-        return
-    
     clear_screen()
     print_header("Toolboard Fans")
     
-    fan_list = list(fan_ports.keys())
+    print_info(f"{Colors.WHITE}Select 'None' if fan is on mainboard or not used{Colors.NC}")
+    print_info("")
+    
+    fan_list = list(fan_ports.keys()) if fan_ports else []
     
     # Part cooling fan
     print_info(f"{Colors.BWHITE}Part Cooling Fan:{Colors.NC}")
     num = 1
+    
+    # "None" option first
+    current = state.toolboard_assignments.get('fan_part_cooling', '')
+    none_status = "done" if current == 'none' else ""
+    print_menu_item(str(num), "None", "Part cooling on mainboard or not used", none_status)
+    num += 1
+    
     for port_name in fan_list:
         port = fan_ports[port_name]
         label = port.get('label', port_name)
         pin = port.get('pin', '?')
-        current = state.toolboard_assignments.get('fan_part_cooling', '')
         status = "done" if current == port_name else ""
         print_menu_item(str(num), f"{port_name}", f"{label} (pin: {pin})", status)
         num += 1
@@ -1338,8 +1379,10 @@ def assign_toolboard_fans(toolboard: Dict):
     choice = prompt("Select fan port for part cooling").strip()
     try:
         idx = int(choice) - 1
-        if 0 <= idx < len(fan_list):
-            state.toolboard_assignments['fan_part_cooling'] = fan_list[idx]
+        if idx == 0:
+            state.toolboard_assignments['fan_part_cooling'] = 'none'
+        elif 1 <= idx < len(fan_list) + 1:
+            state.toolboard_assignments['fan_part_cooling'] = fan_list[idx - 1]
     except ValueError:
         pass
     
@@ -1348,11 +1391,17 @@ def assign_toolboard_fans(toolboard: Dict):
     # Hotend fan
     print_info(f"{Colors.BWHITE}Hotend Fan:{Colors.NC}")
     num = 1
+    
+    # "None" option first
+    current = state.toolboard_assignments.get('fan_hotend', '')
+    none_status = "done" if current == 'none' else ""
+    print_menu_item(str(num), "None", "Hotend fan on mainboard or water cooled", none_status)
+    num += 1
+    
     for port_name in fan_list:
         port = fan_ports[port_name]
         label = port.get('label', port_name)
         pin = port.get('pin', '?')
-        current = state.toolboard_assignments.get('fan_hotend', '')
         status = "done" if current == port_name else ""
         print_menu_item(str(num), f"{port_name}", f"{label} (pin: {pin})", status)
         num += 1
@@ -1360,12 +1409,70 @@ def assign_toolboard_fans(toolboard: Dict):
     choice = prompt("Select fan port for hotend fan").strip()
     try:
         idx = int(choice) - 1
-        if 0 <= idx < len(fan_list):
-            state.toolboard_assignments['fan_hotend'] = fan_list[idx]
+        if idx == 0:
+            state.toolboard_assignments['fan_hotend'] = 'none'
+        elif 1 <= idx < len(fan_list) + 1:
+            state.toolboard_assignments['fan_hotend'] = fan_list[idx - 1]
     except ValueError:
         pass
     
     wait_for_key()
+
+def assign_toolboard_endstop(toolboard: Dict):
+    """Assign toolboard endstop port (typically X endstop)."""
+    endstop_ports = toolboard.get('endstop_ports', {})
+    
+    clear_screen()
+    print_header("Toolboard X Endstop")
+    
+    print_info(f"{Colors.WHITE}X endstop can be connected to toolboard or mainboard{Colors.NC}")
+    print_info("")
+    
+    endstop_list = list(endstop_ports.keys()) if endstop_ports else []
+    
+    print_info(f"{Colors.BWHITE}X Endstop Location:{Colors.NC}")
+    num = 1
+    
+    # "None" option first - endstop on mainboard
+    current = state.toolboard_assignments.get('endstop_x', '')
+    none_status = "done" if current == 'none' or current == '' else ""
+    print_menu_item(str(num), "None", "X endstop on mainboard", none_status)
+    num += 1
+    
+    for port_name in endstop_list:
+        port = endstop_ports[port_name]
+        label = port.get('label', port_name)
+        pin = port.get('pin', '?')
+        status = "done" if current == port_name else ""
+        print_menu_item(str(num), f"{port_name}", f"{label} (pin: {pin})", status)
+        num += 1
+    
+    print_separator()
+    print_action("B", "Back")
+    print_footer()
+    
+    choice = prompt("Select endstop port for X axis").strip()
+    
+    if choice.lower() == 'b':
+        return
+    
+    try:
+        idx = int(choice) - 1
+        if idx == 0:
+            state.toolboard_assignments['endstop_x'] = 'none'
+            # Also clear from mainboard if needed
+            print(f"\n{Colors.GREEN}X endstop set to mainboard{Colors.NC}")
+            wait_for_key()
+        elif 1 <= idx < len(endstop_list) + 1:
+            port_name = endstop_list[idx - 1]
+            state.toolboard_assignments['endstop_x'] = port_name
+            # Remove X endstop from mainboard assignments since it's on toolboard
+            if 'endstop_x' in state.port_assignments:
+                del state.port_assignments['endstop_x']
+            print(f"\n{Colors.GREEN}X endstop assigned to toolboard:{port_name}{Colors.NC}")
+            wait_for_key()
+    except ValueError:
+        pass
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MOTOR FUNCTION CALCULATION

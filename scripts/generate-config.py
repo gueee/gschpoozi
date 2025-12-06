@@ -227,9 +227,16 @@ def generate_hardware_cfg(
     lines.append("microsteps: 16")
     lines.append("rotation_distance: 40")
     
-    # Endstop - check for sensorless or physical
+    # Endstop - check for toolboard, sensorless, or physical on mainboard
+    tb_assignments = hardware_state.get('toolboard_assignments', {}) if toolboard else {}
+    x_endstop_tb = tb_assignments.get('endstop_x', '')
     x_endstop = assignments.get('endstop_x', '')
-    if x_endstop == 'sensorless':
+    
+    if x_endstop_tb and x_endstop_tb not in ('', 'none'):
+        # X endstop on toolboard
+        endstop_pin = get_endstop_pin(toolboard, x_endstop_tb)
+        lines.append(f"endstop_pin: ^toolboard:{endstop_pin}  # {x_endstop_tb} on toolboard")
+    elif x_endstop == 'sensorless':
         lines.append(f"endstop_pin: tmc2209_stepper_x:virtual_endstop  # Sensorless homing")
     elif x_endstop:
         endstop_pin = get_endstop_pin(board, x_endstop)
@@ -354,50 +361,52 @@ def generate_hardware_cfg(
     lines.append("# EXTRUDER")
     lines.append("# " + "─" * 77)
     
-    if toolboard:
-        # Extruder on toolboard
-        tb_assignments = hardware_state.get('toolboard_assignments', {})
+    # Check if extruder is on toolboard (not 'none')
+    tb_assignments = hardware_state.get('toolboard_assignments', {}) if toolboard else {}
+    extruder_on_toolboard = toolboard and tb_assignments.get('extruder', '') not in ('', 'none')
+    heater_on_toolboard = toolboard and tb_assignments.get('heater_extruder', '') not in ('', 'none')
+    therm_on_toolboard = toolboard and tb_assignments.get('thermistor_extruder', '') not in ('', 'none')
+    
+    lines.append("[extruder]")
+    
+    if extruder_on_toolboard:
+        # Extruder motor on toolboard
         e_port = tb_assignments.get('extruder', 'EXTRUDER')
         e_pins = get_motor_pins(toolboard, e_port)
-        
-        lines.append("[extruder]")
         lines.append(f"step_pin: toolboard:{e_pins['step_pin']}      # {e_port}")
         lines.append(f"dir_pin: toolboard:{e_pins['dir_pin']}       # {e_port}")
         lines.append(f"enable_pin: !toolboard:{e_pins['enable_pin']}  # {e_port}")
-        
-        he_port = tb_assignments.get('heater_extruder', 'HE')
-        he_pin = get_heater_pin(toolboard, he_port)
-        th_port = tb_assignments.get('thermistor_extruder', 'TH0')
-        th_pin = get_thermistor_pin(toolboard, th_port)
-        
-        lines.append("microsteps: 16")
-        lines.append("rotation_distance: 22.6789511  # Calibrate this!")
-        lines.append("nozzle_diameter: 0.400")
-        lines.append("filament_diameter: 1.750")
-        lines.append(f"heater_pin: toolboard:{he_pin}  # {he_port}")
-        lines.append(f"sensor_type: {hotend_therm}")
-        lines.append(f"sensor_pin: toolboard:{th_pin}  # {th_port}")
     else:
-        # Extruder on main board
+        # Extruder motor on main board
         e_port = assignments.get('extruder', 'MOTOR_5')
         e_pins = get_motor_pins(board, e_port)
-        
-        lines.append("[extruder]")
         lines.append(f"step_pin: {e_pins['step_pin']}      # {e_port}")
         lines.append(f"dir_pin: {e_pins['dir_pin']}       # {e_port}")
         lines.append(f"enable_pin: !{e_pins['enable_pin']}  # {e_port}")
-        
+    
+    lines.append("microsteps: 16")
+    lines.append("rotation_distance: 22.6789511  # Calibrate this!")
+    lines.append("nozzle_diameter: 0.400")
+    lines.append("filament_diameter: 1.750")
+    
+    if heater_on_toolboard:
+        he_port = tb_assignments.get('heater_extruder', 'HE')
+        he_pin = get_heater_pin(toolboard, he_port)
+        lines.append(f"heater_pin: toolboard:{he_pin}  # {he_port}")
+    else:
         he_port = assignments.get('heater_extruder', 'HE0')
         he_pin = get_heater_pin(board, he_port)
+        lines.append(f"heater_pin: {he_pin}  # {he_port}")
+    
+    lines.append(f"sensor_type: {hotend_therm}")
+    
+    if therm_on_toolboard:
+        th_port = tb_assignments.get('thermistor_extruder', 'TH0')
+        th_pin = get_thermistor_pin(toolboard, th_port)
+        lines.append(f"sensor_pin: toolboard:{th_pin}  # {th_port}")
+    else:
         th_port = assignments.get('thermistor_extruder', 'T0')
         th_pin = get_thermistor_pin(board, th_port)
-        
-        lines.append("microsteps: 16")
-        lines.append("rotation_distance: 22.6789511  # Calibrate this!")
-        lines.append("nozzle_diameter: 0.400")
-        lines.append("filament_diameter: 1.750")
-        lines.append(f"heater_pin: {he_pin}  # {he_port}")
-        lines.append(f"sensor_type: {hotend_therm}")
         lines.append(f"sensor_pin: {th_pin}  # {th_port}")
     
     lines.append("min_temp: 0")
@@ -438,34 +447,39 @@ def generate_hardware_cfg(
     lines.append("# FANS")
     lines.append("# " + "─" * 77)
     
-    if toolboard:
-        # Fans on toolboard
-        tb_assignments = hardware_state.get('toolboard_assignments', {})
+    # Check if fans are on toolboard (not 'none')
+    pc_on_toolboard = toolboard and tb_assignments.get('fan_part_cooling', '') not in ('', 'none')
+    hf_on_toolboard = toolboard and tb_assignments.get('fan_hotend', '') not in ('', 'none')
+    
+    # Part cooling fan
+    if pc_on_toolboard:
         pc_port = tb_assignments.get('fan_part_cooling', 'FAN0')
         pc_pin = get_fan_pin(toolboard, pc_port)
-        hf_port = tb_assignments.get('fan_hotend', 'FAN1')
-        hf_pin = get_fan_pin(toolboard, hf_port)
-        
         lines.append("[fan]")
         lines.append(f"pin: toolboard:{pc_pin}  # {pc_port} - Part cooling")
-        lines.append("")
+    else:
+        pc_port = assignments.get('fan_part_cooling', 'FAN0')
+        pc_pin = get_fan_pin(board, pc_port)
+        lines.append("[fan]")
+        lines.append(f"pin: {pc_pin}  # {pc_port} - Part cooling")
+    lines.append("")
+    
+    # Hotend fan (only if not water cooled / actually used)
+    if hf_on_toolboard:
+        hf_port = tb_assignments.get('fan_hotend', 'FAN1')
+        hf_pin = get_fan_pin(toolboard, hf_port)
         lines.append("[heater_fan hotend_fan]")
         lines.append(f"pin: toolboard:{hf_pin}  # {hf_port}")
         lines.append("heater: extruder")
         lines.append("heater_temp: 50.0")
-    else:
-        pc_port = assignments.get('fan_part_cooling', 'FAN0')
-        pc_pin = get_fan_pin(board, pc_port)
+    elif assignments.get('fan_hotend'):
         hf_port = assignments.get('fan_hotend', 'FAN1')
         hf_pin = get_fan_pin(board, hf_port)
-        
-        lines.append("[fan]")
-        lines.append(f"pin: {pc_pin}  # {pc_port} - Part cooling")
-        lines.append("")
         lines.append("[heater_fan hotend_fan]")
         lines.append(f"pin: {hf_pin}  # {hf_port}")
         lines.append("heater: extruder")
         lines.append("heater_temp: 50.0")
+    # If hotend fan is 'none' on both, skip it (water cooled)
     
     lines.append("")
     

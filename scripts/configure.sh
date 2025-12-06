@@ -1834,16 +1834,23 @@ init_state() {
         [position_min_y]=""
         # Fan configuration
         [fan_part_cooling]=""
-        [fan_part_cooling_pin2]=""
+        [fan_part_cooling_multipin]=""
         [fan_hotend]=""
+        [fan_hotend_multipin]=""
         [fan_controller]=""
+        [fan_controller_multipin]=""
         [fan_exhaust]=""
+        [fan_exhaust_multipin]=""
         [fan_chamber]=""
+        [fan_chamber_multipin]=""
         [fan_chamber_type]=""
         [fan_chamber_sensor_type]=""
         [fan_chamber_sensor_pin]=""
         [fan_chamber_target_temp]=""
         [fan_rscs]=""
+        [fan_rscs_multipin]=""
+        [fan_radiator]=""
+        [fan_radiator_multipin]=""
         # Fan advanced options
         [fan_pc_max_power]=""
         [fan_pc_cycle_time]=""
@@ -2714,20 +2721,28 @@ menu_fans() {
         local ex_status=$([[ -n "${WIZARD_STATE[fan_exhaust]}" ]] && echo "[✓]" || echo "[ ]")
         local ch_status=$([[ -n "${WIZARD_STATE[fan_chamber]}" ]] && echo "[✓]" || echo "[ ]")
         local rs_status=$([[ -n "${WIZARD_STATE[fan_rscs]}" ]] && echo "[✓]" || echo "[ ]")
+        local rd_status=$([[ -n "${WIZARD_STATE[fan_radiator]}" ]] && echo "[✓]" || echo "[ ]")
+        
+        # Helper function to show multi-pin status
+        show_multipin() {
+            [[ "${1}" == "yes" ]] && echo " ${YELLOW}(multi-pin)${NC}" || echo ""
+        }
         
         # Display fan type descriptions
         echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Essential Fans:${NC}"
         local pc_info="${WIZARD_STATE[fan_part_cooling]:-not configured}"
         [[ "${WIZARD_STATE[fan_part_cooling]}" == "none" ]] && pc_info="none (remote blower)"
-        [[ -n "${WIZARD_STATE[fan_part_cooling_pin2]}" ]] && pc_info="${pc_info} + ${WIZARD_STATE[fan_part_cooling_pin2]} (multi-pin)"
+        [[ "${WIZARD_STATE[fan_part_cooling_multipin]}" == "yes" ]] && pc_info="${pc_info} (multi-pin)"
         echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}1)${NC} ${pc_status} Part Cooling Fan [fan] - ${CYAN}${pc_info}${NC}"
         
         local he_info="${WIZARD_STATE[fan_hotend]:-not configured}"
         [[ "${WIZARD_STATE[fan_hotend]}" == "none" ]] && he_info="none (water cooled)"
+        [[ "${WIZARD_STATE[fan_hotend_multipin]}" == "yes" ]] && he_info="${he_info} (multi-pin)"
         echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}2)${NC} ${he_status} Hotend Fan [heater_fan] - ${CYAN}${he_info}${NC}"
         
         local cf_info="${WIZARD_STATE[fan_controller]:-not configured}"
         [[ "${WIZARD_STATE[fan_controller]}" == "none" ]] && cf_info="none (passive cooling)"
+        [[ "${WIZARD_STATE[fan_controller_multipin]}" == "yes" ]] && cf_info="${cf_info} (multi-pin)"
         echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}3)${NC} ${cf_status} Controller Fan [controller_fan] - ${CYAN}${cf_info}${NC}"
         
         echo -e "${BCYAN}${BOX_V}${NC}"
@@ -2735,18 +2750,26 @@ menu_fans() {
         
         local ex_info="${WIZARD_STATE[fan_exhaust]:-not configured}"
         [[ "${WIZARD_STATE[fan_exhaust]}" == "none" ]] && ex_info="disabled"
+        [[ "${WIZARD_STATE[fan_exhaust_multipin]}" == "yes" ]] && ex_info="${ex_info} (multi-pin)"
         echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}4)${NC} ${ex_status} Exhaust Fan [fan_generic] - ${CYAN}${ex_info}${NC}"
         
         local ch_info="${WIZARD_STATE[fan_chamber]:-not configured}"
         if [[ "${WIZARD_STATE[fan_chamber_type]}" == "temperature" ]]; then
-            ch_info="${ch_info} (temp controlled @ ${WIZARD_STATE[fan_chamber_target_temp]:-45}°C)"
+            ch_info="${ch_info} (temp @ ${WIZARD_STATE[fan_chamber_target_temp]:-45}°C)"
         fi
         [[ "${WIZARD_STATE[fan_chamber]}" == "none" ]] && ch_info="disabled"
+        [[ "${WIZARD_STATE[fan_chamber_multipin]}" == "yes" ]] && ch_info="${ch_info} (multi-pin)"
         echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}5)${NC} ${ch_status} Chamber Fan [fan_generic/temperature_fan] - ${CYAN}${ch_info}${NC}"
         
         local rs_info="${WIZARD_STATE[fan_rscs]:-not configured}"
         [[ "${WIZARD_STATE[fan_rscs]}" == "none" ]] && rs_info="disabled"
+        [[ "${WIZARD_STATE[fan_rscs_multipin]}" == "yes" ]] && rs_info="${rs_info} (multi-pin)"
         echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}6)${NC} ${rs_status} RSCS/Filter Fan [fan_generic] - ${CYAN}${rs_info}${NC}"
+        
+        local rd_info="${WIZARD_STATE[fan_radiator]:-not configured}"
+        [[ "${WIZARD_STATE[fan_radiator]}" == "none" ]] && rd_info="disabled"
+        [[ "${WIZARD_STATE[fan_radiator_multipin]}" == "yes" ]] && rd_info="${rd_info} (multi-pin)"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}7)${NC} ${rd_status} Radiator Fan [heater_fan] - ${CYAN}${rd_info}${NC}"
         
         print_separator
         print_action_item "A" "Advanced Fan Settings (PWM, max_power, etc.)"
@@ -2763,6 +2786,7 @@ menu_fans() {
             4) menu_fan_exhaust ;;
             5) menu_fan_chamber ;;
             6) menu_fan_rscs ;;
+            7) menu_fan_radiator ;;
             [aA]) menu_fan_advanced ;;
             [bB]) return ;;
             *) ;;
@@ -2778,9 +2802,9 @@ menu_fan_part_cooling() {
     echo -e "${BCYAN}${BOX_V}${NC}  This is the main print cooling fan."
     echo -e "${BCYAN}${BOX_V}${NC}"
     
-    print_menu_item "1" "" "Enable - will configure in Hardware Setup"
-    print_menu_item "2" "" "None - using remote blower on mainboard"
-    print_menu_item "3" "" "Multi-pin - two fans on same control"
+    print_menu_item "1" "" "Enable - single fan"
+    print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
+    print_menu_item "3" "" "None - using remote blower on mainboard"
     print_separator
     print_action_item "B" "Back"
     print_footer
@@ -2791,22 +2815,21 @@ menu_fan_part_cooling() {
     case "$choice" in
         1) 
             WIZARD_STATE[fan_part_cooling]="enabled"
-            WIZARD_STATE[fan_part_cooling_pin2]=""
-            echo -e "${GREEN}✓${NC} Part cooling fan enabled"
+            WIZARD_STATE[fan_part_cooling_multipin]=""
+            echo -e "${GREEN}✓${NC} Part cooling fan enabled (single)"
             sleep 1
             ;;
-        2) 
+        2)
+            WIZARD_STATE[fan_part_cooling]="enabled"
+            WIZARD_STATE[fan_part_cooling_multipin]="yes"
+            echo -e "${GREEN}✓${NC} Part cooling enabled (multi-pin)"
+            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
+            sleep 1
+            ;;
+        3) 
             WIZARD_STATE[fan_part_cooling]="none"
-            WIZARD_STATE[fan_part_cooling_pin2]=""
+            WIZARD_STATE[fan_part_cooling_multipin]=""
             echo -e "${GREEN}✓${NC} Part cooling set to none (remote blower)"
-            sleep 1
-            ;;
-        3)
-            WIZARD_STATE[fan_part_cooling]="multi-pin"
-            echo -e "${BCYAN}${BOX_V}${NC}  Multi-pin mode: Two fan ports will be controlled together"
-            echo -e "${BCYAN}${BOX_V}${NC}  Configure both pins in Hardware Setup"
-            WIZARD_STATE[fan_part_cooling_pin2]="enabled"
-            echo -e "${GREEN}✓${NC} Multi-pin part cooling enabled"
             sleep 1
             ;;
         [bB]) return ;;
@@ -2853,8 +2876,9 @@ menu_fan_controller() {
     echo -e "${BCYAN}${BOX_V}${NC}  Runs when steppers or heaters are active."
     echo -e "${BCYAN}${BOX_V}${NC}"
     
-    print_menu_item "1" "" "Enable - electronics fan"
-    print_menu_item "2" "" "None - passive cooling or always-on fan"
+    print_menu_item "1" "" "Enable - single fan"
+    print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
+    print_menu_item "3" "" "None - passive cooling or always-on fan"
     print_separator
     print_action_item "B" "Back"
     print_footer
@@ -2865,11 +2889,20 @@ menu_fan_controller() {
     case "$choice" in
         1) 
             WIZARD_STATE[fan_controller]="enabled"
-            echo -e "${GREEN}✓${NC} Controller fan enabled"
+            WIZARD_STATE[fan_controller_multipin]=""
+            echo -e "${GREEN}✓${NC} Controller fan enabled (single)"
             sleep 1
             ;;
         2) 
+            WIZARD_STATE[fan_controller]="enabled"
+            WIZARD_STATE[fan_controller_multipin]="yes"
+            echo -e "${GREEN}✓${NC} Controller fan enabled (multi-pin)"
+            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
+            sleep 1
+            ;;
+        3) 
             WIZARD_STATE[fan_controller]="none"
+            WIZARD_STATE[fan_controller_multipin]=""
             echo -e "${GREEN}✓${NC} Controller fan disabled"
             sleep 1
             ;;
@@ -2885,8 +2918,9 @@ menu_fan_exhaust() {
     echo -e "${BCYAN}${BOX_V}${NC}  Manually controlled via SET_FAN_SPEED FAN=exhaust_fan SPEED=x"
     echo -e "${BCYAN}${BOX_V}${NC}"
     
-    print_menu_item "1" "" "Enable - exhaust fan"
-    print_menu_item "2" "" "None - no exhaust fan"
+    print_menu_item "1" "" "Enable - single fan"
+    print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
+    print_menu_item "3" "" "None - no exhaust fan"
     print_separator
     print_action_item "B" "Back"
     print_footer
@@ -2897,11 +2931,20 @@ menu_fan_exhaust() {
     case "$choice" in
         1) 
             WIZARD_STATE[fan_exhaust]="enabled"
-            echo -e "${GREEN}✓${NC} Exhaust fan enabled"
+            WIZARD_STATE[fan_exhaust_multipin]=""
+            echo -e "${GREEN}✓${NC} Exhaust fan enabled (single)"
             sleep 1
             ;;
         2) 
+            WIZARD_STATE[fan_exhaust]="enabled"
+            WIZARD_STATE[fan_exhaust_multipin]="yes"
+            echo -e "${GREEN}✓${NC} Exhaust fan enabled (multi-pin)"
+            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
+            sleep 1
+            ;;
+        3) 
             WIZARD_STATE[fan_exhaust]="none"
+            WIZARD_STATE[fan_exhaust_multipin]=""
             echo -e "${GREEN}✓${NC} Exhaust fan disabled"
             sleep 1
             ;;
@@ -2917,9 +2960,11 @@ menu_fan_chamber() {
     echo -e "${BCYAN}${BOX_V}${NC}  Can be manual or temperature-controlled."
     echo -e "${BCYAN}${BOX_V}${NC}"
     
-    print_menu_item "1" "" "Manual [fan_generic] - control via SET_FAN_SPEED"
-    print_menu_item "2" "" "Temperature controlled [temperature_fan] - auto regulates"
-    print_menu_item "3" "" "None - no chamber fan"
+    print_menu_item "1" "" "Manual [fan_generic] - single fan"
+    print_menu_item "2" "" "Manual [fan_generic] - multi-pin (2+ fans)"
+    print_menu_item "3" "" "Temperature controlled [temperature_fan] - single"
+    print_menu_item "4" "" "Temperature controlled [temperature_fan] - multi-pin"
+    print_menu_item "5" "" "None - no chamber fan"
     print_separator
     print_action_item "B" "Back"
     print_footer
@@ -2931,18 +2976,36 @@ menu_fan_chamber() {
         1) 
             WIZARD_STATE[fan_chamber]="enabled"
             WIZARD_STATE[fan_chamber_type]="manual"
-            echo -e "${GREEN}✓${NC} Chamber fan enabled (manual control)"
+            WIZARD_STATE[fan_chamber_multipin]=""
+            echo -e "${GREEN}✓${NC} Chamber fan enabled (manual, single)"
             sleep 1
             ;;
         2) 
             WIZARD_STATE[fan_chamber]="enabled"
-            WIZARD_STATE[fan_chamber_type]="temperature"
-            # Prompt for temperature settings
-            menu_fan_chamber_temp_settings
+            WIZARD_STATE[fan_chamber_type]="manual"
+            WIZARD_STATE[fan_chamber_multipin]="yes"
+            echo -e "${GREEN}✓${NC} Chamber fan enabled (manual, multi-pin)"
+            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
+            sleep 1
             ;;
         3) 
+            WIZARD_STATE[fan_chamber]="enabled"
+            WIZARD_STATE[fan_chamber_type]="temperature"
+            WIZARD_STATE[fan_chamber_multipin]=""
+            menu_fan_chamber_temp_settings
+            ;;
+        4) 
+            WIZARD_STATE[fan_chamber]="enabled"
+            WIZARD_STATE[fan_chamber_type]="temperature"
+            WIZARD_STATE[fan_chamber_multipin]="yes"
+            menu_fan_chamber_temp_settings
+            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
+            sleep 1
+            ;;
+        5) 
             WIZARD_STATE[fan_chamber]="none"
             WIZARD_STATE[fan_chamber_type]=""
+            WIZARD_STATE[fan_chamber_multipin]=""
             echo -e "${GREEN}✓${NC} Chamber fan disabled"
             sleep 1
             ;;
@@ -2992,8 +3055,9 @@ menu_fan_rscs() {
     echo -e "${BCYAN}${BOX_V}${NC}  Controlled via SET_FAN_SPEED FAN=rscs_fan SPEED=x"
     echo -e "${BCYAN}${BOX_V}${NC}"
     
-    print_menu_item "1" "" "Enable - RSCS/Filter fan"
-    print_menu_item "2" "" "None - no filter fan"
+    print_menu_item "1" "" "Enable - single fan"
+    print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
+    print_menu_item "3" "" "None - no filter fan"
     print_separator
     print_action_item "B" "Back"
     print_footer
@@ -3004,12 +3068,64 @@ menu_fan_rscs() {
     case "$choice" in
         1) 
             WIZARD_STATE[fan_rscs]="enabled"
-            echo -e "${GREEN}✓${NC} RSCS/Filter fan enabled"
+            WIZARD_STATE[fan_rscs_multipin]=""
+            echo -e "${GREEN}✓${NC} RSCS/Filter fan enabled (single)"
             sleep 1
             ;;
         2) 
+            WIZARD_STATE[fan_rscs]="enabled"
+            WIZARD_STATE[fan_rscs_multipin]="yes"
+            echo -e "${GREEN}✓${NC} RSCS/Filter fan enabled (multi-pin)"
+            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
+            sleep 1
+            ;;
+        3) 
             WIZARD_STATE[fan_rscs]="none"
+            WIZARD_STATE[fan_rscs_multipin]=""
             echo -e "${GREEN}✓${NC} RSCS/Filter fan disabled"
+            sleep 1
+            ;;
+        [bB]) return ;;
+    esac
+}
+
+menu_fan_radiator() {
+    clear_screen
+    print_header "Radiator Fan [heater_fan]"
+    
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Water cooling radiator fan(s)${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  Runs when extruder is hot (like hotend fan)."
+    echo -e "${BCYAN}${BOX_V}${NC}  Common for water-cooled hotends with external radiator."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    
+    print_menu_item "1" "" "Enable - single fan"
+    print_menu_item "2" "" "Enable - multi-pin (2+ fans on radiator)"
+    print_menu_item "3" "" "None - no radiator fan"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+    
+    echo -en "${BYELLOW}Select option${NC}: "
+    read -r choice
+    
+    case "$choice" in
+        1) 
+            WIZARD_STATE[fan_radiator]="enabled"
+            WIZARD_STATE[fan_radiator_multipin]=""
+            echo -e "${GREEN}✓${NC} Radiator fan enabled (single)"
+            sleep 1
+            ;;
+        2) 
+            WIZARD_STATE[fan_radiator]="enabled"
+            WIZARD_STATE[fan_radiator_multipin]="yes"
+            echo -e "${GREEN}✓${NC} Radiator fan enabled (multi-pin)"
+            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
+            sleep 1
+            ;;
+        3) 
+            WIZARD_STATE[fan_radiator]="none"
+            WIZARD_STATE[fan_radiator_multipin]=""
+            echo -e "${GREEN}✓${NC} Radiator fan disabled"
             sleep 1
             ;;
         [bB]) return ;;
@@ -3872,4 +3988,5 @@ main() {
 
 # Run main
 main "$@"
+
 

@@ -1156,28 +1156,47 @@ def assign_fan_ports(board: Dict):
         rs_display = f"{rs_port} (pin: {rs_pin})" if rs_port else "not assigned"
         print_menu_item("6", "RSCS/Filter Fan [fan_generic]", rs_display, rs_status)
         
-        # Multi-pin part cooling
-        pc2_port = state.port_assignments.get('fan_part_cooling_pin2', '')
-        if pc2_port:
-            pc2_pin = fan_ports.get(pc2_port, {}).get('pin', '') if pc2_port else ''
-            print_info(f"  7) Part Cooling Pin 2 (multi-pin): {Colors.CYAN}{pc2_port} (pin: {pc2_pin}){Colors.NC}")
-        else:
-            print_menu_item("7", "Part Cooling Pin 2 (multi-pin)", "not assigned", "")
+        rd_port = state.port_assignments.get('fan_radiator', '')
+        rd_pin = fan_ports.get(rd_port, {}).get('pin', '') if rd_port else ''
+        rd_status = "done" if rd_port else ""
+        rd_display = f"{rd_port} (pin: {rd_pin})" if rd_port else "not assigned"
+        print_menu_item("7", "Radiator Fan [heater_fan]", rd_display, rd_status)
+        
+        # Multi-pin section
+        print_info("")
+        print_info(f"{Colors.BWHITE}Multi-Pin (2nd port for same control):{Colors.NC}")
+        
+        # Helper to show multi-pin port
+        def show_multipin_port(key, label, num):
+            port = state.port_assignments.get(key, '')
+            pin = fan_ports.get(port, {}).get('pin', '') if port else ''
+            status = "done" if port else ""
+            display = f"{port} (pin: {pin})" if port else "not assigned"
+            print_menu_item(num, label, display, status)
+        
+        show_multipin_port('fan_part_cooling_pin2', 'Part Cooling Pin 2', 'A')
+        show_multipin_port('fan_controller_pin2', 'Controller Fan Pin 2', 'B')
+        show_multipin_port('fan_rscs_pin2', 'RSCS/Filter Pin 2', 'C')
+        show_multipin_port('fan_radiator_pin2', 'Radiator Fan Pin 2', 'D')
+        show_multipin_port('fan_chamber_pin2', 'Chamber Fan Pin 2', 'E')
+        show_multipin_port('fan_exhaust_pin2', 'Exhaust Fan Pin 2', 'F')
         
         print_separator()
-        print_action("C", "Clear all fan assignments")
-        print_action("D", "Done")
-        print_action("B", "Back")
+        print_action("X", "Clear all fan assignments")
+        print_action("Q", "Done / Back")
         print_footer()
         
-        choice = prompt("Select fan to configure (1-7), or action").strip().lower()
+        choice = prompt("Select fan to configure (1-7, A-F), or action").strip().lower()
         
-        if choice == 'd' or choice == 'b':
+        if choice == 'q':
             return
-        elif choice == 'c':
+        elif choice == 'x':
             # Clear all fan assignments
-            for key in ['fan_part_cooling', 'fan_hotend', 'fan_controller', 
-                       'fan_exhaust', 'fan_chamber', 'fan_rscs', 'fan_part_cooling_pin2']:
+            fan_keys = ['fan_part_cooling', 'fan_hotend', 'fan_controller', 
+                       'fan_exhaust', 'fan_chamber', 'fan_rscs', 'fan_radiator',
+                       'fan_part_cooling_pin2', 'fan_controller_pin2', 'fan_rscs_pin2',
+                       'fan_radiator_pin2', 'fan_chamber_pin2', 'fan_exhaust_pin2']
+            for key in fan_keys:
                 if key in state.port_assignments:
                     del state.port_assignments[key]
             print(f"\n{Colors.GREEN}All fan assignments cleared{Colors.NC}")
@@ -1195,7 +1214,19 @@ def assign_fan_ports(board: Dict):
         elif choice == '6':
             select_fan_port('fan_rscs', 'RSCS/Filter Fan', fan_ports, fan_list)
         elif choice == '7':
-            select_fan_port('fan_part_cooling_pin2', 'Part Cooling Pin 2 (Multi-pin)', fan_ports, fan_list)
+            select_fan_port('fan_radiator', 'Radiator Fan', fan_ports, fan_list)
+        elif choice == 'a':
+            select_fan_port('fan_part_cooling_pin2', 'Part Cooling Pin 2', fan_ports, fan_list)
+        elif choice == 'b':
+            select_fan_port('fan_controller_pin2', 'Controller Fan Pin 2', fan_ports, fan_list)
+        elif choice == 'c':
+            select_fan_port('fan_rscs_pin2', 'RSCS/Filter Pin 2', fan_ports, fan_list)
+        elif choice == 'd':
+            select_fan_port('fan_radiator_pin2', 'Radiator Fan Pin 2', fan_ports, fan_list)
+        elif choice == 'e':
+            select_fan_port('fan_chamber_pin2', 'Chamber Fan Pin 2', fan_ports, fan_list)
+        elif choice == 'f':
+            select_fan_port('fan_exhaust_pin2', 'Exhaust Fan Pin 2', fan_ports, fan_list)
 
 def select_fan_port(fan_key: str, fan_name: str, fan_ports: Dict, fan_list: List):
     """Select a specific port for a fan function."""

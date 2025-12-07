@@ -2089,26 +2089,68 @@ except:
 show_main_menu() {
     # Load hardware state from Python script's output
     load_hardware_state
-    
+
     clear_screen
     print_header "gschpoozi Configuration Wizard"
-    
+
     # Calculate required motor ports based on selections
     local motor_count=2  # X, Y minimum
     local z_count="${WIZARD_STATE[z_stepper_count]:-1}"
     motor_count=$((motor_count + z_count))
-    
+
     # Extruder on main board only if no toolboard
-    local extruder_on_mainboard="yes"
+    local has_toolboard="no"
     if [[ -n "${WIZARD_STATE[toolboard]}" && "${WIZARD_STATE[toolboard]}" != "none" ]]; then
-        extruder_on_mainboard="no"
+        has_toolboard="yes"
     else
         motor_count=$((motor_count + 1))  # Add extruder
     fi
-    
-    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Step 1: Define Your Setup${NC}"
-    print_menu_item "1" "$(get_step_status toolboard)" "Toolhead Board" "${WIZARD_STATE[toolboard_name]:-none}"
-    
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # BOARDS
+    # ─────────────────────────────────────────────────────────────────────────
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}BOARDS${NC}"
+
+    local board_info="${WIZARD_STATE[board_name]:-not selected}"
+    print_menu_item "1" "$(get_step_status board)" "Main Board" "${board_info}"
+
+    print_menu_item "2" "$(get_step_status toolboard)" "Toolhead Board" "${WIZARD_STATE[toolboard_name]:-none}"
+
+    # Misc MCUs (probes with USB/CAN, MMU, expansion boards)
+    local misc_mcu_info=""
+    local misc_mcu_count=0
+    # Count configured misc MCUs
+    if [[ -n "${WIZARD_STATE[probe_type]}" && "${WIZARD_STATE[probe_type]}" =~ ^(beacon|cartographer|btt-eddy)$ ]]; then
+        misc_mcu_count=$((misc_mcu_count + 1))
+        misc_mcu_info="${WIZARD_STATE[probe_type]}"
+    fi
+    if [[ -n "${WIZARD_STATE[mmu_type]}" && "${WIZARD_STATE[mmu_type]}" != "none" ]]; then
+        misc_mcu_count=$((misc_mcu_count + 1))
+        [[ -n "$misc_mcu_info" ]] && misc_mcu_info="${misc_mcu_info}, "
+        misc_mcu_info="${misc_mcu_info}${WIZARD_STATE[mmu_type]}"
+    fi
+    [[ -z "$misc_mcu_info" ]] && misc_mcu_info="none configured"
+    local misc_status=$([[ $misc_mcu_count -gt 0 ]] && echo "done" || echo "")
+    print_menu_item "3" "$misc_status" "Misc MCUs" "${misc_mcu_info}"
+
+    # Show CAN status if any CAN device is configured
+    if [[ "${WIZARD_STATE[toolboard_connection]}" == "can" ]] || \
+       [[ "${WIZARD_STATE[probe_type]}" =~ ^(beacon|cartographer|btt-eddy)$ && -n "${HARDWARE_STATE[probe_canbus_uuid]}" ]]; then
+        local can_status=""
+        if check_can_interface can0 2>/dev/null; then
+            can_status="${GREEN}UP${NC}"
+        else
+            can_status="${RED}Not configured${NC}"
+        fi
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}C)${NC} [ ] CAN Bus Setup: ${CYAN}${can_status}${NC}"
+    fi
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # MOTION
+    # ─────────────────────────────────────────────────────────────────────────
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}MOTION${NC}"
+
     local kin_display="${WIZARD_STATE[kinematics]:-not set}"
     if [[ -n "${WIZARD_STATE[z_stepper_count]}" ]]; then
         kin_display="${kin_display}, ${WIZARD_STATE[z_stepper_count]}x Z"
@@ -2116,37 +2158,75 @@ show_main_menu() {
             kin_display="${kin_display} (${WIZARD_STATE[leveling_method]})"
         fi
     fi
-    print_menu_item "2" "$(get_step_status kinematics)" "Kinematics" "${kin_display}"
-    print_menu_item "3" "$(get_step_status steppers)" "Stepper Drivers" "${WIZARD_STATE[driver_X]:-not set}"
-    
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Step 2: Hardware Selection${NC}"
-    local board_info="${WIZARD_STATE[board_name]:-not selected}"
-    if [[ -n "${WIZARD_STATE[board]}" ]]; then
-        board_info="${board_info} (need ${motor_count} motors)"
+    if [[ -n "${WIZARD_STATE[driver_X]}" ]]; then
+        kin_display="${kin_display}, ${WIZARD_STATE[driver_X]}"
     fi
-    print_menu_item "4" "$(get_step_status board)" "Main Board" "${board_info}"
-    print_menu_item "5" "$(get_step_status ports)" "Port Assignment" "$(get_port_status)"
-    
-    # Show CAN status if toolboard uses CAN
-    local can_status=""
-    if [[ "${WIZARD_STATE[toolboard_connection]}" == "can" ]]; then
-        if check_can_interface can0 2>/dev/null; then
-            can_status="${GREEN}UP${NC}"
-        else
-            can_status="${RED}Not configured${NC}"
-        fi
-        print_menu_item "C" "" "CAN Bus Setup" "${can_status}"
-    fi
-    
+    print_menu_item "4" "$(get_step_status kinematics)" "Kinematics" "${kin_display}"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # COMPONENTS
+    # ─────────────────────────────────────────────────────────────────────────
     echo -e "${BCYAN}${BOX_V}${NC}"
-    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Step 3: Configuration${NC}"
-    print_menu_item "6" "$(get_step_status extruder)" "Extruder" "${WIZARD_STATE[extruder_type]:-not set}"
-    print_menu_item "7" "$(get_step_status bed)" "Heated Bed" "${WIZARD_STATE[bed_size_x]:+${WIZARD_STATE[bed_size_x]}x${WIZARD_STATE[bed_size_y]}mm}"
-    print_menu_item "8" "$(get_step_status probe)" "Probe" "${WIZARD_STATE[probe_type]:-not set}"
-    print_menu_item "9" "$(get_step_status extras)" "Extras" ""
-    print_menu_item "0" "$(get_step_status macros)" "Macros" ""
-    
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}COMPONENTS${NC}"
+
+    # Hotend
+    local hotend_info=""
+    if [[ -n "${WIZARD_STATE[hotend_thermistor]}" ]]; then
+        hotend_info="${WIZARD_STATE[hotend_thermistor]}"
+    else
+        hotend_info="not configured"
+    fi
+    print_menu_item "5" "$(get_step_status hotend)" "Hotend" "${hotend_info}"
+
+    # Heated Bed
+    local bed_info=""
+    if [[ -n "${WIZARD_STATE[bed_size_x]}" ]]; then
+        bed_info="${WIZARD_STATE[bed_size_x]}x${WIZARD_STATE[bed_size_y]}mm"
+        [[ -n "${WIZARD_STATE[bed_thermistor]}" ]] && bed_info="${bed_info}, ${WIZARD_STATE[bed_thermistor]}"
+    else
+        bed_info="not configured"
+    fi
+    print_menu_item "6" "$(get_step_status bed)" "Heated Bed" "${bed_info}"
+
+    # Endstops (including probe as Z endstop)
+    local endstop_info=""
+    local probe_type="${WIZARD_STATE[probe_type]:-none}"
+    if [[ "$probe_type" != "none" && "$probe_type" != "endstop" && -n "$probe_type" ]]; then
+        endstop_info="X/Y + ${probe_type}"
+    else
+        endstop_info="X/Y/Z physical"
+    fi
+    if [[ -n "${WIZARD_STATE[home_x]}" ]]; then
+        endstop_info="${endstop_info} (X:${WIZARD_STATE[home_x]}, Y:${WIZARD_STATE[home_y]})"
+    fi
+    print_menu_item "7" "$(get_step_status endstops)" "Endstops" "${endstop_info}"
+
+    # Fans
+    local fan_count=0
+    [[ "${WIZARD_STATE[fan_part_cooling]}" == "enabled" ]] && fan_count=$((fan_count + 1))
+    [[ "${WIZARD_STATE[fan_hotend]}" == "enabled" ]] && fan_count=$((fan_count + 1))
+    [[ "${WIZARD_STATE[fan_controller]}" == "enabled" ]] && fan_count=$((fan_count + 1))
+    [[ "${WIZARD_STATE[fan_exhaust]}" == "enabled" ]] && fan_count=$((fan_count + 1))
+    [[ "${WIZARD_STATE[fan_chamber]}" == "enabled" ]] && fan_count=$((fan_count + 1))
+    [[ "${WIZARD_STATE[fan_rscs]}" == "enabled" ]] && fan_count=$((fan_count + 1))
+    [[ "${WIZARD_STATE[fan_radiator]}" == "enabled" ]] && fan_count=$((fan_count + 1))
+    local fan_info="${fan_count} configured"
+    local fan_status=$([[ $fan_count -gt 0 ]] && echo "done" || echo "")
+    print_menu_item "8" "$fan_status" "Fans" "${fan_info}"
+
+    # Lighting
+    local light_info="${WIZARD_STATE[lighting_type]:-not configured}"
+    local light_status=$([[ -n "${WIZARD_STATE[lighting_type]}" && "${WIZARD_STATE[lighting_type]}" != "none" ]] && echo "done" || echo "")
+    print_menu_item "9" "$light_status" "Lighting" "${light_info}"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # EXTRAS
+    # ─────────────────────────────────────────────────────────────────────────
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}EXTRAS${NC}"
+    print_menu_item "E" "$(get_step_status extras)" "Extras" ""
+    print_menu_item "M" "$(get_step_status macros)" "Macros" ""
+
     print_separator
     print_action_item "T" "Stepper Calibration"
     print_action_item "F" "MCU Firmware Update"
@@ -2159,16 +2239,17 @@ show_main_menu() {
     read -r choice
 
     case "$choice" in
-        1) menu_toolboard ;;
-        2) menu_kinematics ;;
-        3) menu_steppers ;;
-        4) menu_board ;;
-        5) menu_ports ;;
-        6) menu_extruder ;;
-        7) menu_bed ;;
-        8) menu_probe ;;
-        9) menu_extras ;;
-        0) menu_macros ;;
+        1) menu_board ;;
+        2) menu_toolboard ;;
+        3) menu_misc_mcus ;;
+        4) menu_kinematics ;;
+        5) menu_hotend ;;
+        6) menu_bed ;;
+        7) menu_endstops ;;
+        8) menu_fans ;;
+        9) menu_lighting ;;
+        [eE]) menu_extras ;;
+        [mM]) menu_macros ;;
         [cC]) menu_can_setup ;;
         [tT]) menu_stepper_calibration ;;
         [fF]) menu_mcu_firmware_update ;;
@@ -2232,9 +2313,66 @@ menu_ports() {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 menu_kinematics() {
+    while true; do
+        clear_screen
+        print_header "Motion Configuration"
+
+        # Current configuration summary
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Current Configuration:${NC}"
+        local kin_status=$([[ -n "${WIZARD_STATE[kinematics]}" ]] && echo "done" || echo "")
+        print_menu_item "1" "$kin_status" "Kinematics Type" "${WIZARD_STATE[kinematics]:-not set}"
+
+        local z_info="${WIZARD_STATE[z_stepper_count]:-1}x Z"
+        [[ -n "${WIZARD_STATE[leveling_method]}" && "${WIZARD_STATE[leveling_method]}" != "none" ]] && z_info="${z_info} (${WIZARD_STATE[leveling_method]})"
+        local z_status=$([[ -n "${WIZARD_STATE[z_stepper_count]}" ]] && echo "done" || echo "")
+        print_menu_item "2" "$z_status" "Z Configuration" "${z_info}"
+
+        local driver_status=$([[ -n "${WIZARD_STATE[driver_X]}" ]] && echo "done" || echo "")
+        print_menu_item "3" "$driver_status" "Stepper Drivers" "${WIZARD_STATE[driver_X]:-not set}"
+
+        # Motor port assignment requires board to be selected
+        local motor_status=""
+        local motor_info="not configured"
+        if [[ -n "${WIZARD_STATE[board]}" ]]; then
+            # Check if motor ports are assigned in hardware state
+            if [[ -n "${HARDWARE_STATE[stepper_x_port]}" ]]; then
+                motor_status="done"
+                motor_info="configured"
+            fi
+            print_menu_item "4" "$motor_status" "Motor Port Assignment" "${motor_info}"
+        else
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}4)${NC} ${YELLOW}[ ]${NC} Motor Port Assignment: ${YELLOW}select board first${NC}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back to Main Menu"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1) menu_kinematics_type ;;
+            2) menu_z_config ;;
+            3) menu_steppers ;;
+            4)
+                if [[ -n "${WIZARD_STATE[board]}" ]]; then
+                    menu_motor_ports
+                else
+                    echo -e "\n${RED}Please select a main board first!${NC}"
+                    sleep 1
+                fi
+                ;;
+            [bB]) return ;;
+            *) ;;
+        esac
+    done
+}
+
+menu_kinematics_type() {
     clear_screen
-    print_header "Select Kinematics"
-    
+    print_header "Select Kinematics Type"
+
     print_menu_item "1" "" "CoreXY"
     print_menu_item "2" "" "CoreXY AWD (4 XY motors)"
     print_menu_item "3" "" "Cartesian (bed slinger)"
@@ -2242,10 +2380,10 @@ menu_kinematics() {
     print_separator
     print_action_item "B" "Back"
     print_footer
-    
+
     echo -en "${BYELLOW}Select kinematics${NC}: "
     read -r choice
-    
+
     case "$choice" in
         1) WIZARD_STATE[kinematics]="corexy" ;;
         2) WIZARD_STATE[kinematics]="corexy-awd" ;;
@@ -2254,9 +2392,6 @@ menu_kinematics() {
         [bB]) return ;;
         *) return ;;
     esac
-    
-    # Now ask about Z configuration
-    menu_z_config
 }
 
 menu_z_config() {
@@ -2614,6 +2749,24 @@ menu_steppers() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MOTOR PORT ASSIGNMENT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+menu_motor_ports() {
+    # Save wizard state so Python script can read Z count, kinematics, etc.
+    save_state
+
+    # Call the Python hardware setup script for motor port assignment
+    python3 "${SCRIPT_DIR}/setup-hardware.py" --motors
+
+    # Reload hardware state
+    load_hardware_state
+
+    echo -e "${GREEN}Motor ports configured.${NC}"
+    sleep 1
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # EXTRUDER CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2734,51 +2887,888 @@ menu_pullup_resistor() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# HOTEND CONFIGURATION (thermistor, heater, ports)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+menu_hotend() {
+    while true; do
+        clear_screen
+        print_header "Hotend Configuration"
+
+        # Check if toolboard handles hotend
+        local has_toolboard="no"
+        local hotend_on_toolboard="no"
+        if [[ -n "${WIZARD_STATE[toolboard]}" && "${WIZARD_STATE[toolboard]}" != "none" ]]; then
+            has_toolboard="yes"
+            # Check if toolboard has hotend components assigned
+            if [[ -n "${HARDWARE_STATE[toolboard_heater_extruder]}" && "${HARDWARE_STATE[toolboard_heater_extruder]}" != "none" ]]; then
+                hotend_on_toolboard="yes"
+            fi
+        fi
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Hotend Settings:${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # 1. Extruder type (direct drive / bowden)
+        local ext_status=$([[ -n "${WIZARD_STATE[extruder_type]}" ]] && echo "done" || echo "")
+        print_menu_item "1" "$ext_status" "Extruder Type" "${WIZARD_STATE[extruder_type]:-not set}"
+
+        # 2. Thermistor type
+        local therm_status=$([[ -n "${WIZARD_STATE[hotend_thermistor]}" ]] && echo "done" || echo "")
+        local therm_info="${WIZARD_STATE[hotend_thermistor]:-not set}"
+        if [[ -n "${WIZARD_STATE[hotend_pullup_resistor]}" ]]; then
+            therm_info="${therm_info} (pullup: ${WIZARD_STATE[hotend_pullup_resistor]}Ω)"
+        fi
+        print_menu_item "2" "$therm_status" "Thermistor Type" "${therm_info}"
+
+        # 3. Port assignment (heater + thermistor)
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Port Assignment:${NC}"
+
+        if [[ "$hotend_on_toolboard" == "yes" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Hotend heater/thermistor on toolboard${NC}"
+            local heater_port="${HARDWARE_STATE[toolboard_heater_extruder]:-not set}"
+            local therm_port="${HARDWARE_STATE[toolboard_thermistor_extruder]:-not set}"
+            echo -e "${BCYAN}${BOX_V}${NC}    Heater: ${CYAN}toolboard:${heater_port}${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}    Thermistor: ${CYAN}toolboard:${therm_port}${NC}"
+        elif [[ -n "${WIZARD_STATE[board]}" ]]; then
+            local heater_status=$([[ -n "${HARDWARE_STATE[heater_extruder]}" ]] && echo "done" || echo "")
+            print_menu_item "3" "$heater_status" "Heater Port" "${HARDWARE_STATE[heater_extruder]:-not assigned}"
+
+            local therm_port_status=$([[ -n "${HARDWARE_STATE[thermistor_extruder]}" ]] && echo "done" || echo "")
+            print_menu_item "4" "$therm_port_status" "Thermistor Port" "${HARDWARE_STATE[thermistor_extruder]:-not assigned}"
+        else
+            echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Select a main board first to assign ports${NC}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back to Main Menu"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1) menu_extruder_type ;;
+            2) menu_hotend_thermistor ;;
+            3)
+                if [[ -n "${WIZARD_STATE[board]}" && "$hotend_on_toolboard" != "yes" ]]; then
+                    menu_hotend_heater_port
+                fi
+                ;;
+            4)
+                if [[ -n "${WIZARD_STATE[board]}" && "$hotend_on_toolboard" != "yes" ]]; then
+                    menu_hotend_thermistor_port
+                fi
+                ;;
+            [bB]) return ;;
+            *) ;;
+        esac
+    done
+}
+
+menu_extruder_type() {
+    clear_screen
+    print_header "Extruder Type"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Select Extruder Type:${NC}"
+    print_menu_item "1" "" "Direct Drive"
+    print_menu_item "2" "" "Bowden"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select type${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) WIZARD_STATE[extruder_type]="direct-drive" ;;
+        2) WIZARD_STATE[extruder_type]="bowden" ;;
+        [bB]) return ;;
+        *) ;;
+    esac
+}
+
+menu_hotend_heater_port() {
+    # Save state and call Python script for heater port assignment
+    save_state
+    python3 "${SCRIPT_DIR}/setup-hardware.py" --heater-extruder
+    load_hardware_state
+}
+
+menu_hotend_thermistor_port() {
+    # Save state and call Python script for thermistor port assignment
+    save_state
+    python3 "${SCRIPT_DIR}/setup-hardware.py" --thermistor-extruder
+    load_hardware_state
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # BED CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
 menu_bed() {
+    while true; do
+        clear_screen
+        print_header "Heated Bed Configuration"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Bed Settings:${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # 1. Bed dimensions
+        local dim_info=""
+        if [[ -n "${WIZARD_STATE[bed_size_x]}" ]]; then
+            dim_info="${WIZARD_STATE[bed_size_x]}x${WIZARD_STATE[bed_size_y]}x${WIZARD_STATE[bed_size_z]}mm"
+        else
+            dim_info="not set"
+        fi
+        local dim_status=$([[ -n "${WIZARD_STATE[bed_size_x]}" ]] && echo "done" || echo "")
+        print_menu_item "1" "$dim_status" "Bed Dimensions" "${dim_info}"
+
+        # 2. Thermistor type
+        local therm_status=$([[ -n "${WIZARD_STATE[bed_thermistor]}" ]] && echo "done" || echo "")
+        local therm_info="${WIZARD_STATE[bed_thermistor]:-not set}"
+        if [[ -n "${WIZARD_STATE[bed_pullup_resistor]}" ]]; then
+            therm_info="${therm_info} (pullup: ${WIZARD_STATE[bed_pullup_resistor]}Ω)"
+        fi
+        print_menu_item "2" "$therm_status" "Thermistor Type" "${therm_info}"
+
+        # 3. Port assignment
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Port Assignment:${NC}"
+
+        if [[ -n "${WIZARD_STATE[board]}" ]]; then
+            local heater_status=$([[ -n "${HARDWARE_STATE[heater_bed]}" ]] && echo "done" || echo "")
+            print_menu_item "3" "$heater_status" "Heater Port" "${HARDWARE_STATE[heater_bed]:-not assigned}"
+
+            local therm_port_status=$([[ -n "${HARDWARE_STATE[thermistor_bed]}" ]] && echo "done" || echo "")
+            print_menu_item "4" "$therm_port_status" "Thermistor Port" "${HARDWARE_STATE[thermistor_bed]:-not assigned}"
+        else
+            echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Select a main board first to assign ports${NC}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back to Main Menu"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1) menu_bed_dimensions ;;
+            2) menu_bed_thermistor ;;
+            3)
+                if [[ -n "${WIZARD_STATE[board]}" ]]; then
+                    menu_bed_heater_port
+                fi
+                ;;
+            4)
+                if [[ -n "${WIZARD_STATE[board]}" ]]; then
+                    menu_bed_thermistor_port
+                fi
+                ;;
+            [bB]) return ;;
+            *) ;;
+        esac
+    done
+}
+
+menu_bed_dimensions() {
     clear_screen
-    print_header "Heated Bed Configuration"
-    
+    print_header "Bed Dimensions"
+
     echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Enter bed dimensions:${NC}"
     echo -e "${BCYAN}${BOX_V}${NC}"
-    
-    # Use a subshell-safe approach for prompts
+
     echo -en "  " >&2
     WIZARD_STATE[bed_size_x]=$(prompt_input "Bed size X (mm)" "${WIZARD_STATE[bed_size_x]:-300}")
     echo -en "  " >&2
     WIZARD_STATE[bed_size_y]=$(prompt_input "Bed size Y (mm)" "${WIZARD_STATE[bed_size_y]:-300}")
     echo -en "  " >&2
     WIZARD_STATE[bed_size_z]=$(prompt_input "Max Z height (mm)" "${WIZARD_STATE[bed_size_z]:-350}")
-    
-    echo ""
+
+    echo -e "\n${GREEN}Bed dimensions saved.${NC}"
+    sleep 1
+}
+
+menu_bed_thermistor() {
+    clear_screen
+    print_header "Bed Thermistor"
+
     echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Select Bed Thermistor:${NC}"
     print_menu_item "1" "" "Generic 3950 (NTC 100K)"
     print_menu_item "2" "" "Keenovo (NTC 100K)"
-    print_menu_item "3" "" "PT1000"
+    print_menu_item "3" "" "PT1000 (direct, needs pullup config)"
     print_menu_item "4" "" "NTC 100K beta 3950 (Prusa)"
+    print_menu_item "5" "" "EPCOS 100K B57560G104F"
     print_separator
     print_action_item "B" "Back"
     print_footer
-    
+
     echo -en "${BYELLOW}Select thermistor${NC}: "
     read -r choice
-    
+
     case "$choice" in
         1) WIZARD_STATE[bed_thermistor]="Generic 3950" ;;
         2) WIZARD_STATE[bed_thermistor]="Keenovo" ;;
-        3) WIZARD_STATE[bed_thermistor]="PT1000" ;;
+        3)
+            WIZARD_STATE[bed_thermistor]="PT1000"
+            menu_bed_pullup_resistor
+            ;;
         4) WIZARD_STATE[bed_thermistor]="NTC 100K beta 3950" ;;
+        5) WIZARD_STATE[bed_thermistor]="EPCOS 100K B57560G104F" ;;
         [bB]) return ;;
         *) ;;
     esac
 }
 
+menu_bed_pullup_resistor() {
+    clear_screen
+    print_header "Bed Thermistor Pullup Resistor"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Select the pullup resistor value for bed thermistor:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  (Check your board documentation if unsure)"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    print_menu_item "1" "" "4700 ohms (4.7K) - Most common default"
+    print_menu_item "2" "" "2200 ohms (2.2K) - Some BTT boards"
+    print_menu_item "3" "" "1000 ohms (1K) - Rare"
+    print_menu_item "4" "" "Custom value"
+    print_separator
+    print_action_item "S" "Skip (use Klipper default)"
+    print_footer
+
+    echo -en "${BYELLOW}Select pullup resistor${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) WIZARD_STATE[bed_pullup_resistor]="4700" ;;
+        2) WIZARD_STATE[bed_pullup_resistor]="2200" ;;
+        3) WIZARD_STATE[bed_pullup_resistor]="1000" ;;
+        4)
+            echo -en "  Enter pullup resistor value (ohms): "
+            read -r custom_value
+            if [[ -n "$custom_value" ]]; then
+                WIZARD_STATE[bed_pullup_resistor]="$custom_value"
+            fi
+            ;;
+        [sS]) WIZARD_STATE[bed_pullup_resistor]="" ;;
+        *) ;;
+    esac
+}
+
+menu_bed_heater_port() {
+    save_state
+    python3 "${SCRIPT_DIR}/setup-hardware.py" --heater-bed
+    load_hardware_state
+}
+
+menu_bed_thermistor_port() {
+    save_state
+    python3 "${SCRIPT_DIR}/setup-hardware.py" --thermistor-bed
+    load_hardware_state
+}
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# PROBE CONFIGURATION
+# ENDSTOPS CONFIGURATION (includes probe as Z endstop)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+menu_endstops() {
+    while true; do
+        clear_screen
+        print_header "Endstops Configuration"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}X/Y Endstops:${NC}"
+
+        # X endstop
+        local x_info=""
+        if [[ -n "${WIZARD_STATE[home_x]}" ]]; then
+            x_info="position: ${WIZARD_STATE[home_x]}"
+            if [[ "${WIZARD_STATE[endstop_x_type]}" == "sensorless" ]]; then
+                x_info="${x_info}, sensorless"
+            elif [[ -n "${HARDWARE_STATE[endstop_x]}" ]]; then
+                x_info="${x_info}, port: ${HARDWARE_STATE[endstop_x]}"
+            fi
+        else
+            x_info="not configured"
+        fi
+        local x_status=$([[ -n "${WIZARD_STATE[home_x]}" ]] && echo "done" || echo "")
+        print_menu_item "1" "$x_status" "X Endstop" "${x_info}"
+
+        # Y endstop
+        local y_info=""
+        if [[ -n "${WIZARD_STATE[home_y]}" ]]; then
+            y_info="position: ${WIZARD_STATE[home_y]}"
+            if [[ "${WIZARD_STATE[endstop_y_type]}" == "sensorless" ]]; then
+                y_info="${y_info}, sensorless"
+            elif [[ -n "${HARDWARE_STATE[endstop_y]}" ]]; then
+                y_info="${y_info}, port: ${HARDWARE_STATE[endstop_y]}"
+            fi
+        else
+            y_info="not configured"
+        fi
+        local y_status=$([[ -n "${WIZARD_STATE[home_y]}" ]] && echo "done" || echo "")
+        print_menu_item "2" "$y_status" "Y Endstop" "${y_info}"
+
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Z Endstop / Probe:${NC}"
+
+        # Z endstop / probe
+        local z_info=""
+        local probe_type="${WIZARD_STATE[probe_type]:-not set}"
+        if [[ "$probe_type" == "endstop" ]]; then
+            z_info="Physical switch"
+            if [[ -n "${WIZARD_STATE[home_z]}" ]]; then
+                z_info="${z_info} (${WIZARD_STATE[home_z]})"
+            fi
+            if [[ -n "${HARDWARE_STATE[endstop_z]}" ]]; then
+                z_info="${z_info}, port: ${HARDWARE_STATE[endstop_z]}"
+            fi
+        elif [[ "$probe_type" != "not set" && -n "$probe_type" ]]; then
+            z_info="${probe_type}"
+            # Show MCU info for probes with their own MCU
+            if [[ "$probe_type" =~ ^(beacon|cartographer|btt-eddy)$ ]]; then
+                if [[ -n "${WIZARD_STATE[probe_serial]}" ]]; then
+                    z_info="${z_info} (serial configured)"
+                elif [[ -n "${WIZARD_STATE[probe_canbus_uuid]}" ]]; then
+                    z_info="${z_info} (CAN configured)"
+                else
+                    z_info="${z_info} (MCU not configured)"
+                fi
+            fi
+        else
+            z_info="not configured"
+        fi
+        local z_status=$([[ -n "${WIZARD_STATE[probe_type]}" ]] && echo "done" || echo "")
+        print_menu_item "3" "$z_status" "Z Probe/Endstop" "${z_info}"
+
+        print_separator
+        print_action_item "B" "Back to Main Menu"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1) menu_endstop_x ;;
+            2) menu_endstop_y ;;
+            3) menu_endstop_z ;;
+            [bB]) return ;;
+            *) ;;
+        esac
+    done
+}
+
+menu_endstop_x() {
+    while true; do
+        clear_screen
+        print_header "X Endstop Configuration"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}X Axis Endstop:${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        local pos_status=$([[ -n "${WIZARD_STATE[home_x]}" ]] && echo "done" || echo "")
+        print_menu_item "1" "$pos_status" "Endstop Position" "${WIZARD_STATE[home_x]:-not set}"
+
+        local type_status=$([[ -n "${WIZARD_STATE[endstop_x_type]}" ]] && echo "done" || echo "")
+        print_menu_item "2" "$type_status" "Endstop Type" "${WIZARD_STATE[endstop_x_type]:-physical switch}"
+
+        # Port assignment only for physical switches
+        if [[ "${WIZARD_STATE[endstop_x_type]}" != "sensorless" ]]; then
+            if [[ -n "${WIZARD_STATE[board]}" ]]; then
+                local port_status=$([[ -n "${HARDWARE_STATE[endstop_x]}" ]] && echo "done" || echo "")
+                print_menu_item "3" "$port_status" "Port Assignment" "${HARDWARE_STATE[endstop_x]:-not assigned}"
+            else
+                echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}3) Port Assignment: select board first${NC}"
+            fi
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1) menu_endstop_x_position ;;
+            2) menu_endstop_x_type ;;
+            3)
+                if [[ -n "${WIZARD_STATE[board]}" && "${WIZARD_STATE[endstop_x_type]}" != "sensorless" ]]; then
+                    menu_endstop_x_port
+                fi
+                ;;
+            [bB]) return ;;
+            *) ;;
+        esac
+    done
+}
+
+menu_endstop_x_position() {
+    clear_screen
+    print_header "X Endstop Position"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Where is the X endstop located?${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    print_menu_item "1" "" "X MAX (right side) - Voron style"
+    print_menu_item "2" "" "X MIN (left side) - Prusa/Ender style"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select position${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) WIZARD_STATE[home_x]="max" ;;
+        2) WIZARD_STATE[home_x]="min" ;;
+        [bB]) return ;;
+        *) ;;
+    esac
+}
+
+menu_endstop_x_type() {
+    clear_screen
+    print_header "X Endstop Type"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Select X endstop type:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    print_menu_item "1" "" "Physical switch (microswitch)"
+    print_menu_item "2" "" "Sensorless homing (TMC StallGuard)"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select type${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) WIZARD_STATE[endstop_x_type]="physical" ;;
+        2) WIZARD_STATE[endstop_x_type]="sensorless" ;;
+        [bB]) return ;;
+        *) ;;
+    esac
+}
+
+menu_endstop_x_port() {
+    save_state
+    python3 "${SCRIPT_DIR}/setup-hardware.py" --endstop-x
+    load_hardware_state
+}
+
+menu_endstop_y() {
+    while true; do
+        clear_screen
+        print_header "Y Endstop Configuration"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Y Axis Endstop:${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        local pos_status=$([[ -n "${WIZARD_STATE[home_y]}" ]] && echo "done" || echo "")
+        print_menu_item "1" "$pos_status" "Endstop Position" "${WIZARD_STATE[home_y]:-not set}"
+
+        local type_status=$([[ -n "${WIZARD_STATE[endstop_y_type]}" ]] && echo "done" || echo "")
+        print_menu_item "2" "$type_status" "Endstop Type" "${WIZARD_STATE[endstop_y_type]:-physical switch}"
+
+        # Port assignment only for physical switches
+        if [[ "${WIZARD_STATE[endstop_y_type]}" != "sensorless" ]]; then
+            if [[ -n "${WIZARD_STATE[board]}" ]]; then
+                local port_status=$([[ -n "${HARDWARE_STATE[endstop_y]}" ]] && echo "done" || echo "")
+                print_menu_item "3" "$port_status" "Port Assignment" "${HARDWARE_STATE[endstop_y]:-not assigned}"
+            else
+                echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}3) Port Assignment: select board first${NC}"
+            fi
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1) menu_endstop_y_position ;;
+            2) menu_endstop_y_type ;;
+            3)
+                if [[ -n "${WIZARD_STATE[board]}" && "${WIZARD_STATE[endstop_y_type]}" != "sensorless" ]]; then
+                    menu_endstop_y_port
+                fi
+                ;;
+            [bB]) return ;;
+            *) ;;
+        esac
+    done
+}
+
+menu_endstop_y_position() {
+    clear_screen
+    print_header "Y Endstop Position"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Where is the Y endstop located?${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    print_menu_item "1" "" "Y MAX (back) - Voron style"
+    print_menu_item "2" "" "Y MIN (front) - Prusa/Ender style"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select position${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) WIZARD_STATE[home_y]="max" ;;
+        2) WIZARD_STATE[home_y]="min" ;;
+        [bB]) return ;;
+        *) ;;
+    esac
+}
+
+menu_endstop_y_type() {
+    clear_screen
+    print_header "Y Endstop Type"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Select Y endstop type:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    print_menu_item "1" "" "Physical switch (microswitch)"
+    print_menu_item "2" "" "Sensorless homing (TMC StallGuard)"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select type${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) WIZARD_STATE[endstop_y_type]="physical" ;;
+        2) WIZARD_STATE[endstop_y_type]="sensorless" ;;
+        [bB]) return ;;
+        *) ;;
+    esac
+}
+
+menu_endstop_y_port() {
+    save_state
+    python3 "${SCRIPT_DIR}/setup-hardware.py" --endstop-y
+    load_hardware_state
+}
+
+menu_endstop_z() {
+    while true; do
+        clear_screen
+        print_header "Z Endstop / Probe Configuration"
+
+        # Show installation status for probes that need modules
+        local beacon_status="" carto_status="" eddy_status=""
+        if is_probe_installed "beacon"; then
+            beacon_status="${GREEN}[installed]${NC}"
+        else
+            beacon_status="${YELLOW}[not installed]${NC}"
+        fi
+        if is_probe_installed "cartographer"; then
+            carto_status="${GREEN}[installed]${NC}"
+        else
+            carto_status="${YELLOW}[not installed]${NC}"
+        fi
+        if is_probe_installed "btt-eddy"; then
+            eddy_status="${GREEN}[installed]${NC}"
+        else
+            eddy_status="${YELLOW}[not installed]${NC}"
+        fi
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Current: ${WIZARD_STATE[probe_type]:-not set}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Pin-based Probes:${NC}"
+        print_menu_item "1" "" "BLTouch / 3DTouch"
+        print_menu_item "2" "" "Klicky Probe"
+        print_menu_item "3" "" "Inductive Probe (PINDA/SuperPINDA)"
+
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}MCU-based Probes (USB/CAN):${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}4)${NC} [ ] Beacon (Eddy Current) ${beacon_status}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}5)${NC} [ ] Cartographer ${carto_status}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}6)${NC} [ ] BTT Eddy ${eddy_status}"
+
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Physical Endstop:${NC}"
+        print_menu_item "7" "" "Physical Z Endstop (no probe)"
+
+        # Show port/MCU assignment option if probe is selected
+        if [[ -n "${WIZARD_STATE[probe_type]}" && "${WIZARD_STATE[probe_type]}" != "endstop" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            if [[ "${WIZARD_STATE[probe_type]}" =~ ^(beacon|cartographer|btt-eddy)$ ]]; then
+                local mcu_info=""
+                if [[ -n "${WIZARD_STATE[probe_serial]}" ]]; then
+                    mcu_info="USB: ${WIZARD_STATE[probe_serial]}"
+                elif [[ -n "${WIZARD_STATE[probe_canbus_uuid]}" ]]; then
+                    mcu_info="CAN: ${WIZARD_STATE[probe_canbus_uuid]}"
+                else
+                    mcu_info="not configured"
+                fi
+                print_menu_item "P" "" "Configure Probe MCU" "${mcu_info}"
+            else
+                local pin_info="${HARDWARE_STATE[probe_pin]:-not assigned}"
+                print_menu_item "P" "" "Configure Probe Pin" "${pin_info}"
+            fi
+        elif [[ "${WIZARD_STATE[probe_type]}" == "endstop" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            local z_port="${HARDWARE_STATE[endstop_z]:-not assigned}"
+            print_menu_item "P" "" "Configure Z Endstop Port" "${z_port}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        local selected_probe=""
+        case "$choice" in
+            1) WIZARD_STATE[probe_type]="bltouch" ;;
+            2) WIZARD_STATE[probe_type]="klicky" ;;
+            3) WIZARD_STATE[probe_type]="inductive" ;;
+            4)
+                WIZARD_STATE[probe_type]="beacon"
+                selected_probe="beacon"
+                ;;
+            5)
+                WIZARD_STATE[probe_type]="cartographer"
+                selected_probe="cartographer"
+                ;;
+            6)
+                WIZARD_STATE[probe_type]="btt-eddy"
+                selected_probe="btt-eddy"
+                ;;
+            7)
+                WIZARD_STATE[probe_type]="endstop"
+                menu_endstop_z_position
+                ;;
+            [pP])
+                if [[ -n "${WIZARD_STATE[probe_type]}" ]]; then
+                    menu_probe_port_or_mcu
+                fi
+                ;;
+            [bB]) return ;;
+            *) ;;
+        esac
+
+        # If selected probe needs installation, offer to install it
+        if [[ -n "$selected_probe" ]] && ! is_probe_installed "$selected_probe"; then
+            echo ""
+            echo -e "${YELLOW}The ${selected_probe} probe requires additional software.${NC}"
+            if confirm "Install ${selected_probe} module now?"; then
+                install_probe_module "$selected_probe"
+                wait_for_key
+            else
+                echo -e "${YELLOW}Note: You'll need to install ${selected_probe} manually before using it.${NC}"
+                wait_for_key
+            fi
+        fi
+    done
+}
+
+menu_endstop_z_position() {
+    clear_screen
+    print_header "Z Endstop Position"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Where is the Z endstop located?${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    print_menu_item "1" "" "Z MIN (bed level) - most common"
+    print_menu_item "2" "" "Z MAX (top of travel)"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select position${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) WIZARD_STATE[home_z]="min" ;;
+        2) WIZARD_STATE[home_z]="max" ;;
+        [bB]) return ;;
+        *) ;;
+    esac
+}
+
+menu_probe_port_or_mcu() {
+    local probe_type="${WIZARD_STATE[probe_type]}"
+
+    if [[ "$probe_type" =~ ^(beacon|cartographer|btt-eddy)$ ]]; then
+        # MCU-based probe - configure serial or CAN
+        menu_probe_mcu
+    elif [[ "$probe_type" == "endstop" ]]; then
+        # Physical Z endstop
+        if [[ -n "${WIZARD_STATE[board]}" ]]; then
+            save_state
+            python3 "${SCRIPT_DIR}/setup-hardware.py" --endstop-z
+            load_hardware_state
+        else
+            echo -e "${RED}Please select a main board first!${NC}"
+            wait_for_key
+        fi
+    else
+        # Pin-based probe (BLTouch, Klicky, Inductive)
+        if [[ -n "${WIZARD_STATE[board]}" ]]; then
+            save_state
+            python3 "${SCRIPT_DIR}/setup-hardware.py" --probe-pin
+            load_hardware_state
+        else
+            echo -e "${RED}Please select a main board first!${NC}"
+            wait_for_key
+        fi
+    fi
+}
+
+menu_probe_mcu() {
+    clear_screen
+    print_header "Probe MCU Configuration"
+
+    local probe_type="${WIZARD_STATE[probe_type]}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Configure ${probe_type} connection:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    print_menu_item "1" "" "USB connection (serial by-id)"
+    print_menu_item "2" "" "CAN bus (UUID)"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select connection type${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) menu_probe_usb ;;
+        2) menu_probe_can ;;
+        [bB]) return ;;
+        *) ;;
+    esac
+}
+
+menu_probe_usb() {
+    clear_screen
+    print_header "Probe USB Serial"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Scanning for USB devices...${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    # Scan for USB devices
+    local devices=()
+    local i=1
+    while IFS= read -r device; do
+        if [[ -n "$device" ]]; then
+            devices+=("$device")
+            local short_name=$(basename "$device")
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${i})${NC} ${short_name}"
+            i=$((i + 1))
+        fi
+    done < <(ls /dev/serial/by-id/ 2>/dev/null | grep -E "beacon|cartographer|eddy|probe" || true)
+
+    if [[ ${#devices[@]} -eq 0 ]]; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}No probe USB devices found.${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${WHITE}Make sure your probe is connected via USB.${NC}"
+    fi
+
+    print_separator
+    print_action_item "M" "Manual entry"
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select device or M for manual${NC}: "
+    read -r choice
+
+    case "$choice" in
+        [1-9])
+            local idx=$((choice - 1))
+            if [[ $idx -lt ${#devices[@]} ]]; then
+                WIZARD_STATE[probe_serial]="/dev/serial/by-id/${devices[$idx]}"
+                WIZARD_STATE[probe_canbus_uuid]=""
+                echo -e "${GREEN}✓${NC} Probe serial set to: ${WIZARD_STATE[probe_serial]}"
+                sleep 1
+            fi
+            ;;
+        [mM])
+            echo -en "  Enter serial path: "
+            read -r manual_serial
+            if [[ -n "$manual_serial" ]]; then
+                WIZARD_STATE[probe_serial]="$manual_serial"
+                WIZARD_STATE[probe_canbus_uuid]=""
+            fi
+            ;;
+        [bB]) return ;;
+        *) ;;
+    esac
+}
+
+menu_probe_can() {
+    clear_screen
+    print_header "Probe CAN UUID"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Scanning CAN bus for devices...${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    # Check if CAN interface is up
+    if ! check_can_interface can0 2>/dev/null; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}CAN interface not available.${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${WHITE}Please configure CAN bus first.${NC}"
+        print_footer
+        wait_for_key
+        return
+    fi
+
+    # Scan for CAN devices
+    local uuids=()
+    local i=1
+    while IFS= read -r line; do
+        if [[ "$line" =~ canbus_uuid=([a-f0-9]+) ]]; then
+            local uuid="${BASH_REMATCH[1]}"
+            uuids+=("$uuid")
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${i})${NC} ${uuid}"
+            i=$((i + 1))
+        fi
+    done < <(python3 ~/klipper/scripts/canbus_query.py can0 2>/dev/null || true)
+
+    if [[ ${#uuids[@]} -eq 0 ]]; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}No CAN devices found.${NC}"
+    fi
+
+    print_separator
+    print_action_item "M" "Manual entry"
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select device or M for manual${NC}: "
+    read -r choice
+
+    case "$choice" in
+        [1-9])
+            local idx=$((choice - 1))
+            if [[ $idx -lt ${#uuids[@]} ]]; then
+                WIZARD_STATE[probe_canbus_uuid]="${uuids[$idx]}"
+                WIZARD_STATE[probe_serial]=""
+                echo -e "${GREEN}✓${NC} Probe CAN UUID set to: ${WIZARD_STATE[probe_canbus_uuid]}"
+                sleep 1
+            fi
+            ;;
+        [mM])
+            echo -en "  Enter CAN UUID: "
+            read -r manual_uuid
+            if [[ -n "$manual_uuid" ]]; then
+                WIZARD_STATE[probe_canbus_uuid]="$manual_uuid"
+                WIZARD_STATE[probe_serial]=""
+            fi
+            ;;
+        [bB]) return ;;
+        *) ;;
+    esac
+}
+
+# Legacy probe menu - redirects to new endstops menu
 menu_probe() {
     clear_screen
     print_header "Probe Configuration"
@@ -2865,7 +3855,6 @@ menu_fans() {
         print_header "Fan Configuration"
         
         echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Configure your printer's fans:${NC}"
-        echo -e "${BCYAN}${BOX_V}${NC}  (Port assignment is done in Hardware Setup)"
         echo -e "${BCYAN}${BOX_V}${NC}"
         
         # Show current fan configurations
@@ -2949,222 +3938,379 @@ menu_fans() {
 }
 
 menu_fan_part_cooling() {
-    clear_screen
-    print_header "Part Cooling Fan [fan]"
-    
-    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Part cooling fan controlled by M106/M107${NC}"
-    echo -e "${BCYAN}${BOX_V}${NC}  This is the main print cooling fan."
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    
-    print_menu_item "1" "" "Enable - single fan"
-    print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
-    print_menu_item "3" "" "None - using remote blower on mainboard"
-    print_separator
-    print_action_item "B" "Back"
-    print_footer
-    
-    echo -en "${BYELLOW}Select option${NC}: "
-    read -r choice
-    
-    case "$choice" in
-        1) 
-            WIZARD_STATE[fan_part_cooling]="enabled"
-            WIZARD_STATE[fan_part_cooling_multipin]=""
-            echo -e "${GREEN}✓${NC} Part cooling fan enabled (single)"
-            sleep 1
-            ;;
-        2)
-            WIZARD_STATE[fan_part_cooling]="enabled"
-            WIZARD_STATE[fan_part_cooling_multipin]="yes"
-            echo -e "${GREEN}✓${NC} Part cooling enabled (multi-pin)"
-            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
-            sleep 1
-            ;;
-        3) 
-            WIZARD_STATE[fan_part_cooling]="none"
-            WIZARD_STATE[fan_part_cooling_multipin]=""
-            echo -e "${GREEN}✓${NC} Part cooling set to none (remote blower)"
-            sleep 1
-            ;;
-        [bB]) return ;;
-    esac
+    while true; do
+        clear_screen
+        print_header "Part Cooling Fan [fan]"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Part cooling fan controlled by M106/M107${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  This is the main print cooling fan."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # Check if on toolboard
+        local has_toolboard="no"
+        local fan_on_toolboard="no"
+        if [[ -n "${WIZARD_STATE[toolboard]}" && "${WIZARD_STATE[toolboard]}" != "none" ]]; then
+            has_toolboard="yes"
+            if [[ -n "${HARDWARE_STATE[toolboard_fan_part_cooling]}" ]]; then
+                fan_on_toolboard="yes"
+            fi
+        fi
+
+        # Current status
+        local status_info="${WIZARD_STATE[fan_part_cooling]:-not configured}"
+        [[ "${WIZARD_STATE[fan_part_cooling_multipin]}" == "yes" ]] && status_info="${status_info} (multi-pin)"
+        echo -e "${BCYAN}${BOX_V}${NC}  Current: ${CYAN}${status_info}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_menu_item "1" "" "Enable - single fan"
+        print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
+        print_menu_item "3" "" "None - using remote blower on mainboard"
+
+        # Port assignment option
+        if [[ "${WIZARD_STATE[fan_part_cooling]}" == "enabled" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            if [[ "$fan_on_toolboard" == "yes" ]]; then
+                echo -e "${BCYAN}${BOX_V}${NC}  Port: ${GREEN}toolboard:${HARDWARE_STATE[toolboard_fan_part_cooling]}${NC}"
+            elif [[ -n "${WIZARD_STATE[board]}" ]]; then
+                local port_info="${HARDWARE_STATE[fan_part_cooling]:-not assigned}"
+                [[ "${WIZARD_STATE[fan_part_cooling_multipin]}" == "yes" && -n "${HARDWARE_STATE[fan_part_cooling_2]}" ]] && port_info="${port_info}, ${HARDWARE_STATE[fan_part_cooling_2]}"
+                print_menu_item "P" "" "Assign Port(s)" "${port_info}"
+            fi
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                WIZARD_STATE[fan_part_cooling]="enabled"
+                WIZARD_STATE[fan_part_cooling_multipin]=""
+                echo -e "${GREEN}✓${NC} Part cooling fan enabled (single)"
+                sleep 1
+                ;;
+            2)
+                WIZARD_STATE[fan_part_cooling]="enabled"
+                WIZARD_STATE[fan_part_cooling_multipin]="yes"
+                echo -e "${GREEN}✓${NC} Part cooling enabled (multi-pin)"
+                sleep 1
+                ;;
+            3)
+                WIZARD_STATE[fan_part_cooling]="none"
+                WIZARD_STATE[fan_part_cooling_multipin]=""
+                echo -e "${GREEN}✓${NC} Part cooling set to none (remote blower)"
+                sleep 1
+                ;;
+            [pP])
+                if [[ "${WIZARD_STATE[fan_part_cooling]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+                    menu_fan_port_assign "fan_part_cooling" "Part Cooling"
+                fi
+                ;;
+            [bB]) return ;;
+        esac
+    done
+}
+
+# Generic fan port assignment helper
+# Usage: menu_fan_port_assign <fan_key> <fan_display_name>
+menu_fan_port_assign() {
+    local fan_key="$1"
+    local fan_name="$2"
+    local is_multipin="${WIZARD_STATE[${fan_key}_multipin]}"
+
+    save_state
+
+    if [[ "$is_multipin" == "yes" ]]; then
+        # Multi-pin assignment
+        python3 "${SCRIPT_DIR}/setup-hardware.py" --fan-multipin "${fan_key}"
+    else
+        # Single pin assignment
+        python3 "${SCRIPT_DIR}/setup-hardware.py" --fan "${fan_key}"
+    fi
+
+    load_hardware_state
 }
 
 menu_fan_hotend() {
-    clear_screen
-    print_header "Hotend Fan [heater_fan]"
-    
-    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Hotend cooling fan that runs when extruder is hot${NC}"
-    echo -e "${BCYAN}${BOX_V}${NC}  Automatically turns on above heater_temp threshold."
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    
-    print_menu_item "1" "" "Enable - standard hotend fan"
-    print_menu_item "2" "" "None - water cooled hotend"
-    print_separator
-    print_action_item "B" "Back"
-    print_footer
-    
-    echo -en "${BYELLOW}Select option${NC}: "
-    read -r choice
-    
-    case "$choice" in
-        1) 
-            WIZARD_STATE[fan_hotend]="enabled"
-            echo -e "${GREEN}✓${NC} Hotend fan enabled"
-            sleep 1
-            ;;
-        2) 
-            WIZARD_STATE[fan_hotend]="none"
-            echo -e "${GREEN}✓${NC} Hotend fan disabled (water cooled)"
-            sleep 1
-            ;;
-        [bB]) return ;;
-    esac
+    while true; do
+        clear_screen
+        print_header "Hotend Fan [heater_fan]"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Hotend cooling fan that runs when extruder is hot${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Automatically turns on above heater_temp threshold."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # Check if on toolboard
+        local fan_on_toolboard="no"
+        if [[ -n "${WIZARD_STATE[toolboard]}" && "${WIZARD_STATE[toolboard]}" != "none" ]]; then
+            if [[ -n "${HARDWARE_STATE[toolboard_fan_hotend]}" ]]; then
+                fan_on_toolboard="yes"
+            fi
+        fi
+
+        # Current status
+        echo -e "${BCYAN}${BOX_V}${NC}  Current: ${CYAN}${WIZARD_STATE[fan_hotend]:-not configured}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_menu_item "1" "" "Enable - standard hotend fan"
+        print_menu_item "2" "" "Enable - multi-pin (2+ fans)"
+        print_menu_item "3" "" "None - water cooled hotend"
+
+        # Port assignment option
+        if [[ "${WIZARD_STATE[fan_hotend]}" == "enabled" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            if [[ "$fan_on_toolboard" == "yes" ]]; then
+                echo -e "${BCYAN}${BOX_V}${NC}  Port: ${GREEN}toolboard:${HARDWARE_STATE[toolboard_fan_hotend]}${NC}"
+            elif [[ -n "${WIZARD_STATE[board]}" ]]; then
+                local port_info="${HARDWARE_STATE[fan_hotend]:-not assigned}"
+                print_menu_item "P" "" "Assign Port(s)" "${port_info}"
+            fi
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                WIZARD_STATE[fan_hotend]="enabled"
+                WIZARD_STATE[fan_hotend_multipin]=""
+                echo -e "${GREEN}✓${NC} Hotend fan enabled"
+                sleep 1
+                ;;
+            2)
+                WIZARD_STATE[fan_hotend]="enabled"
+                WIZARD_STATE[fan_hotend_multipin]="yes"
+                echo -e "${GREEN}✓${NC} Hotend fan enabled (multi-pin)"
+                sleep 1
+                ;;
+            3)
+                WIZARD_STATE[fan_hotend]="none"
+                WIZARD_STATE[fan_hotend_multipin]=""
+                echo -e "${GREEN}✓${NC} Hotend fan disabled (water cooled)"
+                sleep 1
+                ;;
+            [pP])
+                if [[ "${WIZARD_STATE[fan_hotend]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+                    menu_fan_port_assign "fan_hotend" "Hotend"
+                fi
+                ;;
+            [bB]) return ;;
+        esac
+    done
 }
 
 menu_fan_controller() {
-    clear_screen
-    print_header "Controller Fan [controller_fan]"
-    
-    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Electronics cooling fan${NC}"
-    echo -e "${BCYAN}${BOX_V}${NC}  Runs when steppers or heaters are active."
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    
-    print_menu_item "1" "" "Enable - single fan"
-    print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
-    print_menu_item "3" "" "None - passive cooling or always-on fan"
-    print_separator
-    print_action_item "B" "Back"
-    print_footer
-    
-    echo -en "${BYELLOW}Select option${NC}: "
-    read -r choice
-    
-    case "$choice" in
-        1) 
-            WIZARD_STATE[fan_controller]="enabled"
-            WIZARD_STATE[fan_controller_multipin]=""
-            echo -e "${GREEN}✓${NC} Controller fan enabled (single)"
-            sleep 1
-            ;;
-        2) 
-            WIZARD_STATE[fan_controller]="enabled"
-            WIZARD_STATE[fan_controller_multipin]="yes"
-            echo -e "${GREEN}✓${NC} Controller fan enabled (multi-pin)"
-            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
-            sleep 1
-            ;;
-        3) 
-            WIZARD_STATE[fan_controller]="none"
-            WIZARD_STATE[fan_controller_multipin]=""
-            echo -e "${GREEN}✓${NC} Controller fan disabled"
-            sleep 1
-            ;;
-        [bB]) return ;;
-    esac
+    while true; do
+        clear_screen
+        print_header "Controller Fan [controller_fan]"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Electronics cooling fan${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Runs when steppers or heaters are active."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # Current status
+        local status_info="${WIZARD_STATE[fan_controller]:-not configured}"
+        [[ "${WIZARD_STATE[fan_controller_multipin]}" == "yes" ]] && status_info="${status_info} (multi-pin)"
+        echo -e "${BCYAN}${BOX_V}${NC}  Current: ${CYAN}${status_info}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_menu_item "1" "" "Enable - single fan"
+        print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
+        print_menu_item "3" "" "None - passive cooling or always-on fan"
+
+        # Port assignment option
+        if [[ "${WIZARD_STATE[fan_controller]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            local port_info="${HARDWARE_STATE[fan_controller]:-not assigned}"
+            [[ "${WIZARD_STATE[fan_controller_multipin]}" == "yes" && -n "${HARDWARE_STATE[fan_controller_2]}" ]] && port_info="${port_info}, ${HARDWARE_STATE[fan_controller_2]}"
+            print_menu_item "P" "" "Assign Port(s)" "${port_info}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                WIZARD_STATE[fan_controller]="enabled"
+                WIZARD_STATE[fan_controller_multipin]=""
+                echo -e "${GREEN}✓${NC} Controller fan enabled (single)"
+                sleep 1
+                ;;
+            2)
+                WIZARD_STATE[fan_controller]="enabled"
+                WIZARD_STATE[fan_controller_multipin]="yes"
+                echo -e "${GREEN}✓${NC} Controller fan enabled (multi-pin)"
+                sleep 1
+                ;;
+            3)
+                WIZARD_STATE[fan_controller]="none"
+                WIZARD_STATE[fan_controller_multipin]=""
+                echo -e "${GREEN}✓${NC} Controller fan disabled"
+                sleep 1
+                ;;
+            [pP])
+                if [[ "${WIZARD_STATE[fan_controller]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+                    menu_fan_port_assign "fan_controller" "Controller"
+                fi
+                ;;
+            [bB]) return ;;
+        esac
+    done
 }
 
 menu_fan_exhaust() {
-    clear_screen
-    print_header "Exhaust Fan [fan_generic]"
-    
-    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Enclosure exhaust fan${NC}"
-    echo -e "${BCYAN}${BOX_V}${NC}  Manually controlled via SET_FAN_SPEED FAN=exhaust_fan SPEED=x"
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    
-    print_menu_item "1" "" "Enable - single fan"
-    print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
-    print_menu_item "3" "" "None - no exhaust fan"
-    print_separator
-    print_action_item "B" "Back"
-    print_footer
-    
-    echo -en "${BYELLOW}Select option${NC}: "
-    read -r choice
-    
-    case "$choice" in
-        1) 
-            WIZARD_STATE[fan_exhaust]="enabled"
-            WIZARD_STATE[fan_exhaust_multipin]=""
-            echo -e "${GREEN}✓${NC} Exhaust fan enabled (single)"
-            sleep 1
-            ;;
-        2) 
-            WIZARD_STATE[fan_exhaust]="enabled"
-            WIZARD_STATE[fan_exhaust_multipin]="yes"
-            echo -e "${GREEN}✓${NC} Exhaust fan enabled (multi-pin)"
-            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
-            sleep 1
-            ;;
-        3) 
-            WIZARD_STATE[fan_exhaust]="none"
-            WIZARD_STATE[fan_exhaust_multipin]=""
-            echo -e "${GREEN}✓${NC} Exhaust fan disabled"
-            sleep 1
-            ;;
-        [bB]) return ;;
-    esac
+    while true; do
+        clear_screen
+        print_header "Exhaust Fan [fan_generic]"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Enclosure exhaust fan${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Manually controlled via SET_FAN_SPEED FAN=exhaust_fan SPEED=x"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # Current status
+        local status_info="${WIZARD_STATE[fan_exhaust]:-not configured}"
+        [[ "${WIZARD_STATE[fan_exhaust_multipin]}" == "yes" ]] && status_info="${status_info} (multi-pin)"
+        echo -e "${BCYAN}${BOX_V}${NC}  Current: ${CYAN}${status_info}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_menu_item "1" "" "Enable - single fan"
+        print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
+        print_menu_item "3" "" "None - no exhaust fan"
+
+        # Port assignment option
+        if [[ "${WIZARD_STATE[fan_exhaust]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            local port_info="${HARDWARE_STATE[fan_exhaust]:-not assigned}"
+            [[ "${WIZARD_STATE[fan_exhaust_multipin]}" == "yes" && -n "${HARDWARE_STATE[fan_exhaust_2]}" ]] && port_info="${port_info}, ${HARDWARE_STATE[fan_exhaust_2]}"
+            print_menu_item "P" "" "Assign Port(s)" "${port_info}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                WIZARD_STATE[fan_exhaust]="enabled"
+                WIZARD_STATE[fan_exhaust_multipin]=""
+                echo -e "${GREEN}✓${NC} Exhaust fan enabled (single)"
+                sleep 1
+                ;;
+            2)
+                WIZARD_STATE[fan_exhaust]="enabled"
+                WIZARD_STATE[fan_exhaust_multipin]="yes"
+                echo -e "${GREEN}✓${NC} Exhaust fan enabled (multi-pin)"
+                sleep 1
+                ;;
+            3)
+                WIZARD_STATE[fan_exhaust]="none"
+                WIZARD_STATE[fan_exhaust_multipin]=""
+                echo -e "${GREEN}✓${NC} Exhaust fan disabled"
+                sleep 1
+                ;;
+            [pP])
+                if [[ "${WIZARD_STATE[fan_exhaust]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+                    menu_fan_port_assign "fan_exhaust" "Exhaust"
+                fi
+                ;;
+            [bB]) return ;;
+        esac
+    done
 }
 
 menu_fan_chamber() {
-    clear_screen
-    print_header "Chamber Fan"
-    
-    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Chamber circulation/heating fan${NC}"
-    echo -e "${BCYAN}${BOX_V}${NC}  Can be manual or temperature-controlled."
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    
-    print_menu_item "1" "" "Manual [fan_generic] - single fan"
-    print_menu_item "2" "" "Manual [fan_generic] - multi-pin (2+ fans)"
-    print_menu_item "3" "" "Temperature controlled [temperature_fan] - single"
-    print_menu_item "4" "" "Temperature controlled [temperature_fan] - multi-pin"
-    print_menu_item "5" "" "None - no chamber fan"
-    print_separator
-    print_action_item "B" "Back"
-    print_footer
-    
-    echo -en "${BYELLOW}Select option${NC}: "
-    read -r choice
-    
-    case "$choice" in
-        1) 
-            WIZARD_STATE[fan_chamber]="enabled"
-            WIZARD_STATE[fan_chamber_type]="manual"
-            WIZARD_STATE[fan_chamber_multipin]=""
-            echo -e "${GREEN}✓${NC} Chamber fan enabled (manual, single)"
-            sleep 1
-            ;;
-        2) 
-            WIZARD_STATE[fan_chamber]="enabled"
-            WIZARD_STATE[fan_chamber_type]="manual"
-            WIZARD_STATE[fan_chamber_multipin]="yes"
-            echo -e "${GREEN}✓${NC} Chamber fan enabled (manual, multi-pin)"
-            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
-            sleep 1
-            ;;
-        3) 
-            WIZARD_STATE[fan_chamber]="enabled"
-            WIZARD_STATE[fan_chamber_type]="temperature"
-            WIZARD_STATE[fan_chamber_multipin]=""
-            menu_fan_chamber_temp_settings
-            ;;
-        4) 
-            WIZARD_STATE[fan_chamber]="enabled"
-            WIZARD_STATE[fan_chamber_type]="temperature"
-            WIZARD_STATE[fan_chamber_multipin]="yes"
-            menu_fan_chamber_temp_settings
-            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
-            sleep 1
-            ;;
-        5) 
-            WIZARD_STATE[fan_chamber]="none"
-            WIZARD_STATE[fan_chamber_type]=""
-            WIZARD_STATE[fan_chamber_multipin]=""
-            echo -e "${GREEN}✓${NC} Chamber fan disabled"
-            sleep 1
-            ;;
-        [bB]) return ;;
-    esac
+    while true; do
+        clear_screen
+        print_header "Chamber Fan"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Chamber circulation/heating fan${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Can be manual or temperature-controlled."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # Current status
+        local status_info="${WIZARD_STATE[fan_chamber]:-not configured}"
+        [[ "${WIZARD_STATE[fan_chamber_type]}" == "temperature" ]] && status_info="${status_info} (temp: ${WIZARD_STATE[fan_chamber_target_temp]:-45}°C)"
+        [[ "${WIZARD_STATE[fan_chamber_multipin]}" == "yes" ]] && status_info="${status_info} (multi-pin)"
+        echo -e "${BCYAN}${BOX_V}${NC}  Current: ${CYAN}${status_info}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_menu_item "1" "" "Manual [fan_generic] - single fan"
+        print_menu_item "2" "" "Manual [fan_generic] - multi-pin (2+ fans)"
+        print_menu_item "3" "" "Temperature controlled [temperature_fan] - single"
+        print_menu_item "4" "" "Temperature controlled [temperature_fan] - multi-pin"
+        print_menu_item "5" "" "None - no chamber fan"
+
+        # Port assignment option
+        if [[ "${WIZARD_STATE[fan_chamber]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            local port_info="${HARDWARE_STATE[fan_chamber]:-not assigned}"
+            [[ "${WIZARD_STATE[fan_chamber_multipin]}" == "yes" && -n "${HARDWARE_STATE[fan_chamber_2]}" ]] && port_info="${port_info}, ${HARDWARE_STATE[fan_chamber_2]}"
+            print_menu_item "P" "" "Assign Port(s)" "${port_info}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                WIZARD_STATE[fan_chamber]="enabled"
+                WIZARD_STATE[fan_chamber_type]="manual"
+                WIZARD_STATE[fan_chamber_multipin]=""
+                echo -e "${GREEN}✓${NC} Chamber fan enabled (manual, single)"
+                sleep 1
+                ;;
+            2)
+                WIZARD_STATE[fan_chamber]="enabled"
+                WIZARD_STATE[fan_chamber_type]="manual"
+                WIZARD_STATE[fan_chamber_multipin]="yes"
+                echo -e "${GREEN}✓${NC} Chamber fan enabled (manual, multi-pin)"
+                sleep 1
+                ;;
+            3)
+                WIZARD_STATE[fan_chamber]="enabled"
+                WIZARD_STATE[fan_chamber_type]="temperature"
+                WIZARD_STATE[fan_chamber_multipin]=""
+                menu_fan_chamber_temp_settings
+                ;;
+            4)
+                WIZARD_STATE[fan_chamber]="enabled"
+                WIZARD_STATE[fan_chamber_type]="temperature"
+                WIZARD_STATE[fan_chamber_multipin]="yes"
+                menu_fan_chamber_temp_settings
+                ;;
+            5)
+                WIZARD_STATE[fan_chamber]="none"
+                WIZARD_STATE[fan_chamber_type]=""
+                WIZARD_STATE[fan_chamber_multipin]=""
+                echo -e "${GREEN}✓${NC} Chamber fan disabled"
+                sleep 1
+                ;;
+            [pP])
+                if [[ "${WIZARD_STATE[fan_chamber]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+                    menu_fan_port_assign "fan_chamber" "Chamber"
+                fi
+                ;;
+            [bB]) return ;;
+        esac
+    done
 }
 
 menu_fan_chamber_temp_settings() {
@@ -3202,88 +4348,130 @@ menu_fan_chamber_temp_settings() {
 }
 
 menu_fan_rscs() {
-    clear_screen
-    print_header "RSCS/Filter Fan [fan_generic]"
-    
-    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Recirculating active carbon/HEPA filter fan${NC}"
-    echo -e "${BCYAN}${BOX_V}${NC}  Controlled via SET_FAN_SPEED FAN=rscs_fan SPEED=x"
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    
-    print_menu_item "1" "" "Enable - single fan"
-    print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
-    print_menu_item "3" "" "None - no filter fan"
-    print_separator
-    print_action_item "B" "Back"
-    print_footer
-    
-    echo -en "${BYELLOW}Select option${NC}: "
-    read -r choice
-    
-    case "$choice" in
-        1) 
-            WIZARD_STATE[fan_rscs]="enabled"
-            WIZARD_STATE[fan_rscs_multipin]=""
-            echo -e "${GREEN}✓${NC} RSCS/Filter fan enabled (single)"
-            sleep 1
-            ;;
-        2) 
-            WIZARD_STATE[fan_rscs]="enabled"
-            WIZARD_STATE[fan_rscs_multipin]="yes"
-            echo -e "${GREEN}✓${NC} RSCS/Filter fan enabled (multi-pin)"
-            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
-            sleep 1
-            ;;
-        3) 
-            WIZARD_STATE[fan_rscs]="none"
-            WIZARD_STATE[fan_rscs_multipin]=""
-            echo -e "${GREEN}✓${NC} RSCS/Filter fan disabled"
-            sleep 1
-            ;;
-        [bB]) return ;;
-    esac
+    while true; do
+        clear_screen
+        print_header "RSCS/Filter Fan [fan_generic]"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Recirculating active carbon/HEPA filter fan${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Controlled via SET_FAN_SPEED FAN=rscs_fan SPEED=x"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # Current status
+        local status_info="${WIZARD_STATE[fan_rscs]:-not configured}"
+        [[ "${WIZARD_STATE[fan_rscs_multipin]}" == "yes" ]] && status_info="${status_info} (multi-pin)"
+        echo -e "${BCYAN}${BOX_V}${NC}  Current: ${CYAN}${status_info}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_menu_item "1" "" "Enable - single fan"
+        print_menu_item "2" "" "Enable - multi-pin (2+ fans on same control)"
+        print_menu_item "3" "" "None - no filter fan"
+
+        # Port assignment option
+        if [[ "${WIZARD_STATE[fan_rscs]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            local port_info="${HARDWARE_STATE[fan_rscs]:-not assigned}"
+            [[ "${WIZARD_STATE[fan_rscs_multipin]}" == "yes" && -n "${HARDWARE_STATE[fan_rscs_2]}" ]] && port_info="${port_info}, ${HARDWARE_STATE[fan_rscs_2]}"
+            print_menu_item "P" "" "Assign Port(s)" "${port_info}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                WIZARD_STATE[fan_rscs]="enabled"
+                WIZARD_STATE[fan_rscs_multipin]=""
+                echo -e "${GREEN}✓${NC} RSCS/Filter fan enabled (single)"
+                sleep 1
+                ;;
+            2)
+                WIZARD_STATE[fan_rscs]="enabled"
+                WIZARD_STATE[fan_rscs_multipin]="yes"
+                echo -e "${GREEN}✓${NC} RSCS/Filter fan enabled (multi-pin)"
+                sleep 1
+                ;;
+            3)
+                WIZARD_STATE[fan_rscs]="none"
+                WIZARD_STATE[fan_rscs_multipin]=""
+                echo -e "${GREEN}✓${NC} RSCS/Filter fan disabled"
+                sleep 1
+                ;;
+            [pP])
+                if [[ "${WIZARD_STATE[fan_rscs]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+                    menu_fan_port_assign "fan_rscs" "RSCS/Filter"
+                fi
+                ;;
+            [bB]) return ;;
+        esac
+    done
 }
 
 menu_fan_radiator() {
-    clear_screen
-    print_header "Radiator Fan [heater_fan]"
-    
-    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Water cooling radiator fan(s)${NC}"
-    echo -e "${BCYAN}${BOX_V}${NC}  Runs when extruder is hot (like hotend fan)."
-    echo -e "${BCYAN}${BOX_V}${NC}  Common for water-cooled hotends with external radiator."
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    
-    print_menu_item "1" "" "Enable - single fan"
-    print_menu_item "2" "" "Enable - multi-pin (2+ fans on radiator)"
-    print_menu_item "3" "" "None - no radiator fan"
-    print_separator
-    print_action_item "B" "Back"
-    print_footer
-    
-    echo -en "${BYELLOW}Select option${NC}: "
-    read -r choice
-    
-    case "$choice" in
-        1) 
-            WIZARD_STATE[fan_radiator]="enabled"
-            WIZARD_STATE[fan_radiator_multipin]=""
-            echo -e "${GREEN}✓${NC} Radiator fan enabled (single)"
-            sleep 1
-            ;;
-        2) 
-            WIZARD_STATE[fan_radiator]="enabled"
-            WIZARD_STATE[fan_radiator_multipin]="yes"
-            echo -e "${GREEN}✓${NC} Radiator fan enabled (multi-pin)"
-            echo -e "${CYAN}Configure multiple ports in Hardware Setup${NC}"
-            sleep 1
-            ;;
-        3) 
-            WIZARD_STATE[fan_radiator]="none"
-            WIZARD_STATE[fan_radiator_multipin]=""
-            echo -e "${GREEN}✓${NC} Radiator fan disabled"
-            sleep 1
-            ;;
-        [bB]) return ;;
-    esac
+    while true; do
+        clear_screen
+        print_header "Radiator Fan [heater_fan]"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Water cooling radiator fan(s)${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Runs when extruder is hot (like hotend fan)."
+        echo -e "${BCYAN}${BOX_V}${NC}  Common for water-cooled hotends with external radiator."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # Current status
+        local status_info="${WIZARD_STATE[fan_radiator]:-not configured}"
+        [[ "${WIZARD_STATE[fan_radiator_multipin]}" == "yes" ]] && status_info="${status_info} (multi-pin)"
+        echo -e "${BCYAN}${BOX_V}${NC}  Current: ${CYAN}${status_info}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_menu_item "1" "" "Enable - single fan"
+        print_menu_item "2" "" "Enable - multi-pin (2+ fans on radiator)"
+        print_menu_item "3" "" "None - no radiator fan"
+
+        # Port assignment option
+        if [[ "${WIZARD_STATE[fan_radiator]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            local port_info="${HARDWARE_STATE[fan_radiator]:-not assigned}"
+            [[ "${WIZARD_STATE[fan_radiator_multipin]}" == "yes" && -n "${HARDWARE_STATE[fan_radiator_2]}" ]] && port_info="${port_info}, ${HARDWARE_STATE[fan_radiator_2]}"
+            print_menu_item "P" "" "Assign Port(s)" "${port_info}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                WIZARD_STATE[fan_radiator]="enabled"
+                WIZARD_STATE[fan_radiator_multipin]=""
+                echo -e "${GREEN}✓${NC} Radiator fan enabled (single)"
+                sleep 1
+                ;;
+            2)
+                WIZARD_STATE[fan_radiator]="enabled"
+                WIZARD_STATE[fan_radiator_multipin]="yes"
+                echo -e "${GREEN}✓${NC} Radiator fan enabled (multi-pin)"
+                sleep 1
+                ;;
+            3)
+                WIZARD_STATE[fan_radiator]="none"
+                WIZARD_STATE[fan_radiator_multipin]=""
+                echo -e "${GREEN}✓${NC} Radiator fan disabled"
+                sleep 1
+                ;;
+            [pP])
+                if [[ "${WIZARD_STATE[fan_radiator]}" == "enabled" && -n "${WIZARD_STATE[board]}" ]]; then
+                    menu_fan_port_assign "fan_radiator" "Radiator"
+                fi
+                ;;
+            [bB]) return ;;
+        esac
+    done
 }
 
 menu_fan_advanced() {
@@ -3360,6 +4548,441 @@ menu_fan_advanced() {
             WIZARD_STATE[fan_pc_kick_start]=""
             echo -e "${GREEN}✓${NC} Reset to defaults"
             sleep 1
+            ;;
+        [bB]) return ;;
+    esac
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LIGHTING CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+menu_lighting() {
+    while true; do
+        clear_screen
+        print_header "Lighting Configuration"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Configure printer lighting:${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # Current status
+        local light_type="${WIZARD_STATE[lighting_type]:-not configured}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Current: ${CYAN}${light_type}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_menu_item "1" "" "Neopixel (WS2812, SK6812)"
+        print_menu_item "2" "" "Dotstar (APA102)"
+        print_menu_item "3" "" "PCA9533 (I2C LED driver)"
+        print_menu_item "4" "" "Simple PWM LED"
+        print_menu_item "5" "" "None - no lighting"
+
+        # Port/pin assignment option if type is selected
+        if [[ -n "${WIZARD_STATE[lighting_type]}" && "${WIZARD_STATE[lighting_type]}" != "none" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            local pin_info="${HARDWARE_STATE[lighting_pin]:-not assigned}"
+            local led_count="${WIZARD_STATE[lighting_count]:-1}"
+            if [[ "${WIZARD_STATE[lighting_type]}" =~ ^(neopixel|dotstar)$ ]]; then
+                pin_info="${pin_info}, ${led_count} LEDs"
+            fi
+            print_menu_item "P" "" "Configure Pin & Settings" "${pin_info}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back to Main Menu"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                WIZARD_STATE[lighting_type]="neopixel"
+                echo -e "${GREEN}✓${NC} Neopixel lighting selected"
+                sleep 1
+                ;;
+            2)
+                WIZARD_STATE[lighting_type]="dotstar"
+                echo -e "${GREEN}✓${NC} Dotstar lighting selected"
+                sleep 1
+                ;;
+            3)
+                WIZARD_STATE[lighting_type]="pca9533"
+                echo -e "${GREEN}✓${NC} PCA9533 lighting selected"
+                sleep 1
+                ;;
+            4)
+                WIZARD_STATE[lighting_type]="pwm"
+                echo -e "${GREEN}✓${NC} PWM LED lighting selected"
+                sleep 1
+                ;;
+            5)
+                WIZARD_STATE[lighting_type]="none"
+                echo -e "${GREEN}✓${NC} Lighting disabled"
+                sleep 1
+                ;;
+            [pP])
+                if [[ -n "${WIZARD_STATE[lighting_type]}" && "${WIZARD_STATE[lighting_type]}" != "none" ]]; then
+                    menu_lighting_settings
+                fi
+                ;;
+            [bB]) return ;;
+        esac
+    done
+}
+
+menu_lighting_settings() {
+    clear_screen
+    print_header "Lighting Settings"
+
+    local light_type="${WIZARD_STATE[lighting_type]}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Configure ${light_type} settings:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    # LED count for addressable LEDs
+    if [[ "$light_type" =~ ^(neopixel|dotstar)$ ]]; then
+        echo -en "  Number of LEDs [${WIZARD_STATE[lighting_count]:-1}]: "
+        read -r led_count
+        WIZARD_STATE[lighting_count]="${led_count:-${WIZARD_STATE[lighting_count]:-1}}"
+    fi
+
+    # Color order for Neopixels
+    if [[ "$light_type" == "neopixel" ]]; then
+        echo ""
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Color order:${NC}"
+        print_menu_item "1" "" "GRB (most common)"
+        print_menu_item "2" "" "RGB"
+        print_menu_item "3" "" "GRBW (RGBW strips)"
+        print_menu_item "4" "" "RGBW"
+
+        echo -en "${BYELLOW}Select color order${NC}: "
+        read -r color_choice
+
+        case "$color_choice" in
+            1) WIZARD_STATE[lighting_color_order]="GRB" ;;
+            2) WIZARD_STATE[lighting_color_order]="RGB" ;;
+            3) WIZARD_STATE[lighting_color_order]="GRBW" ;;
+            4) WIZARD_STATE[lighting_color_order]="RGBW" ;;
+            *) WIZARD_STATE[lighting_color_order]="GRB" ;;
+        esac
+    fi
+
+    # Pin assignment
+    if [[ -n "${WIZARD_STATE[board]}" ]]; then
+        save_state
+        python3 "${SCRIPT_DIR}/setup-hardware.py" --lighting
+        load_hardware_state
+    else
+        echo -e "${YELLOW}Select a board first to assign the pin.${NC}"
+        wait_for_key
+    fi
+
+    echo -e "${GREEN}✓${NC} Lighting settings configured"
+    sleep 1
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MISC MCUs (MMU, Expansion boards, CAN probes)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+menu_misc_mcus() {
+    while true; do
+        clear_screen
+        print_header "Misc MCUs Configuration"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Additional MCUs and expansion boards:${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # MMU
+        local mmu_info="${WIZARD_STATE[mmu_type]:-not configured}"
+        if [[ -n "${WIZARD_STATE[mmu_serial]}" ]]; then
+            mmu_info="${mmu_info} (USB configured)"
+        elif [[ -n "${WIZARD_STATE[mmu_canbus_uuid]}" ]]; then
+            mmu_info="${mmu_info} (CAN configured)"
+        fi
+        local mmu_status=$([[ -n "${WIZARD_STATE[mmu_type]}" && "${WIZARD_STATE[mmu_type]}" != "none" ]] && echo "done" || echo "")
+        print_menu_item "1" "$mmu_status" "MMU / ERCF / Tradrack" "${mmu_info}"
+
+        # Expansion board
+        local exp_info="${WIZARD_STATE[expansion_board]:-not configured}"
+        local exp_status=$([[ -n "${WIZARD_STATE[expansion_board]}" && "${WIZARD_STATE[expansion_board]}" != "none" ]] && echo "done" || echo "")
+        print_menu_item "2" "$exp_status" "Expansion Board" "${exp_info}"
+
+        # CAN probes (Beacon, Cartographer, Eddy) - shown if selected in endstops
+        local probe_type="${WIZARD_STATE[probe_type]}"
+        if [[ "$probe_type" =~ ^(beacon|cartographer|btt-eddy)$ ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Probe MCU (from Endstops):${NC}"
+            local probe_mcu_info="${probe_type}"
+            if [[ -n "${WIZARD_STATE[probe_serial]}" ]]; then
+                probe_mcu_info="${probe_mcu_info} (USB: configured)"
+            elif [[ -n "${WIZARD_STATE[probe_canbus_uuid]}" ]]; then
+                probe_mcu_info="${probe_mcu_info} (CAN: configured)"
+            else
+                probe_mcu_info="${probe_mcu_info} (not configured)"
+            fi
+            local probe_mcu_status=$([[ -n "${WIZARD_STATE[probe_serial]}" || -n "${WIZARD_STATE[probe_canbus_uuid]}" ]] && echo "done" || echo "")
+            print_menu_item "3" "$probe_mcu_status" "Probe MCU" "${probe_mcu_info}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back to Main Menu"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1) menu_mmu ;;
+            2) menu_expansion_board ;;
+            3)
+                if [[ "$probe_type" =~ ^(beacon|cartographer|btt-eddy)$ ]]; then
+                    menu_probe_mcu
+                fi
+                ;;
+            [bB]) return ;;
+            *) ;;
+        esac
+    done
+}
+
+menu_mmu() {
+    while true; do
+        clear_screen
+        print_header "MMU Configuration"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Multi-Material Unit:${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # Current status
+        local mmu_info="${WIZARD_STATE[mmu_type]:-not configured}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Current: ${CYAN}${mmu_info}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_menu_item "1" "" "ERCF (Enraged Rabbit Carrot Feeder)"
+        print_menu_item "2" "" "Tradrack"
+        print_menu_item "3" "" "MMU2S"
+        print_menu_item "4" "" "Other MMU (manual config)"
+        print_menu_item "5" "" "None - no MMU"
+
+        # Connection config if MMU selected
+        if [[ -n "${WIZARD_STATE[mmu_type]}" && "${WIZARD_STATE[mmu_type]}" != "none" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            local conn_info=""
+            if [[ -n "${WIZARD_STATE[mmu_serial]}" ]]; then
+                conn_info="USB: ${WIZARD_STATE[mmu_serial]}"
+            elif [[ -n "${WIZARD_STATE[mmu_canbus_uuid]}" ]]; then
+                conn_info="CAN: ${WIZARD_STATE[mmu_canbus_uuid]}"
+            else
+                conn_info="not configured"
+            fi
+            print_menu_item "C" "" "Configure Connection" "${conn_info}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1) WIZARD_STATE[mmu_type]="ercf" ;;
+            2) WIZARD_STATE[mmu_type]="tradrack" ;;
+            3) WIZARD_STATE[mmu_type]="mmu2s" ;;
+            4) WIZARD_STATE[mmu_type]="other" ;;
+            5)
+                WIZARD_STATE[mmu_type]="none"
+                WIZARD_STATE[mmu_serial]=""
+                WIZARD_STATE[mmu_canbus_uuid]=""
+                ;;
+            [cC])
+                if [[ -n "${WIZARD_STATE[mmu_type]}" && "${WIZARD_STATE[mmu_type]}" != "none" ]]; then
+                    menu_mmu_connection
+                fi
+                ;;
+            [bB]) return ;;
+        esac
+    done
+}
+
+menu_mmu_connection() {
+    clear_screen
+    print_header "MMU Connection"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Configure ${WIZARD_STATE[mmu_type]} connection:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    print_menu_item "1" "" "USB connection (serial by-id)"
+    print_menu_item "2" "" "CAN bus (UUID)"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select connection type${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1)
+            # USB serial selection
+            clear_screen
+            print_header "MMU USB Serial"
+
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Scanning for USB devices...${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}"
+
+            local devices=()
+            local i=1
+            while IFS= read -r device; do
+                if [[ -n "$device" ]]; then
+                    devices+=("$device")
+                    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${i})${NC} ${device}"
+                    i=$((i + 1))
+                fi
+            done < <(ls /dev/serial/by-id/ 2>/dev/null || true)
+
+            if [[ ${#devices[@]} -eq 0 ]]; then
+                echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}No USB devices found.${NC}"
+            fi
+
+            print_separator
+            print_action_item "M" "Manual entry"
+            print_action_item "B" "Back"
+            print_footer
+
+            echo -en "${BYELLOW}Select device or M for manual${NC}: "
+            read -r dev_choice
+
+            case "$dev_choice" in
+                [1-9])
+                    local idx=$((dev_choice - 1))
+                    if [[ $idx -lt ${#devices[@]} ]]; then
+                        WIZARD_STATE[mmu_serial]="/dev/serial/by-id/${devices[$idx]}"
+                        WIZARD_STATE[mmu_canbus_uuid]=""
+                        echo -e "${GREEN}✓${NC} MMU serial configured"
+                        sleep 1
+                    fi
+                    ;;
+                [mM])
+                    echo -en "  Enter serial path: "
+                    read -r manual_serial
+                    if [[ -n "$manual_serial" ]]; then
+                        WIZARD_STATE[mmu_serial]="$manual_serial"
+                        WIZARD_STATE[mmu_canbus_uuid]=""
+                    fi
+                    ;;
+            esac
+            ;;
+        2)
+            # CAN UUID selection
+            clear_screen
+            print_header "MMU CAN UUID"
+
+            echo -en "  Enter CAN UUID: "
+            read -r can_uuid
+            if [[ -n "$can_uuid" ]]; then
+                WIZARD_STATE[mmu_canbus_uuid]="$can_uuid"
+                WIZARD_STATE[mmu_serial]=""
+                echo -e "${GREEN}✓${NC} MMU CAN UUID configured"
+                sleep 1
+            fi
+            ;;
+        [bB]) return ;;
+    esac
+}
+
+menu_expansion_board() {
+    while true; do
+        clear_screen
+        print_header "Expansion Board"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Additional MCU expansion boards:${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        # Current status
+        echo -e "${BCYAN}${BOX_V}${NC}  Current: ${CYAN}${WIZARD_STATE[expansion_board]:-not configured}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_menu_item "1" "" "BTT EXP-MOT (motor expander)"
+        print_menu_item "2" "" "Fly-SHT36/42 (as expansion, not toolhead)"
+        print_menu_item "3" "" "Other expansion board"
+        print_menu_item "4" "" "None - no expansion board"
+
+        # Connection config if board selected
+        if [[ -n "${WIZARD_STATE[expansion_board]}" && "${WIZARD_STATE[expansion_board]}" != "none" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            local conn_info=""
+            if [[ -n "${WIZARD_STATE[expansion_serial]}" ]]; then
+                conn_info="USB: configured"
+            elif [[ -n "${WIZARD_STATE[expansion_canbus_uuid]}" ]]; then
+                conn_info="CAN: configured"
+            else
+                conn_info="not configured"
+            fi
+            print_menu_item "C" "" "Configure Connection" "${conn_info}"
+        fi
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1) WIZARD_STATE[expansion_board]="btt-exp-mot" ;;
+            2) WIZARD_STATE[expansion_board]="fly-sht" ;;
+            3) WIZARD_STATE[expansion_board]="other" ;;
+            4)
+                WIZARD_STATE[expansion_board]="none"
+                WIZARD_STATE[expansion_serial]=""
+                WIZARD_STATE[expansion_canbus_uuid]=""
+                ;;
+            [cC])
+                if [[ -n "${WIZARD_STATE[expansion_board]}" && "${WIZARD_STATE[expansion_board]}" != "none" ]]; then
+                    menu_expansion_connection
+                fi
+                ;;
+            [bB]) return ;;
+        esac
+    done
+}
+
+menu_expansion_connection() {
+    clear_screen
+    print_header "Expansion Board Connection"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Configure expansion board connection:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    print_menu_item "1" "" "USB connection (serial by-id)"
+    print_menu_item "2" "" "CAN bus (UUID)"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select connection type${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1)
+            echo -en "  Enter USB serial path: "
+            read -r serial_path
+            if [[ -n "$serial_path" ]]; then
+                WIZARD_STATE[expansion_serial]="$serial_path"
+                WIZARD_STATE[expansion_canbus_uuid]=""
+                echo -e "${GREEN}✓${NC} Expansion board serial configured"
+                sleep 1
+            fi
+            ;;
+        2)
+            echo -en "  Enter CAN UUID: "
+            read -r can_uuid
+            if [[ -n "$can_uuid" ]]; then
+                WIZARD_STATE[expansion_canbus_uuid]="$can_uuid"
+                WIZARD_STATE[expansion_serial]=""
+                echo -e "${GREEN}✓${NC} Expansion board CAN UUID configured"
+                sleep 1
+            fi
             ;;
         [bB]) return ;;
     esac

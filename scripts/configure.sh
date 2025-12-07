@@ -765,6 +765,155 @@ update_can_mcu() {
     return 0
 }
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEPPER CALIBRATION MENU
+# ═══════════════════════════════════════════════════════════════════════════════
+
+menu_stepper_calibration() {
+    local kinematics="${WIZARD_STATE[kinematics]:-corexy}"
+    local is_awd=$([[ "$kinematics" == "corexy-awd" ]] && echo "yes" || echo "no")
+    local z_count="${WIZARD_STATE[z_stepper_count]:-1}"
+    local driver="${WIZARD_STATE[driver_X]:-TMC2209}"
+    local is_tmc=$([[ "$driver" == TMC* ]] && echo "yes" || echo "no")
+
+    while true; do
+        clear_screen
+        print_header "Stepper Calibration"
+
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Stepper Identification & Direction Calibration${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  This generates macros to help you:"
+        echo -e "${BCYAN}${BOX_V}${NC}  - Identify which physical motor is on which driver"
+        echo -e "${BCYAN}${BOX_V}${NC}  - Verify motor directions are correct"
+        if [[ "$is_awd" == "yes" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}  - ${GREEN}Test AWD motor pairs safely (one pair at a time)${NC}"
+        fi
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_separator
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Your Configuration:${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Kinematics: ${CYAN}${kinematics}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Z Motors: ${CYAN}${z_count}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Driver: ${CYAN}${driver}${NC}"
+        if [[ "$is_tmc" == "yes" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}  TMC Status: ${GREEN}TMC query macros will be included${NC}"
+        fi
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_separator
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Available Macros (after generation):${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}STEPPER_CALIBRATION_WIZARD${NC} - Display calibration instructions"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}IDENTIFY_ALL_STEPPERS${NC} - Buzz each motor for identification"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}IDENTIFY_STEPPER STEPPER=name${NC} - Buzz a single motor"
+        if [[ "$is_tmc" == "yes" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}QUERY_TMC_STATUS${NC} - Query all TMC driver registers"
+        fi
+        if [[ "$is_awd" == "yes" ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}AWD-Specific (safe pair testing):${NC}"
+            echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}AWD_FULL_TEST${NC} - Complete pair-by-pair calibration"
+            echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}AWD_TEST_PAIR_A${NC} - Test X+Y only (X1+Y1 disabled)"
+            echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}AWD_TEST_PAIR_B${NC} - Test X1+Y1 only (X+Y disabled)"
+            echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}AWD_ENABLE_ALL${NC} - Re-enable all motors"
+        else
+            echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}COREXY_DIRECTION_CHECK${NC} - Test CoreXY directions"
+        fi
+        if [[ "$z_count" -gt 1 ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}Z_DIRECTION_CHECK${NC} - Verify all Z motors match"
+        fi
+        echo -e "${BCYAN}${BOX_V}${NC}"
+
+        print_separator
+        print_action_item "G" "Generate calibration.cfg now"
+        print_action_item "I" "Show calibration instructions"
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            [gG])
+                echo -e "\n${CYAN}Generating calibration.cfg...${NC}"
+                python3 "${SCRIPT_DIR}/generate-config.py" --output-dir "${OUTPUT_DIR}" --calibration-only
+                echo -e "${GREEN}✓ calibration.cfg generated!${NC}"
+                echo -e "\n${WHITE}Add to your printer.cfg:${NC}"
+                echo -e "${CYAN}[include gschpoozi/calibration.cfg]${NC}"
+                wait_for_key
+                ;;
+            [iI])
+                show_calibration_instructions "$is_awd" "$is_tmc" "$z_count"
+                wait_for_key
+                ;;
+            [bB])
+                return
+                ;;
+        esac
+    done
+}
+
+show_calibration_instructions() {
+    local is_awd="$1"
+    local is_tmc="$2"
+    local z_count="$3"
+
+    clear_screen
+    print_header "Stepper Calibration Instructions"
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}STEP 1: Generate Configuration${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  Generate calibration.cfg and add to printer.cfg:"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}[include gschpoozi/calibration.cfg]${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  Then restart Klipper."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}STEP 2: Identify Motors${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  Run from console: ${CYAN}IDENTIFY_ALL_STEPPERS${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  Watch each motor and note which one moves."
+    echo -e "${BCYAN}${BOX_V}${NC}  This helps verify your wiring is correct."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    if [[ "$is_tmc" == "yes" ]]; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}STEP 3: Check TMC Communication${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Run: ${CYAN}QUERY_TMC_STATUS${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Verify no 00000000 or ffffffff errors."
+        echo -e "${BCYAN}${BOX_V}${NC}  Look for 'ola'/'olb' flags = motor disconnected."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+    fi
+
+    if [[ "$is_awd" == "yes" ]]; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}STEP 4: AWD Safe Pair Testing${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Run: ${CYAN}AWD_FULL_TEST${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  This tests motors in pairs to prevent fighting:"
+        echo -e "${BCYAN}${BOX_V}${NC}  - First test: Only X+Y move (X1+Y1 disabled)"
+        echo -e "${BCYAN}${BOX_V}${NC}  - Second test: Only X1+Y1 move (X+Y disabled)"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Both pairs should move the toolhead identically."
+        echo -e "${BCYAN}${BOX_V}${NC}  If they don't match, adjust dir_pins."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+    else
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}STEP 4: Direction Check${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Run: ${CYAN}COREXY_DIRECTION_CHECK${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Verify +X goes right, +Y goes back."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+    fi
+
+    if [[ "$z_count" -gt 1 ]]; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}STEP 5: Z Axis Verification${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Run: ${CYAN}Z_DIRECTION_CHECK${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  All ${z_count} Z motors should move the same direction."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+    fi
+
+    print_separator
+    echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Resources:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}https://www.klipper3d.org/Config_checks.html${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${CYAN}https://mpx.wiki/Troubleshooting/corexy-direction${NC}"
+    print_footer
+}
+
 # Interactive MCU firmware update menu
 menu_mcu_firmware_update() {
     while true; do
@@ -1169,7 +1318,7 @@ menu_can_setup() {
         print_menu_item "5" "" "Diagnose CAN issues"
         print_menu_item "6" "" "Install Katapult (optional bootloader)"
         echo -e "${BCYAN}${BOX_V}${NC}"
-        print_action_item "B" "Back to main menu"
+        print_action_item "B" "Back"
         
         print_footer
         
@@ -1240,13 +1389,16 @@ menu_select_can_adapter() {
         done
     fi
     
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    print_action_item "C" "Cancel"
-    
+    print_separator
+    print_action_item "B" "Back"
     print_footer
-    
+
     read -r -p "Select adapter: " choice
-    
+
+    case "$choice" in
+        [bB]) return ;;
+    esac
+
     if [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 ]] && [[ "$choice" -lt "$num" ]]; then
         local idx=$((choice - 1))
         WIZARD_STATE[can_adapter]="${adapter_names[$idx]}"
@@ -1296,19 +1448,18 @@ menu_can_interface_setup() {
     print_menu_item "1" "" "1000000 bps (1 Mbit - recommended)"
     print_menu_item "2" "" "500000 bps (500 Kbit)"
     print_menu_item "3" "" "250000 bps (250 Kbit)"
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    print_action_item "C" "Cancel"
-    
+    print_separator
+    print_action_item "B" "Back"
     print_footer
-    
+
     read -r -p "Select bitrate: " choice
-    
+
     local bitrate
     case "$choice" in
         1) bitrate=1000000 ;;
         2) bitrate=500000 ;;
         3) bitrate=250000 ;;
-        [Cc]) return ;;
+        [bB]) return ;;
         *) bitrate=1000000 ;;
     esac
     
@@ -1330,21 +1481,20 @@ menu_can_bring_up() {
     echo -e "${BCYAN}${BOX_V}${NC}"
     print_menu_item "1" "" "1000000 bps (1 Mbit)"
     print_menu_item "2" "" "500000 bps (500 Kbit)"
-    echo -e "${BCYAN}${BOX_V}${NC}"
-    print_action_item "C" "Cancel"
-    
+    print_separator
+    print_action_item "B" "Back"
     print_footer
-    
+
     read -r -p "Select bitrate: " choice
-    
+
     local bitrate
     case "$choice" in
         1) bitrate=1000000 ;;
         2) bitrate=500000 ;;
-        [Cc]) return ;;
+        [bB]) return ;;
         *) bitrate=1000000 ;;
     esac
-    
+
     bring_up_can_interface "can0" "$bitrate"
     
     wait_for_key
@@ -1998,15 +2148,16 @@ show_main_menu() {
     print_menu_item "0" "$(get_step_status macros)" "Macros" ""
     
     print_separator
+    print_action_item "T" "Stepper Calibration"
     print_action_item "F" "MCU Firmware Update"
     print_action_item "G" "Generate Configuration"
     print_action_item "S" "Save Progress"
     print_action_item "Q" "Quit"
     print_footer
-    
+
     echo -en "${BYELLOW}Select option${NC}: "
     read -r choice
-    
+
     case "$choice" in
         1) menu_toolboard ;;
         2) menu_kinematics ;;
@@ -2019,6 +2170,7 @@ show_main_menu() {
         9) menu_extras ;;
         0) menu_macros ;;
         [cC]) menu_can_setup ;;
+        [tT]) menu_stepper_calibration ;;
         [fF]) menu_mcu_firmware_update ;;
         [gG]) generate_config ;;
         [sS]) save_state; echo -e "${GREEN}Progress saved!${NC}"; wait_for_key ;;
@@ -2088,7 +2240,7 @@ menu_kinematics() {
     print_menu_item "3" "" "Cartesian (bed slinger)"
     print_menu_item "4" "" "CoreXZ"
     print_separator
-    print_action_item "B" "Back to Main Menu"
+    print_action_item "B" "Back"
     print_footer
     
     echo -en "${BYELLOW}Select kinematics${NC}: "
@@ -2404,7 +2556,7 @@ menu_steppers() {
         
         print_separator
         print_action_item "A" "Set ALL axes to same driver"
-        print_action_item "B" "Back to Main Menu"
+        print_action_item "B" "Back"
         print_footer
         
         echo -en "${BYELLOW}Select axis to configure${NC}: "
@@ -2473,7 +2625,7 @@ menu_extruder() {
     print_menu_item "1" "" "Direct Drive"
     print_menu_item "2" "" "Bowden"
     print_separator
-    print_action_item "B" "Back to Main Menu"
+    print_action_item "B" "Back"
     print_footer
     
     echo -en "${BYELLOW}Select type${NC}: "
@@ -2556,13 +2708,14 @@ menu_pullup_resistor() {
     print_menu_item "2" "" "2200 ohms (2.2K) - Some BTT boards"
     print_menu_item "3" "" "1000 ohms (1K) - Rare"
     print_menu_item "4" "" "Custom value"
+    print_menu_item "-" "" "Skip (use Klipper default)"
     print_separator
-    print_action_item "S" "Skip (use Klipper default)"
+    print_action_item "B" "Back"
     print_footer
-    
+
     echo -en "${BYELLOW}Select pullup resistor${NC}: "
     read -r choice
-    
+
     case "$choice" in
         1) WIZARD_STATE[hotend_pullup_resistor]="4700" ;;
         2) WIZARD_STATE[hotend_pullup_resistor]="2200" ;;
@@ -2574,7 +2727,8 @@ menu_pullup_resistor() {
                 WIZARD_STATE[hotend_pullup_resistor]="$custom_value"
             fi
             ;;
-        [sS]) WIZARD_STATE[hotend_pullup_resistor]="" ;;
+        -) WIZARD_STATE[hotend_pullup_resistor]="" ;;
+        [bB]) return ;;
         *) ;;
     esac
 }
@@ -2605,7 +2759,7 @@ menu_bed() {
     print_menu_item "3" "" "PT1000"
     print_menu_item "4" "" "NTC 100K beta 3950 (Prusa)"
     print_separator
-    print_action_item "B" "Back to Main Menu"
+    print_action_item "B" "Back"
     print_footer
     
     echo -en "${BYELLOW}Select thermistor${NC}: "
@@ -2655,7 +2809,7 @@ menu_probe() {
     print_menu_item "6" "" "Inductive Probe (PINDA/SuperPINDA)"
     print_menu_item "7" "" "Physical Z Endstop (no probe)"
     print_separator
-    print_action_item "B" "Back to Main Menu"
+    print_action_item "B" "Back"
     print_footer
     
     echo -en "${BYELLOW}Select probe${NC}: "
@@ -2773,7 +2927,7 @@ menu_fans() {
         
         print_separator
         print_action_item "A" "Advanced Fan Settings (PWM, max_power, etc.)"
-        print_action_item "B" "Back to Main Menu"
+        print_action_item "B" "Back"
         print_footer
         
         echo -en "${BYELLOW}Select fan to configure${NC}: "
@@ -3249,7 +3403,7 @@ menu_extras() {
     echo -e "${BCYAN}${BOX_V}${NC}  7) ${cam_status} Webcam (Crowsnest)"
     
     print_separator
-    print_action_item "B" "Back to Main Menu"
+    print_action_item "B" "Back"
     print_footer
     
     echo -en "${BYELLOW}Toggle option${NC}: "

@@ -1684,6 +1684,404 @@ def get_motor_port_summary() -> str:
     return summary
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# SINGLE PORT SELECTION (CLI mode)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def select_single_port(port_type: str, ports: Dict, assignment_key: str, title: str) -> bool:
+    """
+    Interactive single port selection for CLI mode.
+    port_type: 'heater', 'thermistor', 'endstop', 'fan', 'gpio'
+    ports: dict of available ports
+    assignment_key: key to store in state.port_assignments
+    title: display title
+    Returns True if saved, False if cancelled.
+    """
+    clear_screen()
+    print_header(title)
+
+    port_list = list(ports.keys())
+    if not port_list:
+        print_info(f"{Colors.YELLOW}No {port_type} ports available on this board.{Colors.NC}")
+        wait_for_key()
+        return False
+
+    print_info(f"Current: {Colors.CYAN}{state.port_assignments.get(assignment_key, 'not assigned')}{Colors.NC}")
+    print_info("")
+    print_info(f"Available {port_type} ports:")
+    print_info("")
+
+    num = 1
+    for port_name in port_list:
+        port = ports[port_name]
+        label = port.get('label', port_name)
+        pin = port.get('pin', port.get('step_pin', '?'))
+
+        # Check if used by another function
+        used_by = None
+        for func, assigned_port in state.port_assignments.items():
+            if assigned_port == port_name and func != assignment_key:
+                used_by = func
+                break
+
+        status_text = f" {Colors.YELLOW}(used by {used_by}){Colors.NC}" if used_by else ""
+        current = state.port_assignments.get(assignment_key, "")
+        status = "done" if current == port_name else ""
+        print_menu_item(str(num), f"{port_name}", f"{label} - pin: {pin}{status_text}", status)
+        num += 1
+
+    print_separator()
+    print_action("C", "Clear assignment")
+    print_action("B", "Back without saving")
+    print_footer()
+
+    choice = prompt("Select port").strip()
+
+    if choice.lower() == 'b':
+        return False
+    if choice.lower() == 'c':
+        if assignment_key in state.port_assignments:
+            del state.port_assignments[assignment_key]
+        print(f"\n{Colors.GREEN}Assignment cleared.{Colors.NC}")
+        return True
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(port_list):
+            state.port_assignments[assignment_key] = port_list[idx]
+            print(f"\n{Colors.GREEN}Assigned {assignment_key} to {port_list[idx]}{Colors.NC}")
+            return True
+    except ValueError:
+        pass
+
+    return False
+
+
+def select_single_endstop(axis: str, board: Dict) -> bool:
+    """Select endstop port for a single axis."""
+    endstop_ports = board.get('endstop_ports', board.get('gpio_ports', {}))
+    assignment_key = f'endstop_{axis.lower()}'
+
+    clear_screen()
+    print_header(f"Select {axis.upper()} Endstop Port")
+
+    port_list = list(endstop_ports.keys())
+
+    print_info(f"Current: {Colors.CYAN}{state.port_assignments.get(assignment_key, 'not assigned')}{Colors.NC}")
+    print_info("")
+    print_info("Available endstop ports:")
+    print_info("")
+
+    num = 1
+    for port_name in port_list:
+        port = endstop_ports[port_name]
+        label = port.get('label', port_name)
+        pin = port.get('pin', '?')
+
+        used_by = None
+        for func, assigned_port in state.port_assignments.items():
+            if assigned_port == port_name and func != assignment_key:
+                used_by = func
+                break
+
+        status_text = f" {Colors.YELLOW}(used by {used_by}){Colors.NC}" if used_by else ""
+        current = state.port_assignments.get(assignment_key, "")
+        status = "done" if current == port_name else ""
+        print_menu_item(str(num), f"{port_name}", f"{label} - pin: {pin}{status_text}", status)
+        num += 1
+
+    # Sensorless option for X/Y
+    if axis.lower() in ('x', 'y'):
+        print_info("")
+        current = state.port_assignments.get(assignment_key, "")
+        sensorless_status = "done" if current == "sensorless" else ""
+        print_menu_item(str(num), "Sensorless homing", "Uses TMC DIAG pin", sensorless_status)
+        sensorless_idx = num
+        num += 1
+    else:
+        sensorless_idx = -1
+
+    print_separator()
+    print_action("C", "Clear assignment")
+    print_action("B", "Back without saving")
+    print_footer()
+
+    choice = prompt("Select port").strip()
+
+    if choice.lower() == 'b':
+        return False
+    if choice.lower() == 'c':
+        if assignment_key in state.port_assignments:
+            del state.port_assignments[assignment_key]
+        print(f"\n{Colors.GREEN}Assignment cleared.{Colors.NC}")
+        return True
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(port_list):
+            state.port_assignments[assignment_key] = port_list[idx]
+            print(f"\n{Colors.GREEN}Assigned {assignment_key} to {port_list[idx]}{Colors.NC}")
+            return True
+        elif sensorless_idx > 0 and idx == sensorless_idx - 1:
+            state.port_assignments[assignment_key] = "sensorless"
+            print(f"\n{Colors.GREEN}Set {assignment_key} to sensorless homing{Colors.NC}")
+            return True
+    except ValueError:
+        pass
+
+    return False
+
+
+def select_flexible_port(port_type: str, assignment_key: str, title: str) -> bool:
+    """
+    Flexible port selection - offers BOTH mainboard and toolboard ports.
+    User chooses which board to assign to.
+    """
+    boards = load_available_boards()
+    board = boards.get(state.board_id)
+    has_toolboard = state.toolboard_id and state.toolboard_id != "none"
+
+    clear_screen()
+    print_header(title)
+
+    # Get ports from mainboard
+    if port_type == 'heater':
+        mb_ports = board.get('heater_ports', {})
+    elif port_type == 'thermistor':
+        mb_ports = board.get('thermistor_ports', {})
+    elif port_type == 'endstop':
+        mb_ports = board.get('endstop_ports', board.get('gpio_ports', {}))
+    elif port_type == 'fan':
+        mb_ports = board.get('fan_ports', {})
+    else:
+        mb_ports = board.get('gpio_ports', {})
+
+    # Get ports from toolboard if exists
+    tb_ports = {}
+    toolboard = None
+    if has_toolboard:
+        toolboards = load_available_toolboards()
+        toolboard = toolboards.get(state.toolboard_id)
+        if toolboard:
+            if port_type == 'heater':
+                tb_ports = toolboard.get('heater_ports', {})
+            elif port_type == 'thermistor':
+                tb_ports = toolboard.get('thermistor_ports', {})
+            elif port_type == 'endstop':
+                tb_ports = toolboard.get('endstop_ports', {})
+            elif port_type == 'fan':
+                tb_ports = toolboard.get('fan_ports', {})
+            else:
+                tb_ports = toolboard.get('gpio_ports', {})
+
+    # Show current assignment
+    current_mb = state.port_assignments.get(assignment_key, '')
+    current_tb = state.toolboard_assignments.get(assignment_key, '') if has_toolboard else ''
+    if current_tb and current_tb != 'none':
+        print_info(f"Current: {Colors.CYAN}toolboard:{current_tb}{Colors.NC}")
+    elif current_mb:
+        print_info(f"Current: {Colors.CYAN}{current_mb}{Colors.NC}")
+    else:
+        print_info(f"Current: {Colors.CYAN}not assigned{Colors.NC}")
+    print_info("")
+
+    num = 1
+    port_map = []  # (board_type, port_name)
+
+    # Mainboard ports
+    if mb_ports:
+        print_info(f"{Colors.BWHITE}Mainboard ({board.get('name', 'Main')}):{Colors.NC}")
+        for port_name in mb_ports:
+            port = mb_ports[port_name]
+            label = port.get('label', port_name)
+            pin = port.get('pin', '?')
+            status = "done" if current_mb == port_name else ""
+            print_menu_item(str(num), f"{port_name}", f"{label} - pin: {pin}", status)
+            port_map.append(('mainboard', port_name))
+            num += 1
+        print_info("")
+
+    # Toolboard ports
+    if tb_ports:
+        print_info(f"{Colors.BWHITE}Toolboard ({toolboard.get('name', 'Toolboard')}):{Colors.NC}")
+        for port_name in tb_ports:
+            port = tb_ports[port_name]
+            label = port.get('label', port_name)
+            pin = port.get('pin', '?')
+            status = "done" if current_tb == port_name else ""
+            print_menu_item(str(num), f"toolboard:{port_name}", f"{label} - pin: {pin}", status)
+            port_map.append(('toolboard', port_name))
+            num += 1
+
+    print_separator()
+    print_action("C", "Clear assignment")
+    print_action("B", "Back without saving")
+    print_footer()
+
+    choice = prompt("Select port").strip()
+
+    if choice.lower() == 'b':
+        return False
+    if choice.lower() == 'c':
+        if assignment_key in state.port_assignments:
+            del state.port_assignments[assignment_key]
+        if assignment_key in state.toolboard_assignments:
+            del state.toolboard_assignments[assignment_key]
+        print(f"\n{Colors.GREEN}Assignment cleared.{Colors.NC}")
+        return True
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(port_map):
+            board_type, port_name = port_map[idx]
+            if board_type == 'mainboard':
+                state.port_assignments[assignment_key] = port_name
+                # Clear toolboard assignment if any
+                if assignment_key in state.toolboard_assignments:
+                    del state.toolboard_assignments[assignment_key]
+                print(f"\n{Colors.GREEN}Assigned {assignment_key} to mainboard:{port_name}{Colors.NC}")
+            else:
+                state.toolboard_assignments[assignment_key] = port_name
+                # Clear mainboard assignment if any
+                if assignment_key in state.port_assignments:
+                    del state.port_assignments[assignment_key]
+                print(f"\n{Colors.GREEN}Assigned {assignment_key} to toolboard:{port_name}{Colors.NC}")
+            return True
+    except ValueError:
+        pass
+
+    return False
+
+
+def select_toolboard_single_port(port_type: str, ports: Dict, assignment_key: str, title: str) -> bool:
+    """
+    Interactive single port selection for toolboard (CLI mode).
+    Stores in state.toolboard_assignments instead of state.port_assignments.
+    """
+    clear_screen()
+    print_header(title)
+
+    port_list = list(ports.keys())
+    if not port_list:
+        print_info(f"{Colors.YELLOW}No {port_type} ports available on this toolboard.{Colors.NC}")
+        wait_for_key()
+        return False
+
+    print_info(f"Current: {Colors.CYAN}{state.toolboard_assignments.get(assignment_key, 'not assigned')}{Colors.NC}")
+    print_info("")
+    print_info(f"Available {port_type} ports (on toolboard):")
+    print_info("")
+
+    num = 1
+    for port_name in port_list:
+        port = ports[port_name]
+        label = port.get('label', port_name)
+        pin = port.get('pin', port.get('step_pin', '?'))
+
+        # Check if used by another function
+        used_by = None
+        for func, assigned_port in state.toolboard_assignments.items():
+            if assigned_port == port_name and func != assignment_key:
+                used_by = func
+                break
+
+        status_text = f" {Colors.YELLOW}(used by {used_by}){Colors.NC}" if used_by else ""
+        current = state.toolboard_assignments.get(assignment_key, "")
+        status = "done" if current == port_name else ""
+        print_menu_item(str(num), f"{port_name}", f"{label} - pin: {pin}{status_text}", status)
+        num += 1
+
+    print_separator()
+    print_action("C", "Clear assignment")
+    print_action("B", "Back without saving")
+    print_footer()
+
+    choice = prompt("Select port").strip()
+
+    if choice.lower() == 'b':
+        return False
+    if choice.lower() == 'c':
+        if assignment_key in state.toolboard_assignments:
+            del state.toolboard_assignments[assignment_key]
+        print(f"\n{Colors.GREEN}Assignment cleared.{Colors.NC}")
+        return True
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(port_list):
+            state.toolboard_assignments[assignment_key] = port_list[idx]
+            print(f"\n{Colors.GREEN}Assigned {assignment_key} to toolboard:{port_list[idx]}{Colors.NC}")
+            return True
+    except ValueError:
+        pass
+
+    return False
+
+
+def select_toolboard_endstop(axis: str, toolboard: Dict) -> bool:
+    """Select endstop port on toolboard for a single axis."""
+    endstop_ports = toolboard.get('endstop_ports', {})
+    assignment_key = f'endstop_{axis.lower()}'
+
+    clear_screen()
+    print_header(f"Select Toolboard {axis.upper()} Endstop Port")
+
+    port_list = list(endstop_ports.keys())
+    if not port_list:
+        print_info(f"{Colors.YELLOW}No endstop ports available on this toolboard.{Colors.NC}")
+        wait_for_key()
+        return False
+
+    print_info(f"Current: {Colors.CYAN}{state.toolboard_assignments.get(assignment_key, 'not assigned')}{Colors.NC}")
+    print_info("")
+    print_info("Available endstop ports (on toolboard):")
+    print_info("")
+
+    num = 1
+    for port_name in port_list:
+        port = endstop_ports[port_name]
+        label = port.get('label', port_name)
+        pin = port.get('pin', '?')
+
+        used_by = None
+        for func, assigned_port in state.toolboard_assignments.items():
+            if assigned_port == port_name and func != assignment_key:
+                used_by = func
+                break
+
+        status_text = f" {Colors.YELLOW}(used by {used_by}){Colors.NC}" if used_by else ""
+        current = state.toolboard_assignments.get(assignment_key, "")
+        status = "done" if current == port_name else ""
+        print_menu_item(str(num), f"{port_name}", f"{label} - pin: {pin}{status_text}", status)
+        num += 1
+
+    print_separator()
+    print_action("C", "Clear assignment")
+    print_action("B", "Back without saving")
+    print_footer()
+
+    choice = prompt("Select port").strip()
+
+    if choice.lower() == 'b':
+        return False
+    if choice.lower() == 'c':
+        if assignment_key in state.toolboard_assignments:
+            del state.toolboard_assignments[assignment_key]
+        print(f"\n{Colors.GREEN}Assignment cleared.{Colors.NC}")
+        return True
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(port_list):
+            state.toolboard_assignments[assignment_key] = port_list[idx]
+            print(f"\n{Colors.GREEN}Assigned {assignment_key} to toolboard:{port_list[idx]}{Colors.NC}")
+            return True
+    except ValueError:
+        pass
+
+    return False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MAIN MENU
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1828,6 +2226,18 @@ def main():
     parser = argparse.ArgumentParser(description='gschpoozi Hardware Setup')
     parser.add_argument('--board', action='store_true', help='Board setup only')
     parser.add_argument('--toolboard', action='store_true', help='Toolboard setup only')
+    parser.add_argument('--motors', action='store_true', help='Motor port assignment only')
+    parser.add_argument('--heater-extruder', action='store_true', help='Assign hotend heater port')
+    parser.add_argument('--thermistor-extruder', action='store_true', help='Assign hotend thermistor port')
+    parser.add_argument('--heater-bed', action='store_true', help='Assign bed heater port')
+    parser.add_argument('--thermistor-bed', action='store_true', help='Assign bed thermistor port')
+    parser.add_argument('--endstop-x', action='store_true', help='Assign X endstop port')
+    parser.add_argument('--endstop-y', action='store_true', help='Assign Y endstop port')
+    parser.add_argument('--endstop-z', action='store_true', help='Assign Z endstop port')
+    parser.add_argument('--probe-pin', action='store_true', help='Assign probe pin')
+    parser.add_argument('--fan', type=str, metavar='KEY', help='Assign fan port (e.g., fan_part_cooling)')
+    parser.add_argument('--fan-multipin', type=str, metavar='KEY', help='Assign secondary fan pin')
+    parser.add_argument('--lighting', action='store_true', help='Configure lighting')
     parser.add_argument('--list-boards', action='store_true', help='List available boards')
     parser.add_argument('--output', type=str, help='Output state file path')
     
@@ -1861,6 +2271,97 @@ def main():
     elif args.toolboard:
         select_toolboard()
         state.save()
+    elif args.motors:
+        # Motor port assignment - requires board to be selected
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected. Run setup-hardware.py --board first.{Colors.NC}")
+            sys.exit(1)
+        boards = load_available_boards()
+        board = boards.get(state.board_id)
+        if not board:
+            print(f"{Colors.RED}Error: Board '{state.board_id}' not found.{Colors.NC}")
+            sys.exit(1)
+        functions = get_required_motor_functions()
+        if assign_motor_ports(board, functions):
+            state.save()
+            print(f"\n{Colors.GREEN}Motor port assignments saved.{Colors.NC}")
+    elif getattr(args, 'heater_extruder', False):
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected.{Colors.NC}")
+            sys.exit(1)
+        # Offer BOTH mainboard and toolboard ports - user chooses
+        if select_flexible_port('heater', 'heater_extruder', 'Select Hotend Heater Port'):
+            state.save()
+    elif getattr(args, 'thermistor_extruder', False):
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected.{Colors.NC}")
+            sys.exit(1)
+        # Offer BOTH mainboard and toolboard ports - user chooses
+        if select_flexible_port('thermistor', 'thermistor_extruder', 'Select Hotend Thermistor Port'):
+            state.save()
+    elif getattr(args, 'heater_bed', False):
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected.{Colors.NC}")
+            sys.exit(1)
+        # Offer BOTH mainboard and toolboard ports - user chooses
+        if select_flexible_port('heater', 'heater_bed', 'Select Bed Heater Port'):
+            state.save()
+    elif getattr(args, 'thermistor_bed', False):
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected.{Colors.NC}")
+            sys.exit(1)
+        # Offer BOTH mainboard and toolboard ports - user chooses
+        if select_flexible_port('thermistor', 'thermistor_bed', 'Select Bed Thermistor Port'):
+            state.save()
+    elif getattr(args, 'endstop_x', False):
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected.{Colors.NC}")
+            sys.exit(1)
+        # Offer BOTH mainboard and toolboard ports - user chooses
+        if select_flexible_port('endstop', 'endstop_x', 'Select X Endstop Port'):
+            state.save()
+    elif getattr(args, 'endstop_y', False):
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected.{Colors.NC}")
+            sys.exit(1)
+        # Offer BOTH mainboard and toolboard ports - user chooses
+        if select_flexible_port('endstop', 'endstop_y', 'Select Y Endstop Port'):
+            state.save()
+    elif getattr(args, 'endstop_z', False):
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected.{Colors.NC}")
+            sys.exit(1)
+        # Offer BOTH mainboard and toolboard ports - user chooses
+        if select_flexible_port('endstop', 'endstop_z', 'Select Z Endstop Port'):
+            state.save()
+    elif getattr(args, 'probe_pin', False):
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected.{Colors.NC}")
+            sys.exit(1)
+        # Offer BOTH mainboard and toolboard ports - user chooses
+        if select_flexible_port('endstop', 'probe_pin', 'Select Probe Pin'):
+            state.save()
+    elif args.fan:
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected.{Colors.NC}")
+            sys.exit(1)
+        # Offer BOTH mainboard and toolboard ports - user chooses
+        fan_key = args.fan
+        if select_flexible_port('fan', fan_key, f'Select Port for {fan_key}'):
+            state.save()
+    elif getattr(args, 'fan_multipin', None):
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected.{Colors.NC}")
+            sys.exit(1)
+        boards = load_available_boards()
+        board = boards.get(state.board_id)
+        fan_ports = board.get('fan_ports', {})
+        fan_key = args.fan_multipin + '_pin2'
+        if select_single_port('fan', fan_ports, fan_key, f'Select Secondary Pin for {args.fan_multipin}'):
+            state.save()
+    elif args.lighting:
+        print(f"{Colors.YELLOW}Lighting configuration not yet implemented in CLI mode.{Colors.NC}")
+        print(f"Use the full setup menu: python3 setup-hardware.py")
     else:
         main_menu()
 

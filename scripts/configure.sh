@@ -2334,8 +2334,19 @@ menu_kinematics() {
         local motor_status=""
         local motor_info="not configured"
         if [[ -n "${WIZARD_STATE[board]}" ]]; then
-            # Check if motor ports are assigned in hardware state
-            if [[ -n "${HARDWARE_STATE[stepper_x_port]}" ]]; then
+            # Check if motor ports are assigned in hardware state JSON
+            local has_motors
+            has_motors=$(python3 -c "
+import json
+try:
+    with open('${HARDWARE_STATE_FILE}') as f:
+        data = json.load(f)
+    assignments = data.get('port_assignments', {})
+    print('yes' if 'stepper_x' in assignments else 'no')
+except:
+    print('no')
+" 2>/dev/null)
+            if [[ "$has_motors" == "yes" ]]; then
                 motor_status="done"
                 motor_info="configured"
             fi

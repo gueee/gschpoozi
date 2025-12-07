@@ -1,0 +1,62 @@
+#!/bin/bash
+# pgw - Parallel Git Worktree helper for Claude Code agents
+# Usage: ./pgw <branch-name>
+#
+# Creates an isolated worktree for parallel Claude Code development.
+# Each branch gets its own directory, preventing conflicts.
+# Uses Windows-accessible path for WSL/Cursor compatibility.
+
+set -e
+
+# Use a Windows-accessible temp directory for WSL compatibility
+WORKTREE_BASE="/mnt/d/github-projects/.worktrees"
+mkdir -p "$WORKTREE_BASE"
+
+if [ -z "$1" ]; then
+    echo "Usage: pgw <branch-name>"
+    echo ""
+    echo "Examples:"
+    echo "  ./pgw config-menu-refactor"
+    echo "  ./pgw beacon-integration"
+    echo "  ./pgw led-debug-features"
+    echo ""
+    echo "Management commands:"
+    echo "  git worktree list              # Show all worktrees"
+    echo "  git worktree remove $WORKTREE_BASE/<branch>  # Remove worktree"
+    exit 1
+fi
+
+BRANCH=$1
+WORKTREE_PATH="$WORKTREE_BASE/$BRANCH"
+
+# Check if worktree already exists
+if [ -d "$WORKTREE_PATH" ]; then
+    echo "Worktree already exists at $WORKTREE_PATH"
+    echo ""
+    echo "To open it, run from Cursor's terminal:"
+    echo "  cd $WORKTREE_PATH && cursor ."
+    exit 0
+fi
+
+# Create new worktree - reuse branch if it exists, otherwise create from main
+echo "Creating worktree for branch '$BRANCH'..."
+if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+    # Branch exists, just attach worktree to it
+    git worktree add "$WORKTREE_PATH" "$BRANCH"
+else
+    # Create new branch from main
+    git worktree add -b "$BRANCH" "$WORKTREE_PATH" main
+fi
+
+echo ""
+echo "Worktree created at: $WORKTREE_PATH"
+echo "Branch: $BRANCH"
+echo ""
+echo "To open it, run from Cursor's terminal:"
+echo "  cd $WORKTREE_PATH && cursor ."
+echo ""
+echo "When done, merge back with:"
+echo "  git checkout main"
+echo "  git merge $BRANCH"
+echo "  git worktree remove $WORKTREE_PATH"
+echo "  git branch -d $BRANCH  # optional: delete branch"

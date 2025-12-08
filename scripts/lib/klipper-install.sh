@@ -357,6 +357,12 @@ enable_object_processing: True
 
 [machine]
 provider: systemd_dbus
+
+# Update manager configuration
+# Klipper and Moonraker are auto-detected
+[update_manager]
+refresh_interval: 168
+enable_auto_refresh: True
 EOF
     
     ok_msg "Created $conf_file"

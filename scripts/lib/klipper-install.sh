@@ -467,9 +467,44 @@ download_and_extract() {
     return $result
 }
 
+# Get the next available port for web UI
+# Returns: port number (80 if nothing else is on 80, 81 otherwise)
+get_webui_port() {
+    local ui_name="$1"  # mainsail or fluidd
+    local other_ui=""
+    
+    # Determine the other UI
+    if [[ "$ui_name" == "mainsail" ]]; then
+        other_ui="fluidd"
+    else
+        other_ui="mainsail"
+    fi
+    
+    # Check if other UI is already configured
+    if [[ -f "/etc/nginx/sites-enabled/${other_ui}" ]]; then
+        # Check what port the other UI is using
+        local other_port=$(grep -oP 'listen \K[0-9]+' "/etc/nginx/sites-available/${other_ui}" 2>/dev/null | head -1)
+        if [[ "$other_port" == "80" ]]; then
+            echo "81"
+            return
+        fi
+    fi
+    
+    # Default to port 80
+    echo "80"
+}
+
+# Check if a port is already in use by nginx
+is_port_in_use() {
+    local port="$1"
+    grep -rq "listen ${port}" /etc/nginx/sites-enabled/ 2>/dev/null
+}
+
 # Setup nginx for web UI
+# Now supports running Mainsail and Fluidd side by side on different ports
 setup_nginx() {
     local ui_name="$1"  # mainsail or fluidd
+    local port="${2:-}"  # optional port, auto-detect if not specified
     local template_file="${NGINX_TEMPLATES}/${ui_name}.conf"
     local common_vars="${NGINX_TEMPLATES}/common_vars.conf"
     
@@ -478,16 +513,30 @@ setup_nginx() {
         return 1
     fi
     
-    status_msg "Configuring nginx for $ui_name..."
+    # Auto-detect port if not specified
+    if [[ -z "$port" ]]; then
+        port=$(get_webui_port "$ui_name")
+    fi
+    
+    # Determine if this should be default_server
+    local default_server=""
+    if [[ "$port" == "80" ]]; then
+        default_server="default_server"
+    fi
+    
+    status_msg "Configuring nginx for $ui_name on port $port..."
     
     # Install common_vars if not present
     if [[ ! -f "/etc/nginx/conf.d/common_vars.conf" ]]; then
         sudo cp "$common_vars" /etc/nginx/conf.d/
     fi
     
-    # Create site config with HOME path replaced
+    # Create site config with placeholders replaced
     local temp_file=$(mktemp)
-    sed "s|%HOME%|${HOME}|g" "$template_file" > "$temp_file"
+    sed -e "s|%HOME%|${HOME}|g" \
+        -e "s|%PORT%|${port}|g" \
+        -e "s|%DEFAULT_SERVER%|${default_server}|g" \
+        "$template_file" > "$temp_file"
     
     # Remove default nginx site if exists
     if [[ -f "/etc/nginx/sites-enabled/default" ]]; then
@@ -506,7 +555,9 @@ setup_nginx() {
     # Test and restart nginx
     if sudo nginx -t; then
         sudo systemctl restart nginx
-        ok_msg "Nginx configured for $ui_name"
+        ok_msg "Nginx configured for $ui_name on port $port"
+        # Store the port for display purposes
+        WEBUI_PORT="$port"
         return 0
     else
         error_msg "Nginx configuration test failed"
@@ -679,6 +730,9 @@ do_install_mainsail() {
     clear_screen
     print_header "Installing Mainsail"
     
+    # Determine which port will be used
+    local port=$(get_webui_port "mainsail")
+    
     echo -e "${BCYAN}${BOX_V}${NC}"
     echo -e "${BCYAN}${BOX_V}${NC}  This will install:"
     echo -e "${BCYAN}${BOX_V}${NC}  - Mainsail web interface"
@@ -691,8 +745,10 @@ do_install_mainsail() {
     fi
     
     if is_fluidd_installed; then
-        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Note: Fluidd is already installed.${NC}"
-        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Installing Mainsail will reconfigure nginx.${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Note: Fluidd is already installed on port 80.${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Mainsail will be installed on port ${port} (side-by-side).${NC}"
+    else
+        echo -e "${BCYAN}${BOX_V}${NC}  Will be available on port ${CYAN}${port}${NC}"
     fi
     echo -e "${BCYAN}${BOX_V}${NC}"
     print_footer
@@ -726,12 +782,19 @@ do_install_mainsail() {
     # Download and extract
     download_and_extract "$download_url" "$MAINSAIL_DIR" || return 1
     
-    # Setup nginx
-    setup_nginx "mainsail" || return 1
+    # Setup nginx with auto-detected port
+    setup_nginx "mainsail" "$port" || return 1
     
     # Add update manager entry
     if is_moonraker_installed; then
         add_update_manager_entry "mainsail" "web" "${MAINSAIL_DIR}" "repo: mainsail-crew/mainsail"
+    fi
+    
+    # Build access URL
+    local ip_addr=$(hostname -I | awk '{print $1}')
+    local access_url="http://${ip_addr}"
+    if [[ "$port" != "80" ]]; then
+        access_url="${access_url}:${port}"
     fi
     
     echo ""
@@ -739,7 +802,10 @@ do_install_mainsail() {
     echo -e "${GREEN}  Mainsail installation complete!${NC}"
     echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "  Access at: ${CYAN}http://$(hostname -I | awk '{print $1}')${NC}"
+    echo -e "  Access at: ${CYAN}${access_url}${NC}"
+    if is_fluidd_installed; then
+        echo -e "  (Fluidd is on port 80, Mainsail is on port ${port})"
+    fi
     echo ""
     
     wait_for_key
@@ -750,6 +816,9 @@ do_install_mainsail() {
 do_install_fluidd() {
     clear_screen
     print_header "Installing Fluidd"
+    
+    # Determine which port will be used
+    local port=$(get_webui_port "fluidd")
     
     echo -e "${BCYAN}${BOX_V}${NC}"
     echo -e "${BCYAN}${BOX_V}${NC}  This will install:"
@@ -763,8 +832,10 @@ do_install_fluidd() {
     fi
     
     if is_mainsail_installed; then
-        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Note: Mainsail is already installed.${NC}"
-        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Installing Fluidd will reconfigure nginx.${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Note: Mainsail is already installed on port 80.${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Fluidd will be installed on port ${port} (side-by-side).${NC}"
+    else
+        echo -e "${BCYAN}${BOX_V}${NC}  Will be available on port ${CYAN}${port}${NC}"
     fi
     echo -e "${BCYAN}${BOX_V}${NC}"
     print_footer
@@ -798,12 +869,19 @@ do_install_fluidd() {
     # Download and extract
     download_and_extract "$download_url" "$FLUIDD_DIR" || return 1
     
-    # Setup nginx
-    setup_nginx "fluidd" || return 1
+    # Setup nginx with auto-detected port
+    setup_nginx "fluidd" "$port" || return 1
     
     # Add update manager entry
     if is_moonraker_installed; then
         add_update_manager_entry "fluidd" "web" "${FLUIDD_DIR}" "repo: fluidd-core/fluidd"
+    fi
+    
+    # Build access URL
+    local ip_addr=$(hostname -I | awk '{print $1}')
+    local access_url="http://${ip_addr}"
+    if [[ "$port" != "80" ]]; then
+        access_url="${access_url}:${port}"
     fi
     
     echo ""
@@ -811,7 +889,10 @@ do_install_fluidd() {
     echo -e "${GREEN}  Fluidd installation complete!${NC}"
     echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "  Access at: ${CYAN}http://$(hostname -I | awk '{print $1}')${NC}"
+    echo -e "  Access at: ${CYAN}${access_url}${NC}"
+    if is_mainsail_installed; then
+        echo -e "  (Mainsail is on port 80, Fluidd is on port ${port})"
+    fi
     echo ""
     
     wait_for_key

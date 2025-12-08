@@ -2402,7 +2402,8 @@ show_klipper_setup_menu() {
         local mainsail_info=""
         if is_mainsail_installed; then
             mainsail_status="done"
-            mainsail_info="Installed"
+            local mainsail_port=$(grep -oP 'listen \K[0-9]+' "/etc/nginx/sites-available/mainsail" 2>/dev/null | head -1)
+            mainsail_info="Port ${mainsail_port:-80}"
         else
             mainsail_info="Not installed"
         fi
@@ -2413,7 +2414,8 @@ show_klipper_setup_menu() {
         local fluidd_info=""
         if is_fluidd_installed; then
             fluidd_status="done"
-            fluidd_info="Installed"
+            local fluidd_port=$(grep -oP 'listen \K[0-9]+' "/etc/nginx/sites-available/fluidd" 2>/dev/null | head -1)
+            fluidd_info="Port ${fluidd_port:-80}"
         else
             fluidd_info="Not installed"
         fi

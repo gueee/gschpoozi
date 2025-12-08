@@ -931,3 +931,799 @@ managed_services: sonar"
     return 0
 }
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# UPDATE FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Update Klipper
+do_update_klipper() {
+    clear_screen
+    print_header "Update Klipper"
+    
+    if ! is_klipper_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Klipper is not installed!${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update Klipper to the latest version."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Proceed with Klipper update?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Stop service
+    status_msg "Stopping Klipper service..."
+    sudo systemctl stop klipper
+    
+    # Update repository
+    status_msg "Pulling latest changes..."
+    cd "$KLIPPER_DIR"
+    git pull
+    
+    # Update Python requirements
+    status_msg "Updating Python dependencies..."
+    "${KLIPPY_ENV}/bin/pip" install -r "${KLIPPER_DIR}/scripts/klippy-requirements.txt"
+    
+    # Restart service
+    status_msg "Starting Klipper service..."
+    sudo systemctl start klipper
+    
+    echo ""
+    ok_msg "Klipper updated successfully!"
+    echo -e "  New version: ${CYAN}$(get_klipper_version)${NC}"
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# Update Moonraker
+do_update_moonraker() {
+    clear_screen
+    print_header "Update Moonraker"
+    
+    if ! is_moonraker_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Moonraker is not installed!${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update Moonraker to the latest version."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Proceed with Moonraker update?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Stop service
+    status_msg "Stopping Moonraker service..."
+    sudo systemctl stop moonraker
+    
+    # Update repository
+    status_msg "Pulling latest changes..."
+    cd "$MOONRAKER_DIR"
+    git pull
+    
+    # Update Python requirements
+    status_msg "Updating Python dependencies..."
+    "${MOONRAKER_ENV}/bin/pip" install -r "${MOONRAKER_DIR}/scripts/moonraker-requirements.txt"
+    
+    # Restart service
+    status_msg "Starting Moonraker service..."
+    sudo systemctl start moonraker
+    
+    echo ""
+    ok_msg "Moonraker updated successfully!"
+    echo -e "  New version: ${CYAN}$(get_moonraker_version)${NC}"
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# Update Mainsail
+do_update_mainsail() {
+    clear_screen
+    print_header "Update Mainsail"
+    
+    if ! is_mainsail_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Mainsail is not installed!${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update Mainsail to the latest version."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Proceed with Mainsail update?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Get latest release URL
+    status_msg "Fetching latest Mainsail release..."
+    local download_url=$(get_latest_release_url "mainsail-crew/mainsail" "mainsail.zip")
+    
+    if [[ -z "$download_url" ]]; then
+        error_msg "Could not find Mainsail release"
+        wait_for_key
+        return 1
+    fi
+    
+    # Backup current version
+    status_msg "Backing up current version..."
+    rm -rf "${MAINSAIL_DIR}.bak"
+    mv "$MAINSAIL_DIR" "${MAINSAIL_DIR}.bak"
+    
+    # Download and extract new version
+    download_and_extract "$download_url" "$MAINSAIL_DIR"
+    
+    if [[ $? -eq 0 ]]; then
+        rm -rf "${MAINSAIL_DIR}.bak"
+        ok_msg "Mainsail updated successfully!"
+    else
+        error_msg "Update failed, restoring backup..."
+        rm -rf "$MAINSAIL_DIR"
+        mv "${MAINSAIL_DIR}.bak" "$MAINSAIL_DIR"
+    fi
+    
+    echo ""
+    wait_for_key
+    return 0
+}
+
+# Update Fluidd
+do_update_fluidd() {
+    clear_screen
+    print_header "Update Fluidd"
+    
+    if ! is_fluidd_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Fluidd is not installed!${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update Fluidd to the latest version."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Proceed with Fluidd update?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Get latest release URL
+    status_msg "Fetching latest Fluidd release..."
+    local download_url=$(get_latest_release_url "fluidd-core/fluidd" "fluidd.zip")
+    
+    if [[ -z "$download_url" ]]; then
+        error_msg "Could not find Fluidd release"
+        wait_for_key
+        return 1
+    fi
+    
+    # Backup current version
+    status_msg "Backing up current version..."
+    rm -rf "${FLUIDD_DIR}.bak"
+    mv "$FLUIDD_DIR" "${FLUIDD_DIR}.bak"
+    
+    # Download and extract new version
+    download_and_extract "$download_url" "$FLUIDD_DIR"
+    
+    if [[ $? -eq 0 ]]; then
+        rm -rf "${FLUIDD_DIR}.bak"
+        ok_msg "Fluidd updated successfully!"
+    else
+        error_msg "Update failed, restoring backup..."
+        rm -rf "$FLUIDD_DIR"
+        mv "${FLUIDD_DIR}.bak" "$FLUIDD_DIR"
+    fi
+    
+    echo ""
+    wait_for_key
+    return 0
+}
+
+# Update Crowsnest
+do_update_crowsnest() {
+    clear_screen
+    print_header "Update Crowsnest"
+    
+    if ! is_crowsnest_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Crowsnest is not installed!${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update Crowsnest to the latest version."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Proceed with Crowsnest update?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Stop service
+    status_msg "Stopping Crowsnest service..."
+    sudo systemctl stop crowsnest 2>/dev/null || true
+    
+    # Update repository
+    status_msg "Pulling latest changes..."
+    cd "$CROWSNEST_DIR"
+    git pull
+    
+    # Run update if available
+    if [[ -f "tools/update.sh" ]]; then
+        bash tools/update.sh
+    fi
+    
+    # Restart service
+    status_msg "Starting Crowsnest service..."
+    sudo systemctl start crowsnest 2>/dev/null || true
+    
+    echo ""
+    ok_msg "Crowsnest updated successfully!"
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# Update Sonar
+do_update_sonar() {
+    clear_screen
+    print_header "Update Sonar"
+    
+    if ! is_sonar_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Sonar is not installed!${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update Sonar to the latest version."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Proceed with Sonar update?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Stop service
+    status_msg "Stopping Sonar service..."
+    sudo systemctl stop sonar 2>/dev/null || true
+    
+    # Update repository
+    status_msg "Pulling latest changes..."
+    cd "$SONAR_DIR"
+    git pull
+    
+    # Restart service
+    status_msg "Starting Sonar service..."
+    sudo systemctl start sonar 2>/dev/null || true
+    
+    echo ""
+    ok_msg "Sonar updated successfully!"
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# Update all components
+do_update_all() {
+    clear_screen
+    print_header "Update All Components"
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update all installed components:"
+    is_klipper_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Klipper"
+    is_moonraker_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Moonraker"
+    is_mainsail_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Mainsail"
+    is_fluidd_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Fluidd"
+    is_crowsnest_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Crowsnest"
+    is_sonar_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Sonar"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Proceed with updating all components?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    local errors=0
+    
+    if is_klipper_installed; then
+        echo -e "\n${BWHITE}=== Updating Klipper ===${NC}"
+        sudo systemctl stop klipper
+        cd "$KLIPPER_DIR" && git pull
+        "${KLIPPY_ENV}/bin/pip" install -r "${KLIPPER_DIR}/scripts/klippy-requirements.txt"
+        sudo systemctl start klipper
+        ok_msg "Klipper updated"
+    fi
+    
+    if is_moonraker_installed; then
+        echo -e "\n${BWHITE}=== Updating Moonraker ===${NC}"
+        sudo systemctl stop moonraker
+        cd "$MOONRAKER_DIR" && git pull
+        "${MOONRAKER_ENV}/bin/pip" install -r "${MOONRAKER_DIR}/scripts/moonraker-requirements.txt"
+        sudo systemctl start moonraker
+        ok_msg "Moonraker updated"
+    fi
+    
+    if is_mainsail_installed; then
+        echo -e "\n${BWHITE}=== Updating Mainsail ===${NC}"
+        local url=$(get_latest_release_url "mainsail-crew/mainsail" "mainsail.zip")
+        if [[ -n "$url" ]]; then
+            rm -rf "${MAINSAIL_DIR}.bak"
+            mv "$MAINSAIL_DIR" "${MAINSAIL_DIR}.bak"
+            download_and_extract "$url" "$MAINSAIL_DIR" && rm -rf "${MAINSAIL_DIR}.bak"
+            ok_msg "Mainsail updated"
+        fi
+    fi
+    
+    if is_fluidd_installed; then
+        echo -e "\n${BWHITE}=== Updating Fluidd ===${NC}"
+        local url=$(get_latest_release_url "fluidd-core/fluidd" "fluidd.zip")
+        if [[ -n "$url" ]]; then
+            rm -rf "${FLUIDD_DIR}.bak"
+            mv "$FLUIDD_DIR" "${FLUIDD_DIR}.bak"
+            download_and_extract "$url" "$FLUIDD_DIR" && rm -rf "${FLUIDD_DIR}.bak"
+            ok_msg "Fluidd updated"
+        fi
+    fi
+    
+    if is_crowsnest_installed; then
+        echo -e "\n${BWHITE}=== Updating Crowsnest ===${NC}"
+        sudo systemctl stop crowsnest 2>/dev/null || true
+        cd "$CROWSNEST_DIR" && git pull
+        sudo systemctl start crowsnest 2>/dev/null || true
+        ok_msg "Crowsnest updated"
+    fi
+    
+    if is_sonar_installed; then
+        echo -e "\n${BWHITE}=== Updating Sonar ===${NC}"
+        sudo systemctl stop sonar 2>/dev/null || true
+        cd "$SONAR_DIR" && git pull
+        sudo systemctl start sonar 2>/dev/null || true
+        ok_msg "Sonar updated"
+    fi
+    
+    echo ""
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  All components updated!${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# REMOVE FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Remove Klipper
+do_remove_klipper() {
+    clear_screen
+    print_header "Remove Klipper"
+    
+    if ! is_klipper_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Klipper is not installed.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${RED}WARNING: This will remove:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Klipper installation (~/klipper)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Python environment (~/klippy-env)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Systemd service"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${WHITE}Your config files in ~/printer_data will be preserved.${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Are you sure you want to remove Klipper?"; then
+        return 1
+    fi
+    
+    # Double confirm for destructive action
+    echo -e "\n${RED}This action cannot be undone!${NC}"
+    if ! confirm "Type 'yes' to confirm removal"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Stop and disable service
+    status_msg "Stopping and disabling Klipper service..."
+    sudo systemctl stop klipper 2>/dev/null || true
+    sudo systemctl disable klipper 2>/dev/null || true
+    sudo rm -f "${SYSTEMD_DIR}/klipper.service"
+    sudo systemctl daemon-reload
+    
+    # Remove directories
+    status_msg "Removing Klipper files..."
+    rm -rf "$KLIPPER_DIR"
+    rm -rf "$KLIPPY_ENV"
+    
+    # Remove environment file (but keep printer_data structure)
+    rm -f "${PRINTER_DATA}/systemd/klipper.env"
+    
+    echo ""
+    ok_msg "Klipper has been removed."
+    echo -e "  ${WHITE}Your config files in ~/printer_data have been preserved.${NC}"
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# Remove Moonraker
+do_remove_moonraker() {
+    clear_screen
+    print_header "Remove Moonraker"
+    
+    if ! is_moonraker_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Moonraker is not installed.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${RED}WARNING: This will remove:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Moonraker installation (~/moonraker)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Python environment (~/moonraker-env)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Systemd service"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Web interfaces (Mainsail/Fluidd) will stop working!${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Are you sure you want to remove Moonraker?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Stop and disable service
+    status_msg "Stopping and disabling Moonraker service..."
+    sudo systemctl stop moonraker 2>/dev/null || true
+    sudo systemctl disable moonraker 2>/dev/null || true
+    sudo rm -f "${SYSTEMD_DIR}/moonraker.service"
+    sudo systemctl daemon-reload
+    
+    # Remove directories
+    status_msg "Removing Moonraker files..."
+    rm -rf "$MOONRAKER_DIR"
+    rm -rf "$MOONRAKER_ENV"
+    
+    # Remove environment file
+    rm -f "${PRINTER_DATA}/systemd/moonraker.env"
+    
+    echo ""
+    ok_msg "Moonraker has been removed."
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# Remove Mainsail
+do_remove_mainsail() {
+    clear_screen
+    print_header "Remove Mainsail"
+    
+    if ! is_mainsail_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Mainsail is not installed.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will remove:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Mainsail web interface (~/mainsail)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Nginx configuration"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Are you sure you want to remove Mainsail?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Remove nginx config
+    status_msg "Removing nginx configuration..."
+    sudo rm -f "/etc/nginx/sites-enabled/mainsail"
+    sudo rm -f "/etc/nginx/sites-available/mainsail"
+    sudo systemctl restart nginx 2>/dev/null || true
+    
+    # Remove directory
+    status_msg "Removing Mainsail files..."
+    rm -rf "$MAINSAIL_DIR"
+    
+    # Remove update manager entry from moonraker.conf if present
+    if [[ -f "${PRINTER_DATA}/config/moonraker.conf" ]]; then
+        sed -i '/\[update_manager mainsail\]/,/^$/d' "${PRINTER_DATA}/config/moonraker.conf" 2>/dev/null || true
+    fi
+    
+    echo ""
+    ok_msg "Mainsail has been removed."
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# Remove Fluidd
+do_remove_fluidd() {
+    clear_screen
+    print_header "Remove Fluidd"
+    
+    if ! is_fluidd_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Fluidd is not installed.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will remove:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Fluidd web interface (~/fluidd)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Nginx configuration"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Are you sure you want to remove Fluidd?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Remove nginx config
+    status_msg "Removing nginx configuration..."
+    sudo rm -f "/etc/nginx/sites-enabled/fluidd"
+    sudo rm -f "/etc/nginx/sites-available/fluidd"
+    sudo systemctl restart nginx 2>/dev/null || true
+    
+    # Remove directory
+    status_msg "Removing Fluidd files..."
+    rm -rf "$FLUIDD_DIR"
+    
+    # Remove update manager entry from moonraker.conf if present
+    if [[ -f "${PRINTER_DATA}/config/moonraker.conf" ]]; then
+        sed -i '/\[update_manager fluidd\]/,/^$/d' "${PRINTER_DATA}/config/moonraker.conf" 2>/dev/null || true
+    fi
+    
+    echo ""
+    ok_msg "Fluidd has been removed."
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# Remove Crowsnest
+do_remove_crowsnest() {
+    clear_screen
+    print_header "Remove Crowsnest"
+    
+    if ! is_crowsnest_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Crowsnest is not installed.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will remove:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Crowsnest webcam streamer (~/crowsnest)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Systemd service"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Are you sure you want to remove Crowsnest?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Use Crowsnest's uninstaller if available
+    if [[ -f "${CROWSNEST_DIR}/tools/uninstall.sh" ]]; then
+        status_msg "Running Crowsnest uninstaller..."
+        cd "$CROWSNEST_DIR"
+        bash tools/uninstall.sh
+    else
+        # Manual removal
+        status_msg "Stopping and disabling Crowsnest service..."
+        sudo systemctl stop crowsnest 2>/dev/null || true
+        sudo systemctl disable crowsnest 2>/dev/null || true
+        sudo rm -f "${SYSTEMD_DIR}/crowsnest.service"
+        sudo systemctl daemon-reload
+        
+        status_msg "Removing Crowsnest files..."
+        rm -rf "$CROWSNEST_DIR"
+    fi
+    
+    # Remove update manager entry
+    if [[ -f "${PRINTER_DATA}/config/moonraker.conf" ]]; then
+        sed -i '/\[update_manager crowsnest\]/,/^$/d' "${PRINTER_DATA}/config/moonraker.conf" 2>/dev/null || true
+    fi
+    
+    echo ""
+    ok_msg "Crowsnest has been removed."
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# Remove Sonar
+do_remove_sonar() {
+    clear_screen
+    print_header "Remove Sonar"
+    
+    if ! is_sonar_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Sonar is not installed.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will remove:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Sonar keepalive service (~/sonar)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Systemd service"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Are you sure you want to remove Sonar?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Use Sonar's uninstaller if available
+    if [[ -f "${SONAR_DIR}/tools/uninstall.sh" ]]; then
+        status_msg "Running Sonar uninstaller..."
+        cd "$SONAR_DIR"
+        bash tools/uninstall.sh
+    else
+        # Manual removal
+        status_msg "Stopping and disabling Sonar service..."
+        sudo systemctl stop sonar 2>/dev/null || true
+        sudo systemctl disable sonar 2>/dev/null || true
+        sudo rm -f "${SYSTEMD_DIR}/sonar.service"
+        sudo systemctl daemon-reload
+        
+        status_msg "Removing Sonar files..."
+        rm -rf "$SONAR_DIR"
+    fi
+    
+    # Remove update manager entry
+    if [[ -f "${PRINTER_DATA}/config/moonraker.conf" ]]; then
+        sed -i '/\[update_manager sonar\]/,/^$/d' "${PRINTER_DATA}/config/moonraker.conf" 2>/dev/null || true
+    fi
+    
+    echo ""
+    ok_msg "Sonar has been removed."
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
+# Remove component menu
+show_remove_menu() {
+    while true; do
+        clear_screen
+        print_header "Remove Component"
+        
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}WARNING: Removal is permanent!${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Select component to remove:"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        
+        # Show installed components
+        local num=1
+        local options=()
+        
+        if is_klipper_installed; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} Klipper"
+            options+=("klipper")
+            num=$((num + 1))
+        fi
+        
+        if is_moonraker_installed; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} Moonraker"
+            options+=("moonraker")
+            num=$((num + 1))
+        fi
+        
+        if is_mainsail_installed; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} Mainsail"
+            options+=("mainsail")
+            num=$((num + 1))
+        fi
+        
+        if is_fluidd_installed; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} Fluidd"
+            options+=("fluidd")
+            num=$((num + 1))
+        fi
+        
+        if is_crowsnest_installed; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} Crowsnest"
+            options+=("crowsnest")
+            num=$((num + 1))
+        fi
+        
+        if is_sonar_installed; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} Sonar"
+            options+=("sonar")
+            num=$((num + 1))
+        fi
+        
+        if [[ ${#options[@]} -eq 0 ]]; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}No components installed to remove.${NC}"
+        fi
+        
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+        
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+        
+        case "$choice" in
+            [bB]) return ;;
+            [0-9]*)
+                local idx=$((choice - 1))
+                if [[ $idx -ge 0 && $idx -lt ${#options[@]} ]]; then
+                    case "${options[$idx]}" in
+                        klipper) do_remove_klipper ;;
+                        moonraker) do_remove_moonraker ;;
+                        mainsail) do_remove_mainsail ;;
+                        fluidd) do_remove_fluidd ;;
+                        crowsnest) do_remove_crowsnest ;;
+                        sonar) do_remove_sonar ;;
+                    esac
+                fi
+                ;;
+        esac
+    done
+}
+

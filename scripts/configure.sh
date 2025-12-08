@@ -2445,8 +2445,8 @@ show_klipper_setup_menu() {
         print_menu_item "6" "$sonar_status" "Sonar" "${sonar_info}"
         
         print_separator
-        # print_action_item "R" "Remove component"
-        # print_action_item "U" "Update all"
+        print_action_item "U" "Update all installed"
+        print_action_item "R" "Remove component"
         print_action_item "B" "Back"
         print_footer
         
@@ -2460,6 +2460,22 @@ show_klipper_setup_menu() {
             4) install_fluidd ;;
             5) install_crowsnest ;;
             6) install_sonar ;;
+            [uU]) 
+                if type do_update_all &>/dev/null; then
+                    do_update_all
+                else
+                    echo -e "${RED}Update function not available${NC}"
+                    wait_for_key
+                fi
+                ;;
+            [rR]) 
+                if type show_remove_menu &>/dev/null; then
+                    show_remove_menu
+                else
+                    echo -e "${RED}Remove function not available${NC}"
+                    wait_for_key
+                fi
+                ;;
             [bB]) return ;;
             *) ;;
         esac

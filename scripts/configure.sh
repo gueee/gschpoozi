@@ -2202,6 +2202,11 @@ is_sonar_installed() {
     [[ -d "${HOME}/sonar" ]]
 }
 
+# Check if Timelapse is installed (properly with symlink)
+is_timelapse_installed() {
+    [[ -d "${HOME}/moonraker-timelapse" ]] && [[ -L "${HOME}/moonraker/moonraker/components/timelapse.py" ]]
+}
+
 # Get Klipper version if installed
 get_klipper_version() {
     if is_klipper_installed; then
@@ -2305,6 +2310,21 @@ install_sonar() {
     else
         clear_screen
         print_header "Install Sonar"
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Installation library not found!${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  Please ensure scripts/lib/klipper-install.sh exists."
+        echo -e "${BCYAN}${BOX_V}${NC}"
+        print_footer
+        wait_for_key
+    fi
+}
+
+install_timelapse() {
+    if type do_install_timelapse &>/dev/null; then
+        do_install_timelapse
+    else
+        clear_screen
+        print_header "Install Timelapse"
         echo -e "${BCYAN}${BOX_V}${NC}"
         echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Installation library not found!${NC}"
         echo -e "${BCYAN}${BOX_V}${NC}  Please ensure scripts/lib/klipper-install.sh exists."
@@ -2454,6 +2474,17 @@ show_klipper_setup_menu() {
         fi
         print_menu_item "6" "$sonar_status" "Sonar" "${sonar_info}"
         
+        # Timelapse
+        local timelapse_status=""
+        local timelapse_info=""
+        if is_timelapse_installed; then
+            timelapse_status="done"
+            timelapse_info="Installed"
+        else
+            timelapse_info="Print recordings"
+        fi
+        print_menu_item "7" "$timelapse_status" "Timelapse" "${timelapse_info}"
+        
         print_separator
         print_action_item "U" "Update all installed"
         print_action_item "R" "Remove component"
@@ -2470,6 +2501,7 @@ show_klipper_setup_menu() {
             4) install_fluidd ;;
             5) install_crowsnest ;;
             6) install_sonar ;;
+            7) install_timelapse ;;
             [uU]) 
                 if type do_update_all &>/dev/null; then
                     do_update_all

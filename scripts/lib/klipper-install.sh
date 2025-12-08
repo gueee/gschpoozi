@@ -17,6 +17,7 @@ MAINSAIL_REPO="https://github.com/mainsail-crew/mainsail"
 FLUIDD_REPO="https://github.com/fluidd-core/fluidd"
 CROWSNEST_REPO="https://github.com/mainsail-crew/crowsnest.git"
 SONAR_REPO="https://github.com/mainsail-crew/sonar.git"
+TIMELAPSE_REPO="https://github.com/mainsail-crew/moonraker-timelapse.git"
 
 # Installation paths
 KLIPPER_DIR="${HOME}/klipper"
@@ -25,6 +26,7 @@ MAINSAIL_DIR="${HOME}/mainsail"
 FLUIDD_DIR="${HOME}/fluidd"
 CROWSNEST_DIR="${HOME}/crowsnest"
 SONAR_DIR="${HOME}/sonar"
+TIMELAPSE_DIR="${HOME}/moonraker-timelapse"
 
 KLIPPY_ENV="${HOME}/klippy-env"
 MOONRAKER_ENV="${HOME}/moonraker-env"
@@ -1018,6 +1020,104 @@ managed_services: sonar"
     return 0
 }
 
+# Install Moonraker Timelapse
+do_install_timelapse() {
+    clear_screen
+    print_header "Installing Moonraker Timelapse"
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will install:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Moonraker Timelapse for print recordings"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Proper symlink-based installation"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    
+    if ! is_moonraker_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Error: Moonraker is not installed!${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Timelapse requires Moonraker.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    # Check for incorrectly installed timelapse
+    if [[ -f "${MOONRAKER_DIR}/moonraker/components/timelapse.py" ]] && [[ ! -L "${MOONRAKER_DIR}/moonraker/components/timelapse.py" ]]; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Warning: Found incorrectly installed timelapse.py${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}This will be removed and replaced with proper symlink.${NC}"
+    fi
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Proceed with Timelapse installation?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Preflight checks
+    check_not_root || return 1
+    check_sudo_access || return 1
+    
+    # Install ffmpeg dependency
+    install_packages "ffmpeg" || return 1
+    
+    # Remove incorrectly installed timelapse if present
+    if [[ -f "${MOONRAKER_DIR}/moonraker/components/timelapse.py" ]] && [[ ! -L "${MOONRAKER_DIR}/moonraker/components/timelapse.py" ]]; then
+        status_msg "Removing incorrectly installed timelapse.py..."
+        rm -f "${MOONRAKER_DIR}/moonraker/components/timelapse.py"
+    fi
+    
+    # Clone repository
+    clone_repo "$TIMELAPSE_REPO" "$TIMELAPSE_DIR" || return 1
+    
+    # Create symlink for the component
+    status_msg "Creating symlink for timelapse component..."
+    ln -sf "${TIMELAPSE_DIR}/component/timelapse.py" "${MOONRAKER_DIR}/moonraker/components/timelapse.py"
+    
+    # Create timelapse macro file if it doesn't exist
+    local macro_file="${PRINTER_DATA}/config/timelapse.cfg"
+    if [[ ! -f "$macro_file" ]]; then
+        status_msg "Creating timelapse.cfg..."
+        cp "${TIMELAPSE_DIR}/klipper_macro/timelapse.cfg" "$macro_file"
+    fi
+    
+    # Add update manager entry
+    add_update_manager_entry "timelapse" "git_repo" "${TIMELAPSE_DIR}" "origin: https://github.com/mainsail-crew/moonraker-timelapse.git
+primary_branch: main"
+    
+    # Add timelapse config to moonraker.conf if not present
+    local moonraker_conf="${PRINTER_DATA}/config/moonraker.conf"
+    if ! grep -q "\[timelapse\]" "$moonraker_conf" 2>/dev/null; then
+        status_msg "Adding timelapse config to moonraker.conf..."
+        cat >> "$moonraker_conf" << 'EOF'
+
+[timelapse]
+output_path: ~/printer_data/timelapse/
+frame_path: ~/printer_data/timelapse/frames/
+EOF
+    fi
+    
+    # Create timelapse directories
+    mkdir -p "${PRINTER_DATA}/timelapse/frames"
+    
+    # Restart Moonraker to load the component
+    status_msg "Restarting Moonraker..."
+    sudo systemctl restart moonraker
+    
+    echo ""
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  Moonraker Timelapse installation complete!${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "  ${WHITE}Add to your printer.cfg:${NC}"
+    echo -e "  ${CYAN}[include timelapse.cfg]${NC}"
+    echo ""
+    echo -e "  Output directory: ${CYAN}${PRINTER_DATA}/timelapse/${NC}"
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # UPDATE FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1323,6 +1423,46 @@ do_update_sonar() {
     return 0
 }
 
+# Update Timelapse
+do_update_timelapse() {
+    clear_screen
+    print_header "Update Moonraker Timelapse"
+    
+    if ! is_timelapse_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Timelapse is not installed!${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update Timelapse to the latest version."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Proceed with Timelapse update?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Update repository
+    status_msg "Pulling latest changes..."
+    cd "$TIMELAPSE_DIR"
+    git pull
+    
+    # Restart Moonraker to reload the component
+    status_msg "Restarting Moonraker..."
+    sudo systemctl restart moonraker
+    
+    echo ""
+    ok_msg "Timelapse updated successfully!"
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
 # Update all components
 do_update_all() {
     clear_screen
@@ -1336,6 +1476,7 @@ do_update_all() {
     is_fluidd_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Fluidd"
     is_crowsnest_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Crowsnest"
     is_sonar_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Sonar"
+    is_timelapse_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Timelapse"
     echo -e "${BCYAN}${BOX_V}${NC}"
     print_footer
     
@@ -1401,6 +1542,13 @@ do_update_all() {
         cd "$SONAR_DIR" && git pull
         sudo systemctl start sonar 2>/dev/null || true
         ok_msg "Sonar updated"
+    fi
+    
+    if is_timelapse_installed; then
+        echo -e "\n${BWHITE}=== Updating Timelapse ===${NC}"
+        cd "$TIMELAPSE_DIR" && git pull
+        sudo systemctl restart moonraker
+        ok_msg "Timelapse updated"
     fi
     
     echo ""
@@ -1732,6 +1880,61 @@ do_remove_sonar() {
     return 0
 }
 
+# Remove Timelapse
+do_remove_timelapse() {
+    clear_screen
+    print_header "Remove Moonraker Timelapse"
+    
+    if ! is_timelapse_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Timelapse is not installed.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+    
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will remove:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Moonraker Timelapse (~/moonraker-timelapse)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Component symlink from Moonraker"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${WHITE}timelapse.cfg and recordings will be preserved.${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+    
+    if ! confirm "Are you sure you want to remove Timelapse?"; then
+        return 1
+    fi
+    
+    echo ""
+    
+    # Remove symlink from Moonraker
+    status_msg "Removing timelapse component symlink..."
+    rm -f "${MOONRAKER_DIR}/moonraker/components/timelapse.py"
+    
+    # Remove repository
+    status_msg "Removing Timelapse repository..."
+    rm -rf "$TIMELAPSE_DIR"
+    
+    # Remove update manager entry
+    if [[ -f "${PRINTER_DATA}/config/moonraker.conf" ]]; then
+        sed -i '/\[update_manager timelapse\]/,/^$/d' "${PRINTER_DATA}/config/moonraker.conf" 2>/dev/null || true
+        # Also remove the [timelapse] section
+        sed -i '/\[timelapse\]/,/^$/d' "${PRINTER_DATA}/config/moonraker.conf" 2>/dev/null || true
+    fi
+    
+    # Restart Moonraker
+    status_msg "Restarting Moonraker..."
+    sudo systemctl restart moonraker
+    
+    echo ""
+    ok_msg "Timelapse has been removed."
+    echo -e "  ${WHITE}timelapse.cfg and recordings have been preserved.${NC}"
+    echo ""
+    
+    wait_for_key
+    return 0
+}
+
 # Remove component menu
 show_remove_menu() {
     while true; do
@@ -1783,6 +1986,12 @@ show_remove_menu() {
             num=$((num + 1))
         fi
         
+        if is_timelapse_installed; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} Timelapse"
+            options+=("timelapse")
+            num=$((num + 1))
+        fi
+        
         if [[ ${#options[@]} -eq 0 ]]; then
             echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}No components installed to remove.${NC}"
         fi
@@ -1807,6 +2016,7 @@ show_remove_menu() {
                         fluidd) do_remove_fluidd ;;
                         crowsnest) do_remove_crowsnest ;;
                         sonar) do_remove_sonar ;;
+                        timelapse) do_remove_timelapse ;;
                     esac
                 fi
                 ;;

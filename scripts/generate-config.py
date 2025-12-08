@@ -270,16 +270,18 @@ def generate_hardware_cfg(
     else:
         lines.append(f"endstop_pin: ^REPLACE_PIN  # Configure X endstop port")
     
-    # Homing position - check wizard state for endstop location
+    # Homing position - use configured values or defaults based on home direction
     x_home = wizard_state.get('home_x', 'max')  # 'min' or 'max'
+    x_pos_min = wizard_state.get('position_min_x', '0')
+    x_pos_endstop = wizard_state.get('position_endstop_x', '')
     if x_home == 'min':
-        lines.append("position_min: 0")
+        lines.append(f"position_min: {x_pos_min}")
         lines.append(f"position_max: {bed_x}")
-        lines.append("position_endstop: 0")
+        lines.append(f"position_endstop: {x_pos_endstop if x_pos_endstop else x_pos_min}")
     else:
-        lines.append("position_min: 0")
+        lines.append(f"position_min: {x_pos_min}")
         lines.append(f"position_max: {bed_x}")
-        lines.append(f"position_endstop: {bed_x}")
+        lines.append(f"position_endstop: {x_pos_endstop if x_pos_endstop else bed_x}")
     lines.append("homing_speed: 80")
     lines.append("homing_retract_dist: 5")
     lines.append("")
@@ -305,16 +307,18 @@ def generate_hardware_cfg(
     else:
         lines.append(f"endstop_pin: ^REPLACE_PIN  # Configure Y endstop port")
     
-    # Homing position - check wizard state for endstop location
+    # Homing position - use configured values or defaults based on home direction
     y_home = wizard_state.get('home_y', 'max')  # 'min' or 'max'
+    y_pos_min = wizard_state.get('position_min_y', '0')
+    y_pos_endstop = wizard_state.get('position_endstop_y', '')
     if y_home == 'min':
-        lines.append("position_min: 0")
+        lines.append(f"position_min: {y_pos_min}")
         lines.append(f"position_max: {bed_y}")
-        lines.append("position_endstop: 0")
+        lines.append(f"position_endstop: {y_pos_endstop if y_pos_endstop else y_pos_min}")
     else:
-        lines.append("position_min: 0")
+        lines.append(f"position_min: {y_pos_min}")
         lines.append(f"position_max: {bed_y}")
-        lines.append(f"position_endstop: {bed_y}")
+        lines.append(f"position_endstop: {y_pos_endstop if y_pos_endstop else bed_y}")
     lines.append("homing_speed: 80")
     lines.append("homing_retract_dist: 5")
     lines.append("")
@@ -389,7 +393,93 @@ def generate_hardware_cfg(
             lines.append("homing_speed: 15")
         
         lines.append("")
-    
+
+    # TMC Driver Sections
+    lines.append("# " + "─" * 77)
+    lines.append("# TMC DRIVERS")
+    lines.append("# " + "─" * 77)
+
+    # Helper to generate TMC section
+    def generate_tmc_section(stepper_name: str, driver_type: str, uart_pin: str,
+                              run_current: str = "0.8", mcu_prefix: str = "") -> List[str]:
+        """Generate TMC driver config section."""
+        tmc_lines = []
+        driver_lower = driver_type.lower()
+        prefix = f"{mcu_prefix}:" if mcu_prefix else ""
+
+        tmc_lines.append(f"[{driver_lower} {stepper_name}]")
+        if 'spi' in driver_lower or driver_type in ('TMC5160', 'TMC2130'):
+            tmc_lines.append(f"cs_pin: {prefix}{uart_pin}")
+            tmc_lines.append("spi_software_miso_pin: REPLACE_MISO")
+            tmc_lines.append("spi_software_mosi_pin: REPLACE_MOSI")
+            tmc_lines.append("spi_software_sclk_pin: REPLACE_SCLK")
+        else:
+            tmc_lines.append(f"uart_pin: {prefix}{uart_pin}")
+        tmc_lines.append(f"run_current: {run_current}")
+        # Add stealthchop for quiet operation on XY, off for Z/extruder typically
+        if 'x' in stepper_name.lower() or 'y' in stepper_name.lower():
+            tmc_lines.append("stealthchop_threshold: 999999")
+        else:
+            tmc_lines.append("stealthchop_threshold: 0")
+        tmc_lines.append("")
+        return tmc_lines
+
+    # Default driver type (fallback)
+    default_driver = wizard_state.get('stepper_driver', 'TMC2209')
+
+    # Stepper X TMC
+    driver_x_type = wizard_state.get('driver_X', default_driver)
+    if driver_x_type and x_pins.get('uart_pin'):
+        lines.extend(generate_tmc_section('stepper_x', driver_x_type, x_pins['uart_pin']))
+
+    # Stepper Y TMC
+    driver_y_type = wizard_state.get('driver_Y', default_driver)
+    y_port = assignments.get('stepper_y', 'MOTOR_1')
+    y_pins_tmc = get_motor_pins(board, y_port)
+    if driver_y_type and y_pins_tmc.get('uart_pin'):
+        lines.extend(generate_tmc_section('stepper_y', driver_y_type, y_pins_tmc['uart_pin']))
+
+    # AWD: X1 and Y1 TMC
+    if kinematics == 'corexy-awd':
+        driver_x1_type = wizard_state.get('driver_X1', default_driver)
+        x1_port = assignments.get('stepper_x1', 'MOTOR_2')
+        x1_pins_tmc = get_motor_pins(board, x1_port)
+        if driver_x1_type and x1_pins_tmc.get('uart_pin'):
+            lines.extend(generate_tmc_section('stepper_x1', driver_x1_type, x1_pins_tmc['uart_pin']))
+
+        driver_y1_type = wizard_state.get('driver_Y1', default_driver)
+        y1_port = assignments.get('stepper_y1', 'MOTOR_3')
+        y1_pins_tmc = get_motor_pins(board, y1_port)
+        if driver_y1_type and y1_pins_tmc.get('uart_pin'):
+            lines.extend(generate_tmc_section('stepper_y1', driver_y1_type, y1_pins_tmc['uart_pin']))
+
+    # Stepper Z TMC (and Z1, Z2, Z3)
+    for z_idx in range(z_count):
+        suffix = "" if z_idx == 0 else str(z_idx)
+        stepper_name = f"stepper_z{suffix}"
+        driver_key = f"driver_Z{suffix}" if suffix else "driver_Z"
+        driver_z_type = wizard_state.get(driver_key, default_driver)
+        z_port_name = f"stepper_z{suffix}" if suffix else "stepper_z"
+        z_port_tmc = assignments.get(z_port_name, f'MOTOR_{4 + z_idx}')
+        z_pins_tmc = get_motor_pins(board, z_port_tmc)
+        if driver_z_type and z_pins_tmc.get('uart_pin'):
+            lines.extend(generate_tmc_section(stepper_name, driver_z_type, z_pins_tmc['uart_pin'], "0.8"))
+
+    # Extruder TMC (on mainboard or toolboard)
+    driver_e_type = wizard_state.get('driver_E', default_driver)
+    tb_extruder = hardware_state.get('toolboard_assignments', {}).get('extruder', '') if toolboard else ''
+    extruder_on_tb = toolboard and tb_extruder not in ('', 'none')
+    if extruder_on_tb:
+        e_port_tmc = hardware_state.get('toolboard_assignments', {}).get('extruder', 'EXTRUDER')
+        e_pins_tmc = get_motor_pins(toolboard, e_port_tmc)
+        if driver_e_type and e_pins_tmc.get('uart_pin'):
+            lines.extend(generate_tmc_section('extruder', driver_e_type, e_pins_tmc['uart_pin'], "0.5", "toolboard"))
+    else:
+        e_port_tmc = assignments.get('extruder', 'MOTOR_5')
+        e_pins_tmc = get_motor_pins(board, e_port_tmc)
+        if driver_e_type and e_pins_tmc.get('uart_pin'):
+            lines.extend(generate_tmc_section('extruder', driver_e_type, e_pins_tmc['uart_pin'], "0.5"))
+
     # Extruder (on main board or toolboard)
     lines.append("# " + "─" * 77)
     lines.append("# EXTRUDER")
@@ -474,12 +564,24 @@ def generate_hardware_cfg(
         lines.append("max_temp: 350  # RTD sensor")
     else:
         lines.append("max_temp: 300")
-    lines.append("max_extrude_only_distance: 150")
+    # Adjust settings based on extruder type (direct-drive vs bowden)
+    extruder_type = wizard_state.get('extruder_type', 'direct-drive')
+    if extruder_type == 'bowden':
+        lines.append("max_extrude_only_distance: 500  # Bowden: longer for tube loading")
+        lines.append("max_extrude_cross_section: 5")
+    else:
+        lines.append("max_extrude_only_distance: 150")
+
     lines.append("control: pid")
     lines.append("pid_kp: 26.213  # Run PID_CALIBRATE HEATER=extruder TARGET=200")
     lines.append("pid_ki: 1.304")
     lines.append("pid_kd: 131.721")
-    lines.append("pressure_advance: 0.04")
+
+    # Pressure advance: direct-drive ~0.04, bowden ~0.5-1.0 (requires tuning)
+    if extruder_type == 'bowden':
+        lines.append("pressure_advance: 0.5  # Bowden starting value - tune this!")
+    else:
+        lines.append("pressure_advance: 0.04  # Direct drive starting value")
     lines.append("pressure_advance_smooth_time: 0.040")
     lines.append("")
     
@@ -925,7 +1027,85 @@ def generate_hardware_cfg(
         lines.append("retries: 5")
         lines.append("retry_tolerance: 0.0075")
         lines.append("")
-    
+
+    # Lighting configuration
+    lighting_type = wizard_state.get('lighting_type', '')
+    lighting_pin = wizard_state.get('lighting_pin', '')
+    lighting_count = wizard_state.get('lighting_count', '1')
+    lighting_color_order = wizard_state.get('lighting_color_order', 'GRB')
+
+    if lighting_type and lighting_type != 'none':
+        lines.append("# " + "─" * 77)
+        lines.append("# LIGHTING")
+        lines.append("# " + "─" * 77)
+
+        if lighting_type == 'neopixel':
+            lines.append("[neopixel status_led]")
+            if lighting_pin:
+                lines.append(f"pin: {lighting_pin}")
+            else:
+                lines.append("pin: REPLACE_PIN  # NeoPixel data pin")
+            lines.append(f"chain_count: {lighting_count}")
+            lines.append(f"color_order: {lighting_color_order}")
+            lines.append("initial_RED: 0.2")
+            lines.append("initial_GREEN: 0.2")
+            lines.append("initial_BLUE: 0.2")
+        elif lighting_type == 'dotstar':
+            lines.append("[dotstar status_led]")
+            lines.append("data_pin: REPLACE_DATA_PIN")
+            lines.append("clock_pin: REPLACE_CLOCK_PIN")
+            lines.append(f"chain_count: {lighting_count}")
+            lines.append("initial_RED: 0.2")
+            lines.append("initial_GREEN: 0.2")
+            lines.append("initial_BLUE: 0.2")
+        elif lighting_type == 'simple_led':
+            lines.append("[output_pin caselight]")
+            if lighting_pin:
+                lines.append(f"pin: {lighting_pin}")
+            else:
+                lines.append("pin: REPLACE_PIN")
+            lines.append("pwm: True")
+            lines.append("value: 0.5")
+            lines.append("cycle_time: 0.01")
+        lines.append("")
+
+    # Filament sensor configuration
+    has_filament_sensor = wizard_state.get('has_filament_sensor', '')
+    filament_sensor_pin = wizard_state.get('filament_sensor_pin', '')
+
+    if has_filament_sensor == 'yes':
+        lines.append("# " + "─" * 77)
+        lines.append("# FILAMENT SENSOR")
+        lines.append("# " + "─" * 77)
+        lines.append("[filament_switch_sensor filament_sensor]")
+        lines.append("switch_pin: ^REPLACE_PIN  # Filament sensor pin")
+        lines.append("pause_on_runout: True")
+        lines.append("runout_gcode:")
+        lines.append("    M600  # Pause for filament change")
+        lines.append("insert_gcode:")
+        lines.append("    M117 Filament inserted")
+        lines.append("")
+
+    # Chamber temperature sensor
+    has_chamber_sensor = wizard_state.get('has_chamber_sensor', '')
+    chamber_sensor_type = wizard_state.get('chamber_sensor_type', 'Generic 3950')
+    chamber_sensor_pin = wizard_state.get('chamber_sensor_pin', '')
+
+    if has_chamber_sensor == 'yes':
+        lines.append("# " + "─" * 77)
+        lines.append("# CHAMBER SENSOR")
+        lines.append("# " + "─" * 77)
+        lines.append("[temperature_sensor chamber]")
+        lines.append(f"sensor_type: {chamber_sensor_type}")
+        if chamber_sensor_pin:
+            lines.append(f"sensor_pin: {chamber_sensor_pin}")
+        else:
+            lines.append("sensor_pin: REPLACE_PIN  # Chamber thermistor pin")
+        lines.append("min_temp: 0")
+        lines.append("max_temp: 80")
+        lines.append("gcode_id: C")
+        lines.append("")
+
     return "\n".join(lines)
 
 # ═══════════════════════════════════════════════════════════════════════════════

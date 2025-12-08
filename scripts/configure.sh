@@ -1998,14 +1998,20 @@ init_state() {
         [hotend_thermistor]=""
         [hotend_pullup_resistor]=""
         [bed_thermistor]=""
+        [bed_pullup_resistor]=""
         [probe_type]=""
         [has_filament_sensor]=""
+        [filament_sensor_pin]=""
         [has_chamber_sensor]=""
+        [chamber_sensor_type]=""
+        [chamber_sensor_pin]=""
         [position_endstop_x]=""
         [position_endstop_y]=""
         [position_endstop_z]=""
         [position_min_x]=""
         [position_min_y]=""
+        [home_x]=""
+        [home_y]=""
         # Fan configuration
         [fan_part_cooling]=""
         [fan_part_cooling_multipin]=""
@@ -2063,6 +2069,7 @@ init_state() {
         [fan_rd_kick_start]=""
         # Lighting configuration
         [lighting_type]=""
+        [lighting_pin]=""
         [lighting_count]=""
         [lighting_color_order]=""
         # Stepper configuration - per axis

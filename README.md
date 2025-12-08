@@ -62,6 +62,12 @@ Then generates clean config files:
 - Macros (PRINT_START, PRINT_END, etc.)
 - Homing routines
 
+## Documentation
+
+For complete documentation, see:
+- **[Usage Manual](docs/USAGE.md)** - Detailed guide for all wizard options
+- **[Klipper Config Guidelines](KLIPPER_CONFIG_GUIDELINES.md)** - Klipper syntax reference
+
 ## Automatic Updates
 
 Add this to your `moonraker.conf` for automatic updates:
@@ -113,29 +119,23 @@ variable_my_var: 100       # Add your own variables
 
 ## Supported Hardware
 
-### Controller Boards
-- BTT Octopus v1.1 / Pro
-- BTT Manta M8P v2.0
-- BTT SKR Mini E3 v3
-- More coming...
+**28 Controller Boards** including:
+- BTT Octopus v1.1/Pro, Manta M8P/M5P, SKR 3/Mini E3, Kraken
+- Mellow Fly Super8, Gemini v3
+- Fysetc Spider v2.2
+- And more...
 
-### Toolhead Boards
-- BTT EBB36 / EBB42
-- Mellow SHT36 / SHT42
-- Huvud
+**17 Toolhead Boards** including:
+- BTT EBB36/42, EBB SB2209/2240
+- Mellow SHT36/42, Fly SB2040
+- LDO Nitehawk SB/36
+- Orbiter Orbitool SO3
 
-### Probes
-- BLTouch / 3DTouch
-- Beacon (Eddy Current)
-- Klicky Probe
-- Inductive Probe
-- Microswitch
+**Probes**: Beacon, Cartographer, BTT Eddy, BLTouch, Klicky, Inductive, Tap
 
-### Kinematics
-- CoreXY
-- CoreXY AWD (4 motors)
-- Cartesian
-- CoreXZ
+**Kinematics**: CoreXY, CoreXY AWD, Cartesian, CoreXZ
+
+See [Usage Manual](docs/USAGE.md) for complete hardware list.
 
 ## Contributing
 

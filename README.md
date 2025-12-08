@@ -88,22 +88,9 @@ For complete documentation, see:
 
 ## Automatic Updates
 
-Add this to your `moonraker.conf` for automatic updates:
+The wizard automatically adds gschpoozi to your Moonraker Update Manager. After setup, you'll see gschpoozi in your update list and can update it like any other component.
 
-```ini
-[update_manager gschpoozi]
-type: git_repo
-primary_branch: main
-path: ~/gschpoozi
-origin: https://github.com/gueee/gschpoozi.git
-install_script: scripts/update-manager/moonraker-update.sh
-is_system_service: False
-managed_services: klipper
-info_tags:
-    desc=gschpoozi Configuration Framework
-```
-
-Updates will only affect the gschpoozi repository itself. Your generated configs and `printer.cfg` are **never overwritten**.
+Updates only affect the gschpoozi repository itself. Your generated configs and `printer.cfg` are **never overwritten**.
 
 ## Re-running the Wizard
 

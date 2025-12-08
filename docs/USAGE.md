@@ -42,7 +42,7 @@ That's it! The script handles everything including Klipper installation if neede
 - **SSH access** to your Pi
 - **Basic knowledge** of your printer's hardware (board type, motors, probe, etc.)
 
-**You do NOT need Klipper pre-installed** - the script will install it automatically if it's not present.
+**You do NOT need Klipper pre-installed** - the script will guide you through the installtion if needed.
 
 ### Install Steps
 
@@ -62,27 +62,11 @@ That's it! The script handles everything including Klipper installation if neede
    ~/gschpoozi/scripts/configure.sh
    ```
 
-The wizard will:
-- Install Klipper, Moonraker, and Mainsail/Fluidd if not present
+The wizard will handle:
+- Installation of Klipper, Moonraker, and Mainsail/Fluidd (if not already installed)
+- Adding gschpoozi to Moonraker Update Manager (for automatic updates)
 - Guide you through hardware configuration
 - Generate ready-to-use config files
-
-### Adding to Moonraker Update Manager
-
-After setup, add this to `moonraker.conf` for automatic updates:
-
-```ini
-[update_manager gschpoozi]
-type: git_repo
-primary_branch: main
-path: ~/gschpoozi
-origin: https://github.com/gueee/gschpoozi.git
-install_script: scripts/update-manager/moonraker-update.sh
-is_system_service: False
-managed_services: klipper
-info_tags:
-    desc=gschpoozi Configuration Framework
-```
 
 ---
 

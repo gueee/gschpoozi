@@ -1101,7 +1101,9 @@ detect_usb_mcus() {
                    [[ "$basename" == *rp2040* ]] || \
                    [[ "$basename" == *BIGTREETECH* ]] || \
                    [[ "$basename" == *Mellow* ]] || \
-                   [[ "$basename" == *Katapult* ]]; then
+                   [[ "$basename" == *Katapult* ]] || \
+                   [[ "$basename" == *Beacon* ]] || \
+                   [[ "$basename" == *beacon* ]]; then
                     echo "$device"
                 fi
             fi
@@ -1129,6 +1131,8 @@ get_mcu_description() {
         desc="Mellow device"
     elif [[ "$basename" == *Katapult* ]]; then
         desc="Katapult bootloader"
+    elif [[ "$basename" == *[Bb]eacon* ]]; then
+        desc="Beacon probe"
     else
         desc="USB device"
     fi
@@ -4095,7 +4099,7 @@ menu_probe_usb() {
             echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${i})${NC} ${short_name}"
             i=$((i + 1))
         fi
-    done < <(ls /dev/serial/by-id/ 2>/dev/null | grep -E "beacon|cartographer|eddy|probe" || true)
+    done < <(ls /dev/serial/by-id/ 2>/dev/null | grep -iE "beacon|cartographer|eddy|probe" || true)
 
     if [[ ${#devices[@]} -eq 0 ]]; then
         echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}No probe USB devices found.${NC}"

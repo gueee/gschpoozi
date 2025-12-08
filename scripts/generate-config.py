@@ -149,25 +149,26 @@ def generate_hardware_cfg(
     bed_pullup = wizard_state.get('bed_pullup_resistor', '')
 
     # Get per-axis stepper settings (step angle, microsteps, rotation distance)
+    # Use 'or' to handle empty strings in wizard state
     # X axis
-    x_step_angle = wizard_state.get('stepper_x_step_angle', '1.8')
-    x_microsteps = wizard_state.get('stepper_x_microsteps', '16')
-    x_rotation_distance = wizard_state.get('stepper_x_rotation_distance', '40')
+    x_step_angle = wizard_state.get('stepper_x_step_angle') or '1.8'
+    x_microsteps = wizard_state.get('stepper_x_microsteps') or '16'
+    x_rotation_distance = wizard_state.get('stepper_x_rotation_distance') or '40'
     x_full_steps = '200' if x_step_angle == '1.8' else '400'
     # Y axis
-    y_step_angle = wizard_state.get('stepper_y_step_angle', '1.8')
-    y_microsteps = wizard_state.get('stepper_y_microsteps', '16')
-    y_rotation_distance = wizard_state.get('stepper_y_rotation_distance', '40')
+    y_step_angle = wizard_state.get('stepper_y_step_angle') or '1.8'
+    y_microsteps = wizard_state.get('stepper_y_microsteps') or '16'
+    y_rotation_distance = wizard_state.get('stepper_y_rotation_distance') or '40'
     y_full_steps = '200' if y_step_angle == '1.8' else '400'
     # Z axis
-    z_step_angle = wizard_state.get('stepper_z_step_angle', '1.8')
-    z_microsteps = wizard_state.get('stepper_z_microsteps', '16')
-    z_rotation_distance = wizard_state.get('stepper_z_rotation_distance', '8')
+    z_step_angle = wizard_state.get('stepper_z_step_angle') or '1.8'
+    z_microsteps = wizard_state.get('stepper_z_microsteps') or '16'
+    z_rotation_distance = wizard_state.get('stepper_z_rotation_distance') or '8'
     z_full_steps = '200' if z_step_angle == '1.8' else '400'
     # Extruder
-    e_step_angle = wizard_state.get('stepper_e_step_angle', '1.8')
-    e_microsteps = wizard_state.get('stepper_e_microsteps', '16')
-    e_rotation_distance = wizard_state.get('stepper_e_rotation_distance', '22.6789511')
+    e_step_angle = wizard_state.get('stepper_e_step_angle') or '1.8'
+    e_microsteps = wizard_state.get('stepper_e_microsteps') or '16'
+    e_rotation_distance = wizard_state.get('stepper_e_rotation_distance') or '22.6789511'
     e_full_steps = '200' if e_step_angle == '1.8' else '400'
 
     # Get driver type

@@ -4773,6 +4773,9 @@ menu_probe_usb() {
         [bB]) return ;;
         *) ;;
     esac
+
+    # Save state after probe serial selection
+    save_state
 }
 
 menu_probe_can() {
@@ -4836,6 +4839,9 @@ menu_probe_can() {
         [bB]) return ;;
         *) ;;
     esac
+
+    # Save state after probe CAN UUID selection
+    save_state
 }
 
 # Legacy probe menu - redirects to new endstops menu

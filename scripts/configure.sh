@@ -3562,11 +3562,11 @@ menu_bed_thermistor() {
     print_header "Bed Thermistor"
 
     echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}Select Bed Thermistor:${NC}"
-    print_menu_item "1" "" "Generic 3950 (NTC 100K)"
-    print_menu_item "2" "" "Keenovo (NTC 100K)"
-    print_menu_item "3" "" "PT1000 (direct, needs pullup config)"
-    print_menu_item "4" "" "NTC 100K beta 3950 (Prusa)"
-    print_menu_item "5" "" "EPCOS 100K B57560G104F"
+    print_menu_item "1" "" "Generic 3950 (NTC 100K - Keenovo, most common)"
+    print_menu_item "2" "" "EPCOS 100K B57560G104F"
+    print_menu_item "3" "" "PT1000 (direct)"
+    print_menu_item "4" "" "NTC 100K MGB18-104F39050L32"
+    print_menu_item "5" "" "Honeywell 100K 135-104LAG-J01"
     print_separator
     print_action_item "B" "Back"
     print_footer
@@ -3577,10 +3577,10 @@ menu_bed_thermistor() {
     local needs_pullup=true
     case "$choice" in
         1) WIZARD_STATE[bed_thermistor]="Generic 3950" ;;
-        2) WIZARD_STATE[bed_thermistor]="Keenovo" ;;
+        2) WIZARD_STATE[bed_thermistor]="EPCOS 100K B57560G104F" ;;
         3) WIZARD_STATE[bed_thermistor]="PT1000" ;;
-        4) WIZARD_STATE[bed_thermistor]="NTC 100K beta 3950" ;;
-        5) WIZARD_STATE[bed_thermistor]="EPCOS 100K B57560G104F" ;;
+        4) WIZARD_STATE[bed_thermistor]="NTC 100K MGB18-104F39050L32" ;;
+        5) WIZARD_STATE[bed_thermistor]="Honeywell 100K 135-104LAG-J01" ;;
         [bB]) return ;;
         *) needs_pullup=false ;;
     esac

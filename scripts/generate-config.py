@@ -254,13 +254,14 @@ def generate_hardware_cfg(
     lines.append("# " + "─" * 77)
     lines.append("[mcu]")
     
-    # Use stored serial if available, otherwise placeholder
+    # MCU serial - required for Klipper to function
     mcu_serial = hardware_state.get('mcu_serial')
     if mcu_serial:
         lines.append(f"serial: {mcu_serial}")
     else:
-        lines.append("serial: /dev/serial/by-id/REPLACE_WITH_YOUR_MCU_ID")
-        lines.append("# Run: ls /dev/serial/by-id/* to find your MCU")
+        # Use placeholder path - Klipper will error clearly if not set
+        lines.append("serial: /dev/serial/by-id/SET_YOUR_MCU_ID_HERE")
+        lines.append("# ^^^ Run: ls /dev/serial/by-id/* to find your MCU")
     lines.append("")
     
     # Toolboard MCU if present
@@ -270,22 +271,19 @@ def generate_hardware_cfg(
         lines.append(f"[mcu toolboard]")
         
         if tb_connection == 'CAN':
-            # Use stored canbus_uuid if available
             canbus_uuid = hardware_state.get('toolboard_canbus_uuid')
             if canbus_uuid:
                 lines.append(f"canbus_uuid: {canbus_uuid}")
             else:
-                lines.append("canbus_uuid: REPLACE_WITH_CANBUS_UUID")
-                lines.append("# Run: ~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0")
-                lines.append("# to find your toolboard's canbus_uuid")
+                lines.append("canbus_uuid: SET_YOUR_CANBUS_UUID_HERE")
+                lines.append("# ^^^ Run: ~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0")
         else:
-            # Use stored serial if available
             tb_serial = hardware_state.get('toolboard_serial')
             if tb_serial:
                 lines.append(f"serial: {tb_serial}")
             else:
-                lines.append("serial: /dev/serial/by-id/REPLACE_WITH_TOOLBOARD_ID")
-                lines.append("# Run: ls /dev/serial/by-id/* to find your toolboard")
+                lines.append("serial: /dev/serial/by-id/SET_YOUR_TOOLBOARD_ID_HERE")
+                lines.append("# ^^^ Run: ls /dev/serial/by-id/* to find your toolboard")
         
         lines.append(f"# {tb_name} ({tb_connection})")
         lines.append("")
@@ -334,8 +332,7 @@ def generate_hardware_cfg(
     elif x_endstop:
         endstop_pin = get_endstop_pin(board, x_endstop)
         lines.append(f"endstop_pin: ^{endstop_pin}  # {x_endstop}")
-    else:
-        lines.append(f"endstop_pin: ^REPLACE_PIN  # Configure X endstop port")
+    # If no endstop assigned, Klipper will error - user must configure in Hardware Setup
     
     # Homing position - use configured values or defaults based on home direction
     x_home = wizard_state.get('home_x', 'max')  # 'min' or 'max'
@@ -371,8 +368,7 @@ def generate_hardware_cfg(
     elif y_endstop:
         endstop_pin = get_endstop_pin(board, y_endstop)
         lines.append(f"endstop_pin: ^{endstop_pin}  # {y_endstop}")
-    else:
-        lines.append(f"endstop_pin: ^REPLACE_PIN  # Configure Y endstop port")
+    # If no endstop assigned, Klipper will error - user must configure in Hardware Setup
     
     # Homing position - use configured values or defaults based on home direction
     y_home = wizard_state.get('home_y', 'max')  # 'min' or 'max'
@@ -451,8 +447,13 @@ def generate_hardware_cfg(
             elif probe_type in ('bltouch', 'klicky', 'inductive'):
                 lines.append("endstop_pin: probe:z_virtual_endstop")
                 lines.append("homing_retract_dist: 5")
-            else:
-                lines.append("endstop_pin: REPLACE_PIN  # Physical Z endstop")
+            elif probe_type == 'endstop':
+                # Physical Z endstop - check for assignment
+                z_endstop = assignments.get('endstop_z', '')
+                if z_endstop:
+                    z_endstop_pin = get_endstop_pin(board, z_endstop)
+                    lines.append(f"endstop_pin: ^{z_endstop_pin}  # {z_endstop}")
+                # If no assignment, Klipper will error - user must configure
                 lines.append("position_endstop: 0  # Adjust after homing")
                 lines.append("homing_retract_dist: 5")
             lines.append("position_min: -5")
@@ -614,16 +615,17 @@ def generate_hardware_cfg(
         lines.append(f"heater_pin: {he_pin}  # {he_port}")
     
     # Handle special sensor types (MAX31865 for PT100/PT1000)
+    # MAX31865 requires SPI - user must configure CS pin manually
     if hotend_therm == 'PT1000_MAX31865':
         lines.append("sensor_type: MAX31865")
-        lines.append("sensor_pin: REPLACE_SPI_CS_PIN  # MAX31865 chip select")
+        lines.append("sensor_pin: SET_YOUR_MAX31865_CS_PIN  # MAX31865 chip select")
         lines.append("spi_bus: spi1  # Adjust for your board")
         lines.append("rtd_nominal_r: 1000")
         lines.append("rtd_reference_r: 4300")
         lines.append("rtd_num_of_wires: 2")
     elif hotend_therm == 'PT100_MAX31865':
         lines.append("sensor_type: MAX31865")
-        lines.append("sensor_pin: REPLACE_SPI_CS_PIN  # MAX31865 chip select")
+        lines.append("sensor_pin: SET_YOUR_MAX31865_CS_PIN  # MAX31865 chip select")
         lines.append("spi_bus: spi1  # Adjust for your board")
         lines.append("rtd_nominal_r: 100")
         lines.append("rtd_reference_r: 430")
@@ -894,17 +896,18 @@ def generate_hardware_cfg(
         else:
             pin_value = f"{ch_pin}  # {ch_port}"
 
-        if fan_chamber_type == 'temperature':
-            # Temperature-controlled chamber fan
+        ch_sensor_pin = wizard_state.get('fan_chamber_sensor_pin', '')
+
+        if fan_chamber_type == 'temperature' and ch_sensor_pin:
+            # Temperature-controlled chamber fan (only if sensor pin is configured)
             ch_sensor_type = wizard_state.get('fan_chamber_sensor_type', 'Generic 3950')
-            ch_sensor_pin = wizard_state.get('fan_chamber_sensor_pin', 'REPLACE_PIN')
             ch_target_temp = wizard_state.get('fan_chamber_target_temp', '45')
 
             lines.append("[temperature_fan chamber]")
             lines.append(f"pin: {pin_value}")
             add_fan_settings(lines, ch_settings, {'max_power': '1.0', 'shutdown_speed': '0', 'kick_start': '0.5'})
             lines.append(f"sensor_type: {ch_sensor_type}")
-            lines.append(f"sensor_pin: {ch_sensor_pin}  # Configure chamber thermistor pin")
+            lines.append(f"sensor_pin: {ch_sensor_pin}")
             lines.append("min_temp: 0")
             lines.append("max_temp: 80")
             lines.append(f"target_temp: {ch_target_temp}")
@@ -988,9 +991,8 @@ def generate_hardware_cfg(
             elif probe_canbus_uuid:
                 lines.append(f"canbus_uuid: {probe_canbus_uuid}")
             else:
-                lines.append("serial: /dev/serial/by-id/REPLACE_WITH_BEACON_ID")
-                lines.append("# Run: ls /dev/serial/by-id/*beacon* to find your device")
-                lines.append("# Or for CAN: canbus_uuid: YOUR_BEACON_UUID")
+                lines.append("serial: /dev/serial/by-id/SET_YOUR_BEACON_ID_HERE")
+                lines.append("# ^^^ Run: ls /dev/serial/by-id/*beacon* to find your device")
             lines.append("x_offset: 0")
             lines.append("y_offset: 20  # Adjust for your toolhead")
             lines.append("mesh_main_direction: x")
@@ -1020,9 +1022,8 @@ def generate_hardware_cfg(
             elif probe_canbus_uuid:
                 lines.append(f"canbus_uuid: {probe_canbus_uuid}")
             else:
-                lines.append("serial: /dev/serial/by-id/REPLACE_WITH_CARTOGRAPHER_ID")
-                lines.append("# Run: ls /dev/serial/by-id/*cartographer* to find your device")
-                lines.append("# Or for CAN: canbus_uuid: YOUR_CARTOGRAPHER_UUID")
+                lines.append("serial: /dev/serial/by-id/SET_YOUR_CARTOGRAPHER_ID_HERE")
+                lines.append("# ^^^ Run: ls /dev/serial/by-id/*cartographer* to find your device")
             lines.append("x_offset: 0")
             lines.append("y_offset: 20  # Adjust for your toolhead")
             
@@ -1048,9 +1049,8 @@ def generate_hardware_cfg(
             elif probe_canbus_uuid:
                 lines.append(f"canbus_uuid: {probe_canbus_uuid}")
             else:
-                lines.append("serial: /dev/serial/by-id/REPLACE_WITH_EDDY_ID")
-                lines.append("# Run: ls /dev/serial/by-id/*Eddy* to find your device")
-                lines.append("# Or for CAN: canbus_uuid: YOUR_EDDY_UUID")
+                lines.append("serial: /dev/serial/by-id/SET_YOUR_BTT_EDDY_ID_HERE")
+                lines.append("# ^^^ Run: ls /dev/serial/by-id/*Eddy* to find your device")
             lines.append("")
             lines.append("[temperature_sensor btt_eddy_mcu]")
             lines.append("sensor_type: temperature_mcu")
@@ -1096,22 +1096,32 @@ def generate_hardware_cfg(
                 lines.append("# TEMPERATURE_PROBE_CALIBRATE PROBE=btt_eddy TARGET=70")
                 
         elif probe_type == 'bltouch':
-            lines.append("[bltouch]")
-            lines.append("sensor_pin: ^REPLACE_PIN  # Probe signal pin")
-            lines.append("control_pin: REPLACE_PIN  # Servo control pin")
-            lines.append("x_offset: 0")
-            lines.append("y_offset: 20  # Adjust for your toolhead")
-            lines.append("z_offset: 0  # Run PROBE_CALIBRATE")
+            # BLTouch requires probe pin assignment
+            probe_pin = assignments.get('probe_pin', '')
+            if probe_pin:
+                probe_pin_resolved = get_endstop_pin(board, probe_pin)
+                lines.append("[bltouch]")
+                lines.append(f"sensor_pin: ^{probe_pin_resolved}  # {probe_pin}")
+                lines.append(f"control_pin: {probe_pin_resolved}  # BLTouch servo - may need different pin")
+                lines.append("x_offset: 0")
+                lines.append("y_offset: 20  # Adjust for your toolhead")
+                lines.append("z_offset: 0  # Run PROBE_CALIBRATE")
+            # If no probe_pin assigned, skip section - user must configure in Hardware Setup
         elif probe_type == 'klicky' or probe_type == 'inductive':
-            lines.append("[probe]")
-            lines.append("pin: ^REPLACE_PIN  # Probe signal pin")
-            lines.append("x_offset: 0")
-            lines.append("y_offset: 20  # Adjust for your toolhead")
-            lines.append("z_offset: 0  # Run PROBE_CALIBRATE")
-            lines.append("speed: 5")
-            lines.append("samples: 3")
-            lines.append("sample_retract_dist: 2")
-            lines.append("samples_result: median")
+            # Klicky/Inductive require probe pin assignment
+            probe_pin = assignments.get('probe_pin', '')
+            if probe_pin:
+                probe_pin_resolved = get_endstop_pin(board, probe_pin)
+                lines.append("[probe]")
+                lines.append(f"pin: ^{probe_pin_resolved}  # {probe_pin}")
+                lines.append("x_offset: 0")
+                lines.append("y_offset: 20  # Adjust for your toolhead")
+                lines.append("z_offset: 0  # Run PROBE_CALIBRATE")
+                lines.append("speed: 5")
+                lines.append("samples: 3")
+                lines.append("sample_retract_dist: 2")
+                lines.append("samples_result: median")
+            # If no probe_pin assigned, skip section - user must configure in Hardware Setup
         
         lines.append("")
         
@@ -1302,28 +1312,24 @@ def generate_hardware_cfg(
                 lines.append(f"pin: {pin}")
                 lines.append(f"chain_count: {lighting_count}")
                 lines.append(f"color_order: {lighting_color_order}")
-            elif toolboard_rgb:
-                # Fall back to toolboard RGB from template
-                rgb_pin = toolboard_rgb.get('pin', 'REPLACE_PIN')
+            elif toolboard_rgb and toolboard_rgb.get('pin'):
+                # Fall back to toolboard RGB from template (if pin exists)
+                rgb_pin = toolboard_rgb['pin']
                 rgb_count = toolboard_rgb.get('chain_count', 3)
                 rgb_order = toolboard_rgb.get('color_order', 'GRB')
                 lines.append("[neopixel status_led]")
                 lines.append(f"pin: toolboard:{rgb_pin}")
                 lines.append(f"chain_count: {rgb_count}")
                 lines.append(f"color_order: {rgb_order}")
-            else:
-                lines.append("[neopixel status_led]")
-                lines.append("pin: REPLACE_PIN  # NeoPixel data pin")
-                lines.append(f"chain_count: {lighting_count}")
-                lines.append(f"color_order: {lighting_color_order}")
-            lines.append("initial_RED: 0.2")
-            lines.append("initial_GREEN: 0.2")
-            lines.append("initial_BLUE: 0.2")
-            lines.append("")
+                lines.append("initial_RED: 0.2")
+                lines.append("initial_GREEN: 0.2")
+                lines.append("initial_BLUE: 0.2")
+                lines.append("")
+            # If no valid pin source, skip LED section - user must configure in Hardware Setup
 
         # Case lighting (mainboard RGB or simple LED)
         if has_caselight == 'yes':
-            # Priority: 1) User-selected caselight pin, 2) Mainboard RGB from template, 3) REPLACE_PIN
+            # Priority: 1) User-selected caselight pin, 2) Mainboard RGB from template
             if caselight_pin:
                 # User selected a caselight pin
                 pin_parts = caselight_pin.split(':')
@@ -1343,8 +1349,9 @@ def generate_hardware_cfg(
                     lines.append("pwm: True")
                     lines.append("value: 0.5")
                     lines.append("cycle_time: 0.01")
-            elif mainboard_rgb and caselight_type == 'neopixel':
-                rgb_pin = mainboard_rgb.get('pin', 'REPLACE_PIN')
+                lines.append("")
+            elif mainboard_rgb and mainboard_rgb.get('pin') and caselight_type == 'neopixel':
+                rgb_pin = mainboard_rgb['pin']
                 rgb_count = mainboard_rgb.get('chain_count', 10)
                 rgb_order = mainboard_rgb.get('color_order', 'GRB')
                 lines.append("[neopixel caselight]")
@@ -1354,24 +1361,12 @@ def generate_hardware_cfg(
                 lines.append("initial_RED: 1.0")
                 lines.append("initial_GREEN: 1.0")
                 lines.append("initial_BLUE: 1.0")
-            else:
-                lines.append("[output_pin caselight]")
-                lines.append("pin: REPLACE_PIN  # Case light pin")
-                lines.append("pwm: True")
-                lines.append("value: 0.5")
-                lines.append("cycle_time: 0.01")
-            lines.append("")
+                lines.append("")
+            # If no valid pin, skip caselight section - user must configure in Hardware Setup
 
-        # Dotstar (SPI LEDs)
-        if lighting_type == 'dotstar':
-            lines.append("[dotstar status_led]")
-            lines.append("data_pin: REPLACE_DATA_PIN")
-            lines.append("clock_pin: REPLACE_CLOCK_PIN")
-            lines.append(f"chain_count: {lighting_count}")
-            lines.append("initial_RED: 0.2")
-            lines.append("initial_GREEN: 0.2")
-            lines.append("initial_BLUE: 0.2")
-            lines.append("")
+        # Dotstar (SPI LEDs) - requires manual pin configuration
+        # Skip if lighting_type == 'dotstar' since pins aren't assignable in wizard yet
+        # User would need to add [dotstar] section manually with their data_pin and clock_pin
 
     # Filament sensor configuration
     has_filament_sensor = wizard_state.get('has_filament_sensor', '')
@@ -1383,25 +1378,20 @@ def generate_hardware_cfg(
     else:
         filament_sensor_pin = wizard_state.get('filament_sensor_pin', '')
 
-    if has_filament_sensor == 'yes':
+    # Only include filament sensor section if pin is configured
+    if has_filament_sensor == 'yes' and filament_sensor_pin:
         lines.append("# " + "─" * 77)
         lines.append("# FILAMENT SENSOR")
         lines.append("# " + "─" * 77)
 
         if filament_sensor_type == 'motion':
             lines.append("[filament_motion_sensor filament_sensor]")
-            if filament_sensor_pin:
-                lines.append(f"switch_pin: ^{filament_sensor_pin}  # {filament_port or 'direct pin'}")
-            else:
-                lines.append("switch_pin: ^REPLACE_PIN  # Assign in Hardware Setup")
+            lines.append(f"switch_pin: ^{filament_sensor_pin}  # {filament_port or 'direct pin'}")
             lines.append("detection_length: 7.0  # Adjust based on your sensor")
             lines.append("extruder: extruder")
         else:
             lines.append("[filament_switch_sensor filament_sensor]")
-            if filament_sensor_pin:
-                lines.append(f"switch_pin: ^{filament_sensor_pin}  # {filament_port or 'direct pin'}")
-            else:
-                lines.append("switch_pin: ^REPLACE_PIN  # Assign in Hardware Setup")
+            lines.append(f"switch_pin: ^{filament_sensor_pin}  # {filament_port or 'direct pin'}")
 
         lines.append("pause_on_runout: True")
         lines.append("runout_gcode:")
@@ -1409,6 +1399,7 @@ def generate_hardware_cfg(
         lines.append("insert_gcode:")
         lines.append("    M117 Filament inserted")
         lines.append("")
+    # If has_filament_sensor but no pin, skip section - user must assign in Hardware Setup
 
     # Chamber temperature sensor
     has_chamber_sensor = wizard_state.get('has_chamber_sensor', '')
@@ -1420,20 +1411,19 @@ def generate_hardware_cfg(
     else:
         chamber_sensor_pin = wizard_state.get('chamber_sensor_pin', '')
 
-    if has_chamber_sensor == 'yes':
+    # Only include chamber sensor section if pin is configured
+    if has_chamber_sensor == 'yes' and chamber_sensor_pin:
         lines.append("# " + "─" * 77)
         lines.append("# CHAMBER SENSOR")
         lines.append("# " + "─" * 77)
         lines.append("[temperature_sensor chamber]")
         lines.append(f"sensor_type: {chamber_sensor_type}")
-        if chamber_sensor_pin:
-            lines.append(f"sensor_pin: {chamber_sensor_pin}  # {chamber_port or 'direct pin'}")
-        else:
-            lines.append("sensor_pin: REPLACE_PIN  # Assign thermistor port in Hardware Setup")
+        lines.append(f"sensor_pin: {chamber_sensor_pin}  # {chamber_port or 'direct pin'}")
         lines.append("min_temp: 0")
         lines.append("max_temp: 80")
         lines.append("gcode_id: C")
         lines.append("")
+    # If has_chamber_sensor but no pin, skip section - user must assign in Hardware Setup
 
     return "\n".join(lines)
 

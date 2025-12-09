@@ -1739,10 +1739,17 @@ def assign_toolboard_endstop(toolboard: Dict):
 def assign_lighting_port():
     """Assign lighting pin with support for different LED types."""
     wizard_state = load_wizard_state()
+    has_leds = wizard_state.get('has_leds', '')
+    has_caselight = wizard_state.get('has_caselight', '')
     lighting_type = wizard_state.get('lighting_type', '')
+    caselight_type = wizard_state.get('caselight_type', '')
 
-    if not lighting_type or lighting_type == 'none':
-        print(f"{Colors.YELLOW}No lighting type selected. Select type in wizard first.{Colors.NC}")
+    # Determine what to configure
+    configure_status_leds = has_leds == 'yes'
+    configure_caselight = has_caselight == 'yes'
+
+    if not configure_status_leds and not configure_caselight:
+        print(f"{Colors.YELLOW}No lighting options selected. Enable Status LEDs or Case Lighting first.{Colors.NC}")
         wait_for_key()
         return
 
@@ -1760,15 +1767,60 @@ def assign_lighting_port():
         toolboards = load_available_toolboards()
         toolboard = toolboards.get(state.toolboard_id)
 
+    # If both are enabled, ask which to configure
+    purpose = 'status'  # Default to status LEDs
+    current_type = lighting_type or 'neopixel'
+    pin_key = 'lighting_pin'
+    
+    if configure_status_leds and configure_caselight:
+        clear_screen()
+        print_header("Lighting Pin Assignment")
+        print_info(f"{Colors.BWHITE}Which lighting would you like to configure?{Colors.NC}")
+        print_info("")
+        
+        # Show current assignments
+        current_status_pin = state.port_assignments.get('lighting_pin', '') or state.toolboard_assignments.get('lighting_pin', '')
+        current_caselight_pin = state.port_assignments.get('caselight_pin', '')
+        
+        status_info = f" - Currently: {Colors.GREEN}{current_status_pin}{Colors.NC}" if current_status_pin else ""
+        caselight_info = f" - Currently: {Colors.GREEN}{current_caselight_pin}{Colors.NC}" if current_caselight_pin else ""
+        
+        print_menu_item("1", "Status LEDs", f"({lighting_type or 'neopixel'}){status_info}", "")
+        print_menu_item("2", "Case Lighting", f"({caselight_type or 'simple'}){caselight_info}", "")
+        print_separator()
+        print_action("B", "Back")
+        print_footer()
+        
+        choice = prompt("Select lighting to configure").strip()
+        if choice.lower() == 'b':
+            return
+        elif choice == '2':
+            purpose = 'caselight'
+            current_type = caselight_type or 'simple'
+            pin_key = 'caselight_pin'
+        else:
+            purpose = 'status'
+            current_type = lighting_type or 'neopixel'
+            pin_key = 'lighting_pin'
+    elif configure_caselight:
+        purpose = 'caselight'
+        current_type = caselight_type or 'simple'
+        pin_key = 'caselight_pin'
+    else:
+        purpose = 'status'
+        current_type = lighting_type or 'neopixel'
+        pin_key = 'lighting_pin'
+
     clear_screen()
-    print_header(f"Lighting Pin Assignment - {lighting_type.upper()}")
+    purpose_name = "Status LEDs" if purpose == 'status' else "Case Lighting"
+    print_header(f"{purpose_name} Pin Assignment - {current_type.upper()}")
 
     # Build list of available ports based on lighting type
     port_options = []
     num = 1
 
     # For addressable LEDs (neopixel/dotstar) - prefer dedicated ports
-    if lighting_type in ('neopixel', 'dotstar'):
+    if current_type in ('neopixel', 'dotstar'):
         print_info(f"{Colors.BWHITE}Addressable LED Options:{Colors.NC}")
         print_info(f"{Colors.WHITE}(Neopixel/Dotstar need a data pin, some boards have dedicated ports){Colors.NC}")
         print_info("")
@@ -1779,7 +1831,7 @@ def assign_lighting_port():
             port = misc_ports['NEOPIXEL']
             pin = port.get('pin', '?')
             label = port.get('label', 'NeoPixel')
-            current = state.port_assignments.get('lighting_pin', '')
+            current = state.port_assignments.get(pin_key, '')
             status = "done" if current == f"NEOPIXEL:{pin}" else ""
             print_menu_item(str(num), f"NEOPIXEL", f"{label} - pin: {pin}", status)
             port_options.append(('mainboard', 'NEOPIXEL', pin, 'misc', None, None))
@@ -1792,13 +1844,13 @@ def assign_lighting_port():
         for port_name, port in fan_ports.items():
             pin = port.get('pin', '?')
             label = port.get('label', port_name)
-            status = "done" if state.port_assignments.get('lighting_pin', '') == f"{port_name}:{pin}" else ""
+            status = "done" if state.port_assignments.get(pin_key, '') == f"{port_name}:{pin}" else ""
             print_menu_item(str(num), port_name, f"{label} - pin: {pin}", status)
             port_options.append(('mainboard', port_name, pin, 'fan', None, None))
             num += 1
 
-    # For PWM LED - fan ports and heater ports
-    elif lighting_type == 'pwm':
+    # For simple/PWM LED - fan ports and heater ports
+    elif current_type in ('pwm', 'simple'):
         print_info(f"{Colors.BWHITE}PWM LED Options:{Colors.NC}")
         print_info(f"{Colors.WHITE}(Simple on/off or dimmable LED via PWM signal){Colors.NC}")
         print_info("")
@@ -1809,7 +1861,7 @@ def assign_lighting_port():
         for port_name, port in fan_ports.items():
             pin = port.get('pin', '?')
             label = port.get('label', port_name)
-            status = "done" if state.port_assignments.get('lighting_pin', '') == f"{port_name}:{pin}" else ""
+            status = "done" if state.port_assignments.get(pin_key, '') == f"{port_name}:{pin}" else ""
             print_menu_item(str(num), port_name, f"{label} - pin: {pin}", status)
             port_options.append(('mainboard', port_name, pin, 'fan', None, None))
             num += 1
@@ -1824,13 +1876,13 @@ def assign_lighting_port():
                 continue
             pin = port.get('pin', '?')
             label = port.get('label', port_name)
-            status = "done" if state.port_assignments.get('lighting_pin', '') == f"{port_name}:{pin}" else ""
+            status = "done" if state.port_assignments.get(pin_key, '') == f"{port_name}:{pin}" else ""
             print_menu_item(str(num), port_name, f"{label} - pin: {pin} (HIGH POWER)", status)
             port_options.append(('mainboard', port_name, pin, 'heater', None, None))
             num += 1
 
     # PCA9533 - I2C device
-    elif lighting_type == 'pca9533':
+    elif current_type == 'pca9533':
         print_info(f"{Colors.BWHITE}PCA9533 I2C LED Driver:{Colors.NC}")
         print_info(f"{Colors.WHITE}(I2C device - uses I2C bus, address configurable){Colors.NC}")
         print_info("")
@@ -1839,14 +1891,14 @@ def assign_lighting_port():
         print_info("")
 
         # For PCA9533, we just need to store that it's configured
-        current = state.port_assignments.get('lighting_pin', '')
+        current = state.port_assignments.get(pin_key, '')
         status = "done" if current == "i2c:pca9533" else ""
         print_menu_item(str(num), "I2C", "PCA9533 on I2C bus", status)
         port_options.append(('mainboard', 'I2C', 'pca9533', 'i2c', None, None))
         num += 1
 
-    # Toolboard options (if available and applicable)
-    if has_toolboard and toolboard and lighting_type in ('neopixel', 'dotstar', 'pwm'):
+    # Toolboard options (if available and applicable) - only for status LEDs, not caselight
+    if has_toolboard and toolboard and current_type in ('neopixel', 'dotstar', 'pwm') and purpose == 'status':
         print_info("")
         print_info(f"{Colors.BWHITE}Toolboard Options ({state.toolboard_name}):{Colors.NC}")
 
@@ -1854,7 +1906,7 @@ def assign_lighting_port():
         tb_misc = toolboard.get('misc_ports', {})
 
         # Addressable LED ports (NEOPIXEL or RGB)
-        if lighting_type in ('neopixel', 'dotstar'):
+        if current_type in ('neopixel', 'dotstar'):
             for port_key in ('NEOPIXEL', 'RGB'):
                 if port_key in tb_misc:
                     port = tb_misc[port_key]
@@ -1871,18 +1923,18 @@ def assign_lighting_port():
                             info += f", {color_order}"
                         info += ")"
 
-                    status = "done" if state.toolboard_assignments.get('lighting_pin', '') == f"{port_key}:{pin}" else ""
+                    status = "done" if state.toolboard_assignments.get(pin_key, '') == f"{port_key}:{pin}" else ""
                     print_menu_item(str(num), f"TB:{port_key}", info, status)
                     # Store chain_count and color_order in port_options for later use
                     port_options.append(('toolboard', port_key, pin, 'misc', chain_count, color_order))
                     num += 1
 
         # Simple LED port (HOTEND_LED) - for PWM lighting
-        if lighting_type == 'pwm' and 'HOTEND_LED' in tb_misc:
+        if current_type == 'pwm' and 'HOTEND_LED' in tb_misc:
             port = tb_misc['HOTEND_LED']
             pin = port.get('pin', '?')
             label = port.get('label', 'Hotend LED')
-            status = "done" if state.toolboard_assignments.get('lighting_pin', '') == f"HOTEND_LED:{pin}" else ""
+            status = "done" if state.toolboard_assignments.get(pin_key, '') == f"HOTEND_LED:{pin}" else ""
             print_menu_item(str(num), f"TB:HOTEND_LED", f"Toolboard {label} - pin: {pin}", status)
             port_options.append(('toolboard', 'HOTEND_LED', pin, 'misc', None, None))
             num += 1
@@ -1892,7 +1944,7 @@ def assign_lighting_port():
         for port_name, port in tb_fan_ports.items():
             pin = port.get('pin', '?')
             label = port.get('label', port_name)
-            status = "done" if state.toolboard_assignments.get('lighting_pin', '') == f"{port_name}:{pin}" else ""
+            status = "done" if state.toolboard_assignments.get(pin_key, '') == f"{port_name}:{pin}" else ""
             print_menu_item(str(num), f"TB:{port_name}", f"Toolboard {label} - pin: {pin}", status)
             port_options.append(('toolboard', port_name, pin, 'fan', None, None))
             num += 1
@@ -1903,27 +1955,28 @@ def assign_lighting_port():
 
     # Clear option
     print_info("")
-    print_action("X", "Clear lighting pin assignment")
+    print_action("X", f"Clear {purpose_name.lower()} pin assignment")
 
     print_separator()
     print_action("B", "Back")
     print_footer()
 
-    choice = prompt("Select port for lighting").strip()
+    choice = prompt(f"Select port for {purpose_name.lower()}").strip()
 
     if choice.lower() == 'b':
         return
     elif choice.lower() == 'x':
-        # Clear assignments
-        if 'lighting_pin' in state.port_assignments:
-            del state.port_assignments['lighting_pin']
-        if 'lighting_clock_pin' in state.port_assignments:
-            del state.port_assignments['lighting_clock_pin']
-        if 'lighting_pin' in state.toolboard_assignments:
-            del state.toolboard_assignments['lighting_pin']
-        if 'lighting_clock_pin' in state.toolboard_assignments:
-            del state.toolboard_assignments['lighting_clock_pin']
-        print(f"\n{Colors.GREEN}Lighting pin assignment cleared{Colors.NC}")
+        # Clear assignments for this specific purpose
+        if pin_key in state.port_assignments:
+            del state.port_assignments[pin_key]
+        clock_key = pin_key.replace('_pin', '_clock_pin')
+        if clock_key in state.port_assignments:
+            del state.port_assignments[clock_key]
+        if pin_key in state.toolboard_assignments:
+            del state.toolboard_assignments[pin_key]
+        if clock_key in state.toolboard_assignments:
+            del state.toolboard_assignments[clock_key]
+        print(f"\n{Colors.GREEN}{purpose_name} pin assignment cleared{Colors.NC}")
         state.save()
         wait_for_key()
         return
@@ -1932,30 +1985,32 @@ def assign_lighting_port():
         print_info("")
         pin = prompt("Enter data pin (e.g., PA8, PB0)").strip().upper()
         if pin:
-            # Ask mainboard or toolboard
-            if has_toolboard:
+            # Ask mainboard or toolboard (only for status LEDs)
+            if has_toolboard and purpose == 'status':
                 loc = prompt("Mainboard or Toolboard? [m/t]").strip().lower()
                 if loc == 't':
-                    state.toolboard_assignments['lighting_pin'] = f"manual:{pin}"
-                    if 'lighting_pin' in state.port_assignments:
-                        del state.port_assignments['lighting_pin']
+                    state.toolboard_assignments[pin_key] = f"manual:{pin}"
+                    if pin_key in state.port_assignments:
+                        del state.port_assignments[pin_key]
                 else:
-                    state.port_assignments['lighting_pin'] = f"manual:{pin}"
-                    if 'lighting_pin' in state.toolboard_assignments:
-                        del state.toolboard_assignments['lighting_pin']
+                    state.port_assignments[pin_key] = f"manual:{pin}"
+                    if pin_key in state.toolboard_assignments:
+                        del state.toolboard_assignments[pin_key]
             else:
-                state.port_assignments['lighting_pin'] = f"manual:{pin}"
+                # Caselight is always on mainboard
+                state.port_assignments[pin_key] = f"manual:{pin}"
 
             # For Dotstar, also need clock pin
-            if lighting_type == 'dotstar':
+            if current_type == 'dotstar':
                 clock = prompt("Enter clock pin for Dotstar (e.g., PA9)").strip().upper()
                 if clock:
-                    if has_toolboard and loc == 't':
-                        state.toolboard_assignments['lighting_clock_pin'] = f"manual:{clock}"
+                    clock_key = pin_key.replace('_pin', '_clock_pin')
+                    if has_toolboard and purpose == 'status' and loc == 't':
+                        state.toolboard_assignments[clock_key] = f"manual:{clock}"
                     else:
-                        state.port_assignments['lighting_clock_pin'] = f"manual:{clock}"
+                        state.port_assignments[clock_key] = f"manual:{clock}"
 
-            print(f"\n{Colors.GREEN}Lighting pin assigned: {pin}{Colors.NC}")
+            print(f"\n{Colors.GREEN}{purpose_name} pin assigned: {pin}{Colors.NC}")
             state.save()
         wait_for_key()
         return
@@ -1966,40 +2021,41 @@ def assign_lighting_port():
             location, port_name, pin, port_type, chain_count, color_order = port_options[idx]
 
             if location == 'toolboard':
-                state.toolboard_assignments['lighting_pin'] = f"{port_name}:{pin}"
+                state.toolboard_assignments[pin_key] = f"{port_name}:{pin}"
                 # Store chain_count and color_order if available from template
                 if chain_count:
-                    state.toolboard_assignments['lighting_chain_count'] = str(chain_count)
+                    state.toolboard_assignments[f'{pin_key}_chain_count'] = str(chain_count)
                 if color_order:
-                    state.toolboard_assignments['lighting_color_order'] = color_order
+                    state.toolboard_assignments[f'{pin_key}_color_order'] = color_order
                 # Clear mainboard assignment
-                if 'lighting_pin' in state.port_assignments:
-                    del state.port_assignments['lighting_pin']
-                if 'lighting_chain_count' in state.port_assignments:
-                    del state.port_assignments['lighting_chain_count']
-                if 'lighting_color_order' in state.port_assignments:
-                    del state.port_assignments['lighting_color_order']
-                print(f"\n{Colors.GREEN}Lighting assigned to toolboard:{port_name} (pin: {pin}){Colors.NC}")
+                if pin_key in state.port_assignments:
+                    del state.port_assignments[pin_key]
+                if f'{pin_key}_chain_count' in state.port_assignments:
+                    del state.port_assignments[f'{pin_key}_chain_count']
+                if f'{pin_key}_color_order' in state.port_assignments:
+                    del state.port_assignments[f'{pin_key}_color_order']
+                print(f"\n{Colors.GREEN}{purpose_name} assigned to toolboard:{port_name} (pin: {pin}){Colors.NC}")
                 if chain_count:
                     print(f"{Colors.GREEN}  Chain count: {chain_count}, Color order: {color_order or 'GRB'}{Colors.NC}")
             else:
-                state.port_assignments['lighting_pin'] = f"{port_name}:{pin}"
-                # Clear toolboard assignment
-                if 'lighting_pin' in state.toolboard_assignments:
-                    del state.toolboard_assignments['lighting_pin']
-                if 'lighting_chain_count' in state.toolboard_assignments:
-                    del state.toolboard_assignments['lighting_chain_count']
-                if 'lighting_color_order' in state.toolboard_assignments:
-                    del state.toolboard_assignments['lighting_color_order']
-                print(f"\n{Colors.GREEN}Lighting assigned to {port_name} (pin: {pin}){Colors.NC}")
+                state.port_assignments[pin_key] = f"{port_name}:{pin}"
+                # Clear toolboard assignment (only relevant for status LEDs)
+                if pin_key in state.toolboard_assignments:
+                    del state.toolboard_assignments[pin_key]
+                if f'{pin_key}_chain_count' in state.toolboard_assignments:
+                    del state.toolboard_assignments[f'{pin_key}_chain_count']
+                if f'{pin_key}_color_order' in state.toolboard_assignments:
+                    del state.toolboard_assignments[f'{pin_key}_color_order']
+                print(f"\n{Colors.GREEN}{purpose_name} assigned to {port_name} (pin: {pin}){Colors.NC}")
 
             # For Dotstar on mainboard, need clock pin
-            if lighting_type == 'dotstar' and location == 'mainboard':
+            if current_type == 'dotstar' and location == 'mainboard':
                 print_info("")
                 print_info(f"{Colors.YELLOW}Dotstar also needs a clock pin.{Colors.NC}")
                 clock = prompt("Enter clock pin (e.g., PA9) or press Enter to skip").strip().upper()
                 if clock:
-                    state.port_assignments['lighting_clock_pin'] = f"manual:{clock}"
+                    clock_key = pin_key.replace('_pin', '_clock_pin')
+                    state.port_assignments[clock_key] = f"manual:{clock}"
                     print(f"{Colors.GREEN}Clock pin: {clock}{Colors.NC}")
 
             state.save()

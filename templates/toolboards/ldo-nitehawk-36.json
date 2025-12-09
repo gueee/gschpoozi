@@ -3,7 +3,7 @@
   "name": "LDO Nitehawk-36",
   "manufacturer": "LDO Motors",
   "mcu": "rp2040",
-  "mcu_name": "nhk",
+  "mcu_name": "toolboard",
   "connection": "USB",
   "source": "https://github.com/MotorDynamicsLab/Nitehawk-36",
   "description": "RP2040 USB toolhead board with TMC2209, ADXL345, tachometer fan, RGBW LEDs",

@@ -1155,20 +1155,25 @@ def generate_hardware_cfg(
 
     # Lighting configuration
     lighting_type = wizard_state.get('lighting_type', '')
-    lighting_pin = wizard_state.get('lighting_pin', '')
+    caselight_type = wizard_state.get('caselight_type', '')
     lighting_count = wizard_state.get('lighting_count') or '1'
     lighting_color_order = wizard_state.get('lighting_color_order') or 'GRB'
     has_leds = wizard_state.get('has_leds', '')
     has_caselight = wizard_state.get('has_caselight', '')
+    
+    # Get lighting pins from hardware state (user-selected pins)
+    lighting_pin = assignments.get('lighting_pin', '')
+    tb_lighting_pin = tb_assignments.get('lighting_pin', '')
+    caselight_pin = assignments.get('caselight_pin', '')
 
-    # Check for toolboard RGB LEDs
+    # Check for toolboard RGB LEDs (fallback if no user selection)
     toolboard_rgb = None
     if toolboard:
         misc_ports = toolboard.get('misc_ports', {})
         if 'RGB' in misc_ports:
             toolboard_rgb = misc_ports['RGB']
 
-    # Check for mainboard RGB port
+    # Check for mainboard RGB port (fallback if no user selection)
     mainboard_rgb = None
     if board:
         board_misc = board.get('misc_ports', {})
@@ -1182,21 +1187,42 @@ def generate_hardware_cfg(
 
         # Status LEDs (toolhead neopixels)
         if has_leds == 'yes' or lighting_type == 'neopixel':
-            # Use toolboard RGB if available
-            if toolboard_rgb:
-                tb_mcu = toolboard.get('mcu_name', 'toolhead')
+            # Priority: 1) User-selected toolboard pin, 2) User-selected mainboard pin, 
+            #           3) Toolboard RGB from template, 4) REPLACE_PIN
+            if tb_lighting_pin:
+                # User selected a toolboard pin
+                # Extract just the pin from format like "RGB:gpio7" or "manual:PD15"
+                pin_parts = tb_lighting_pin.split(':')
+                pin = pin_parts[1] if len(pin_parts) > 1 else tb_lighting_pin
+                lines.append("[neopixel status_led]")
+                lines.append(f"pin: toolboard:{pin}")
+                # Use toolboard RGB settings if available for chain_count/color_order
+                if toolboard_rgb:
+                    rgb_count = toolboard_rgb.get('chain_count', 3)
+                    rgb_order = toolboard_rgb.get('color_order', 'GRB')
+                    lines.append(f"chain_count: {rgb_count}")
+                    lines.append(f"color_order: {rgb_order}")
+                else:
+                    lines.append(f"chain_count: {lighting_count}")
+                    lines.append(f"color_order: {lighting_color_order}")
+            elif lighting_pin:
+                # User selected a mainboard pin
+                # Extract just the pin from format like "FAN0:PA8" or "manual:PD15"
+                pin_parts = lighting_pin.split(':')
+                pin = pin_parts[1] if len(pin_parts) > 1 else lighting_pin
+                lines.append("[neopixel status_led]")
+                lines.append(f"pin: {pin}")
+                lines.append(f"chain_count: {lighting_count}")
+                lines.append(f"color_order: {lighting_color_order}")
+            elif toolboard_rgb:
+                # Fall back to toolboard RGB from template
                 rgb_pin = toolboard_rgb.get('pin', 'REPLACE_PIN')
                 rgb_count = toolboard_rgb.get('chain_count', 3)
                 rgb_order = toolboard_rgb.get('color_order', 'GRB')
                 lines.append("[neopixel status_led]")
-                lines.append(f"pin: {tb_mcu}:{rgb_pin}")
+                lines.append(f"pin: toolboard:{rgb_pin}")
                 lines.append(f"chain_count: {rgb_count}")
                 lines.append(f"color_order: {rgb_order}")
-            elif lighting_pin:
-                lines.append("[neopixel status_led]")
-                lines.append(f"pin: {lighting_pin}")
-                lines.append(f"chain_count: {lighting_count}")
-                lines.append(f"color_order: {lighting_color_order}")
             else:
                 lines.append("[neopixel status_led]")
                 lines.append("pin: REPLACE_PIN  # NeoPixel data pin")
@@ -1209,7 +1235,27 @@ def generate_hardware_cfg(
 
         # Case lighting (mainboard RGB or simple LED)
         if has_caselight == 'yes':
-            if mainboard_rgb:
+            # Priority: 1) User-selected caselight pin, 2) Mainboard RGB from template, 3) REPLACE_PIN
+            if caselight_pin:
+                # User selected a caselight pin
+                pin_parts = caselight_pin.split(':')
+                pin = pin_parts[1] if len(pin_parts) > 1 else caselight_pin
+                if caselight_type == 'neopixel':
+                    lines.append("[neopixel caselight]")
+                    lines.append(f"pin: {pin}")
+                    lines.append("chain_count: 10  # Adjust for your LED strip")
+                    lines.append("color_order: GRB")
+                    lines.append("initial_RED: 1.0")
+                    lines.append("initial_GREEN: 1.0")
+                    lines.append("initial_BLUE: 1.0")
+                else:
+                    # Simple PWM LED
+                    lines.append("[output_pin caselight]")
+                    lines.append(f"pin: {pin}  # Case light pin")
+                    lines.append("pwm: True")
+                    lines.append("value: 0.5")
+                    lines.append("cycle_time: 0.01")
+            elif mainboard_rgb and caselight_type == 'neopixel':
                 rgb_pin = mainboard_rgb.get('pin', 'REPLACE_PIN')
                 rgb_count = mainboard_rgb.get('chain_count', 10)
                 rgb_order = mainboard_rgb.get('color_order', 'GRB')

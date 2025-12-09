@@ -918,7 +918,7 @@ run_motor_discovery() {
     print_header "Motor Discovery - Pre-flight Check"
     
     # Check if board is selected
-    if [[ -z "${WIZARD_STATE[mainboard]}" ]]; then
+    if [[ -z "${WIZARD_STATE[board]}" ]]; then
         print_box_line "${RED}Error: No main board selected!${NC}"
         print_box_line "Please select a board first in the wizard."
         print_footer
@@ -927,7 +927,7 @@ run_motor_discovery() {
     fi
     
     # Check if MCU serial is available
-    local mcu_serial="${HARDWARE_STATE[mcu_serial]:-}"
+    local mcu_serial="${WIZARD_STATE[mcu_serial]:-}"
     if [[ -z "$mcu_serial" ]]; then
         print_box_line "${RED}Error: MCU serial not detected!${NC}"
         print_box_line "Please ensure:"
@@ -973,7 +973,7 @@ run_motor_discovery() {
     
     # Build arguments for motor-discovery.py
     local args=(
-        "--board" "${WIZARD_STATE[mainboard]}"
+        "--board" "${WIZARD_STATE[board]}"
         "--mcu-serial" "${mcu_serial}"
     )
     

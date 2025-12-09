@@ -5440,10 +5440,16 @@ menu_fan_port_assign() {
 menu_fan_hotend() {
     while true; do
         clear_screen
-        print_header "Hotend Fan [heater_fan]"
 
-        print_box_line "${BWHITE}Hotend cooling fan that runs when extruder is hot${NC}"
-        print_box_line "Automatically turns on above heater_temp threshold."
+        # Determine fan type for header (default to heater for hotend cooling)
+        local fan_type="${WIZARD_STATE[fan_hotend_type]:-heater}"
+        local header_type="heater_fan"
+        [[ "$fan_type" == "manual" ]] && header_type="fan_generic"
+        [[ "$fan_type" == "temperature" ]] && header_type="temperature_fan"
+        print_header "Hotend Fan [$header_type]"
+
+        print_box_line "${BWHITE}Hotend cooling fan (heat sink / cold end)${NC}"
+        print_box_line "Typically runs when extruder is hot to cool the heat break."
         print_empty_line
 
         # Determine current port assignment (toolboard or mainboard)
@@ -5464,6 +5470,11 @@ menu_fan_hotend() {
         local secondary_status=$([[ -n "$secondary_port" ]] && echo "done" || echo "")
         local secondary_info="${secondary_port:-not set}"
         print_menu_item "2" "$secondary_status" "Multi-pin (2nd fan)" "$secondary_info"
+
+        # Control mode
+        local control_status="done"
+        local control_info="$fan_type"
+        print_menu_item "3" "$control_status" "Control Mode" "$control_info"
 
         print_separator
         print_action_item "C" "Clear (disable fan)"
@@ -5494,11 +5505,21 @@ menu_fan_hotend() {
                     sleep 1
                 fi
                 ;;
+            3)
+                menu_fan_control_mode "hotend" "Hotend Fan"
+                save_state
+                ;;
             [cC])
                 save_state
                 python3 "${SCRIPT_DIR}/setup-hardware.py" --clear-port "fan_hotend"
-                python3 "${SCRIPT_DIR}/setup-hardware.py" --clear-port "fan_hotend_2"
+                python3 "${SCRIPT_DIR}/setup-hardware.py" --clear-port "fan_hotend_pin2"
+                WIZARD_STATE[fan_hotend_type]=""
+                WIZARD_STATE[fan_hotend_heater]=""
+                WIZARD_STATE[fan_hotend_heater_temp]=""
+                WIZARD_STATE[fan_hotend_sensor_type]=""
+                WIZARD_STATE[fan_hotend_target_temp]=""
                 load_hardware_state
+                save_state
                 echo -e "${GREEN}✓${NC} Hotend fan cleared"
                 sleep 1
                 ;;
@@ -5510,10 +5531,16 @@ menu_fan_hotend() {
 menu_fan_controller() {
     while true; do
         clear_screen
-        print_header "Controller Fan [controller_fan]"
+
+        # Determine fan type for header (default to controller for electronics cooling)
+        local fan_type="${WIZARD_STATE[fan_controller_type]:-controller}"
+        local header_type="controller_fan"
+        [[ "$fan_type" == "manual" ]] && header_type="fan_generic"
+        [[ "$fan_type" == "heater" ]] && header_type="heater_fan"
+        print_header "Controller Fan [$header_type]"
 
         print_box_line "${BWHITE}Electronics cooling fan${NC}"
-        print_box_line "Runs when steppers or heaters are active."
+        print_box_line "Cools MCU/drivers. Typically runs when steppers active."
         print_empty_line
 
         # Determine current port assignment
@@ -5528,6 +5555,11 @@ menu_fan_controller() {
         local secondary_status=$([[ -n "$secondary_port" ]] && echo "done" || echo "")
         local secondary_info="${secondary_port:-not set}"
         print_menu_item "2" "$secondary_status" "Multi-pin (2nd fan)" "$secondary_info"
+
+        # Control mode
+        local control_status="done"
+        local control_info="$fan_type"
+        print_menu_item "3" "$control_status" "Control Mode" "$control_info"
 
         print_separator
         print_action_item "C" "Clear (disable fan)"
@@ -5558,11 +5590,18 @@ menu_fan_controller() {
                     sleep 1
                 fi
                 ;;
+            3)
+                menu_fan_controller_mode
+                ;;
             [cC])
                 save_state
                 python3 "${SCRIPT_DIR}/setup-hardware.py" --clear-port "fan_controller"
-                python3 "${SCRIPT_DIR}/setup-hardware.py" --clear-port "fan_controller_2"
+                python3 "${SCRIPT_DIR}/setup-hardware.py" --clear-port "fan_controller_pin2"
+                WIZARD_STATE[fan_controller_type]=""
+                WIZARD_STATE[fan_controller_heater]=""
+                WIZARD_STATE[fan_controller_heater_temp]=""
                 load_hardware_state
+                save_state
                 echo -e "${GREEN}✓${NC} Controller fan cleared"
                 sleep 1
                 ;;
@@ -5803,6 +5842,44 @@ menu_fan_temp_settings() {
     sleep 1
 }
 
+# Controller fan specific control mode (has unique 'controller' option)
+menu_fan_controller_mode() {
+    clear_screen
+    print_header "Controller Fan Control Mode"
+
+    print_box_line "${BWHITE}Select control mode:${NC}"
+    print_empty_line
+    print_menu_item "1" "" "Controller [controller_fan]" "ON when steppers/heaters active"
+    print_menu_item "2" "" "Manual [fan_generic]" "SET_FAN_SPEED control"
+    print_menu_item "3" "" "Heater-triggered [heater_fan]" "ON when heater reaches temp"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select mode${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1)
+            WIZARD_STATE[fan_controller_type]="controller"
+            WIZARD_STATE[fan_controller_heater]=""
+            WIZARD_STATE[fan_controller_heater_temp]=""
+            ;;
+        2)
+            WIZARD_STATE[fan_controller_type]="manual"
+            WIZARD_STATE[fan_controller_heater]=""
+            WIZARD_STATE[fan_controller_heater_temp]=""
+            ;;
+        3)
+            WIZARD_STATE[fan_controller_type]="heater"
+            menu_fan_heater_settings "controller" "Controller Fan"
+            ;;
+        [bB]) return ;;
+    esac
+
+    save_state
+}
+
 menu_fan_chamber() {
     while true; do
         clear_screen
@@ -5902,10 +5979,16 @@ menu_fan_chamber() {
 menu_fan_rscs() {
     while true; do
         clear_screen
-        print_header "RSCS/Filter Fan [fan_generic]"
+
+        # Determine fan type for header
+        local fan_type="${WIZARD_STATE[fan_rscs_type]:-manual}"
+        local header_type="fan_generic"
+        [[ "$fan_type" == "heater" ]] && header_type="heater_fan"
+        [[ "$fan_type" == "temperature" ]] && header_type="temperature_fan"
+        print_header "RSCS/Filter Fan [$header_type]"
 
         print_box_line "${BWHITE}Recirculating active carbon/HEPA filter fan${NC}"
-        print_box_line "Controlled via SET_FAN_SPEED FAN=rscs_fan SPEED=x"
+        print_box_line "Air filtration for VOCs and particles."
         print_empty_line
 
         # Determine current port assignment
@@ -5920,6 +6003,11 @@ menu_fan_rscs() {
         local secondary_status=$([[ -n "$secondary_port" ]] && echo "done" || echo "")
         local secondary_info="${secondary_port:-not set}"
         print_menu_item "2" "$secondary_status" "Multi-pin (2nd fan)" "$secondary_info"
+
+        # Control mode
+        local control_status="done"
+        local control_info="$fan_type"
+        print_menu_item "3" "$control_status" "Control Mode" "$control_info"
 
         print_separator
         print_action_item "C" "Clear (disable fan)"
@@ -5950,11 +6038,21 @@ menu_fan_rscs() {
                     sleep 1
                 fi
                 ;;
+            3)
+                menu_fan_control_mode "rscs" "RSCS/Filter Fan"
+                save_state
+                ;;
             [cC])
                 save_state
                 python3 "${SCRIPT_DIR}/setup-hardware.py" --clear-port "fan_rscs"
-                python3 "${SCRIPT_DIR}/setup-hardware.py" --clear-port "fan_rscs_2"
+                python3 "${SCRIPT_DIR}/setup-hardware.py" --clear-port "fan_rscs_pin2"
+                WIZARD_STATE[fan_rscs_type]=""
+                WIZARD_STATE[fan_rscs_heater]=""
+                WIZARD_STATE[fan_rscs_heater_temp]=""
+                WIZARD_STATE[fan_rscs_sensor_type]=""
+                WIZARD_STATE[fan_rscs_target_temp]=""
                 load_hardware_state
+                save_state
                 echo -e "${GREEN}✓${NC} RSCS/Filter fan cleared"
                 sleep 1
                 ;;

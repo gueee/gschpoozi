@@ -711,8 +711,10 @@ def generate_hardware_cfg(
     fan_pc_multipin = wizard_state.get('fan_part_cooling_multipin', '')
     fan_hotend = wizard_state.get('fan_hotend', '')
     fan_hotend_multipin = wizard_state.get('fan_hotend_multipin', '')
+    fan_hotend_type = wizard_state.get('fan_hotend_type', 'heater')  # manual, heater, temperature (default heater)
     fan_controller = wizard_state.get('fan_controller', '')
     fan_controller_multipin = wizard_state.get('fan_controller_multipin', '')
+    fan_controller_type = wizard_state.get('fan_controller_type', 'controller')  # controller, manual, heater
     fan_exhaust = wizard_state.get('fan_exhaust', '')
     fan_exhaust_multipin = wizard_state.get('fan_exhaust_multipin', '')
     fan_exhaust_type = wizard_state.get('fan_exhaust_type', 'manual')  # manual, heater, temperature
@@ -721,6 +723,7 @@ def generate_hardware_cfg(
     fan_chamber_multipin = wizard_state.get('fan_chamber_multipin', '')
     fan_rscs = wizard_state.get('fan_rscs', '')
     fan_rscs_multipin = wizard_state.get('fan_rscs_multipin', '')
+    fan_rscs_type = wizard_state.get('fan_rscs_type', 'manual')  # manual, heater, temperature
     fan_radiator = wizard_state.get('fan_radiator', '')
     fan_radiator_multipin = wizard_state.get('fan_radiator_multipin', '')
     fan_radiator_type = wizard_state.get('fan_radiator_type', 'heater')  # manual, heater, temperature (default heater for water cooling)
@@ -820,28 +823,51 @@ def generate_hardware_cfg(
     add_fan_settings(lines, pc_settings)
     lines.append("")
     
-    # Hotend fan (only if not water cooled / actually used)
+    # Hotend fan (control type: heater/manual/temperature)
     if fan_hotend != 'none':
+        hf_port = None
+        hf_pin = None
         if hf_on_toolboard:
             hf_port = tb_assignments.get('fan_hotend', 'FAN1')
-            hf_pin = get_fan_pin(toolboard, hf_port)
-            lines.append("[heater_fan hotend_fan]")
-            lines.append(f"pin: toolboard:{hf_pin}  # {hf_port}")
+            hf_pin = f"toolboard:{get_fan_pin(toolboard, hf_port)}"
         elif assignments.get('fan_hotend'):
             hf_port = assignments.get('fan_hotend', 'FAN1')
             hf_pin = get_fan_pin(board, hf_port)
-            lines.append("[heater_fan hotend_fan]")
-            lines.append(f"pin: {hf_pin}  # {hf_port}")
-        else:
-            hf_port = None
 
-        if hf_port:
-            add_fan_settings(lines, hf_settings, {'max_power': '1.0', 'kick_start': '0.5'})
-            lines.append("heater: extruder")
-            lines.append("heater_temp: 50.0")
+        if hf_port and hf_pin:
+            if fan_hotend_type == 'heater':
+                hf_heater = wizard_state.get('fan_hotend_heater', 'extruder')
+                hf_heater_temp = wizard_state.get('fan_hotend_heater_temp', '50')
+                lines.append("[heater_fan hotend_fan]")
+                lines.append(f"pin: {hf_pin}  # {hf_port}")
+                add_fan_settings(lines, hf_settings, {'max_power': '1.0', 'kick_start': '0.5'})
+                lines.append(f"heater: {hf_heater}")
+                lines.append(f"heater_temp: {hf_heater_temp}.0")
+            elif fan_hotend_type == 'temperature':
+                hf_sensor = wizard_state.get('fan_hotend_sensor_type', '')
+                hf_target = wizard_state.get('fan_hotend_target_temp', '40')
+                lines.append("[temperature_fan hotend_fan]")
+                lines.append(f"pin: {hf_pin}  # {hf_port}")
+                add_fan_settings(lines, hf_settings, {'max_power': '1.0', 'kick_start': '0.5', 'shutdown_speed': '0'})
+                if hf_sensor and hf_sensor != 'chamber':
+                    lines.append(f"sensor_type: {hf_sensor}")
+                    lines.append("sensor_pin: REPLACE_PIN  # Connect temperature sensor")
+                else:
+                    lines.append("sensor_type: temperature_combined")
+                    lines.append("sensor_list: temperature_sensor chamber")
+                    lines.append("combination_method: max")
+                lines.append("min_temp: 0")
+                lines.append("max_temp: 100")
+                lines.append(f"target_temp: {hf_target}")
+                lines.append("control: watermark")
+            else:  # manual
+                lines.append("[fan_generic hotend_fan]")
+                lines.append(f"pin: {hf_pin}  # {hf_port}")
+                add_fan_settings(lines, hf_settings, {'max_power': '1.0', 'kick_start': '0.5'})
+                lines.append("# Manual control: SET_FAN_SPEED FAN=hotend_fan SPEED=x")
             lines.append("")
     
-    # Controller fan on main board - generated if port is assigned
+    # Controller fan on main board (control type: controller/manual/heater)
     cf_port = assignments.get('fan_controller')
     cf2_port = assignments.get('fan_controller_pin2', '')
     if cf_port:
@@ -851,16 +877,30 @@ def generate_hardware_cfg(
         if cf2_port:
             cf2_pin = get_fan_pin(board, cf2_port)
             lines.extend(generate_multipin('controller', cf_pin, cf2_pin, cf_port, cf2_port))
-            lines.append("[controller_fan electronics_fan]")
-            lines.append("pin: multi_pin:controller_pins")
+            cf_pin_str = "multi_pin:controller_pins"
         else:
-            lines.append("[controller_fan electronics_fan]")
-            lines.append(f"pin: {cf_pin}  # {cf_port}")
+            cf_pin_str = f"{cf_pin}  # {cf_port}"
 
-        add_fan_settings(lines, cf_settings, {'max_power': '1.0', 'kick_start': '0.5'})
-        lines.append("heater: heater_bed, extruder")
-        lines.append("idle_timeout: 60")
-        lines.append("idle_speed: 0.5")
+        if fan_controller_type == 'controller':
+            lines.append("[controller_fan electronics_fan]")
+            lines.append(f"pin: {cf_pin_str}")
+            add_fan_settings(lines, cf_settings, {'max_power': '1.0', 'kick_start': '0.5'})
+            lines.append("heater: heater_bed, extruder")
+            lines.append("idle_timeout: 60")
+            lines.append("idle_speed: 0.5")
+        elif fan_controller_type == 'heater':
+            cf_heater = wizard_state.get('fan_controller_heater', 'extruder')
+            cf_heater_temp = wizard_state.get('fan_controller_heater_temp', '50')
+            lines.append("[heater_fan electronics_fan]")
+            lines.append(f"pin: {cf_pin_str}")
+            add_fan_settings(lines, cf_settings, {'max_power': '1.0', 'kick_start': '0.5'})
+            lines.append(f"heater: {cf_heater}")
+            lines.append(f"heater_temp: {cf_heater_temp}.0")
+        else:  # manual
+            lines.append("[fan_generic electronics_fan]")
+            lines.append(f"pin: {cf_pin_str}")
+            add_fan_settings(lines, cf_settings, {'max_power': '1.0', 'kick_start': '0.5'})
+            lines.append("# Manual control: SET_FAN_SPEED FAN=electronics_fan SPEED=x")
         lines.append("")
     
     # Exhaust fan - generated if port is assigned (control type: manual/heater/temperature)
@@ -1005,7 +1045,7 @@ def generate_hardware_cfg(
             lines.append("# Control with: SET_FAN_SPEED FAN=chamber_fan SPEED=0.5")
         lines.append("")
     
-    # RSCS/Filter fan (fan_generic) - generated if port is assigned
+    # RSCS/Filter fan (control type: manual/heater/temperature)
     rs_port = assignments.get('fan_rscs')
     rs2_port = assignments.get('fan_rscs_pin2', '')
     if rs_port:
@@ -1015,16 +1055,45 @@ def generate_hardware_cfg(
         if rs2_port:
             rs2_pin = get_fan_pin(board, rs2_port)
             lines.extend(generate_multipin('rscs', rs_pin, rs2_pin, rs_port, rs2_port))
-            lines.append("[fan_generic rscs_fan]")
-            lines.append("pin: multi_pin:rscs_pins")
+            rs_pin_str = "multi_pin:rscs_pins"
         else:
-            lines.append("[fan_generic rscs_fan]")
-            lines.append(f"pin: {rs_pin}  # {rs_port}")
+            rs_pin_str = f"{rs_pin}  # {rs_port}"
 
-        add_fan_settings(lines, rs_settings, {'max_power': '1.0', 'shutdown_speed': '0', 'kick_start': '0.5'})
-        lines.append("off_below: 0.10")
-        lines.append("# Recirculating active carbon/HEPA filter")
-        lines.append("# Control with: SET_FAN_SPEED FAN=rscs_fan SPEED=0.5")
+        if fan_rscs_type == 'heater':
+            rs_heater = wizard_state.get('fan_rscs_heater', 'extruder')
+            rs_heater_temp = wizard_state.get('fan_rscs_heater_temp', '50')
+            lines.append("[heater_fan rscs_fan]")
+            lines.append(f"pin: {rs_pin_str}")
+            add_fan_settings(lines, rs_settings, {'max_power': '1.0', 'kick_start': '0.5'})
+            lines.append(f"heater: {rs_heater}")
+            lines.append(f"heater_temp: {rs_heater_temp}.0")
+            lines.append("# Recirculating active carbon/HEPA filter")
+        elif fan_rscs_type == 'temperature':
+            rs_sensor = wizard_state.get('fan_rscs_sensor_type', '')
+            rs_target = wizard_state.get('fan_rscs_target_temp', '45')
+            lines.append("[temperature_fan rscs_fan]")
+            lines.append(f"pin: {rs_pin_str}")
+            add_fan_settings(lines, rs_settings, {'max_power': '1.0', 'shutdown_speed': '0', 'kick_start': '0.5'})
+            if rs_sensor and rs_sensor != 'chamber':
+                lines.append(f"sensor_type: {rs_sensor}")
+                lines.append("sensor_pin: REPLACE_PIN  # Connect temperature sensor")
+            else:
+                lines.append("sensor_type: temperature_combined")
+                lines.append("sensor_list: temperature_sensor chamber")
+                lines.append("combination_method: max")
+            lines.append("min_temp: 0")
+            lines.append("max_temp: 80")
+            lines.append(f"target_temp: {rs_target}")
+            lines.append("control: watermark")
+            lines.append("gcode_id: R")
+            lines.append("# Recirculating active carbon/HEPA filter - temp controlled")
+        else:  # manual
+            lines.append("[fan_generic rscs_fan]")
+            lines.append(f"pin: {rs_pin_str}")
+            add_fan_settings(lines, rs_settings, {'max_power': '1.0', 'shutdown_speed': '0', 'kick_start': '0.5'})
+            lines.append("off_below: 0.10")
+            lines.append("# Recirculating active carbon/HEPA filter")
+            lines.append("# Control with: SET_FAN_SPEED FAN=rscs_fan SPEED=0.5")
         lines.append("")
     
     # Radiator fan - generated if port is assigned (control type: manual/heater/temperature, default heater for water cooling)

@@ -96,8 +96,8 @@ print_box_line() {
     local visible_content=$(strip_ansi "$content")
     local visible_len=${#visible_content}
 
-    # Calculate padding needed (box width - indent - content - 1 for right margin)
-    local padding=$((BOX_WIDTH - indent - visible_len - 1))
+    # Calculate padding needed (box width - indent - content)
+    local padding=$((BOX_WIDTH - indent - visible_len))
     if [[ $padding -lt 0 ]]; then padding=0; fi
 
     # Print: left border + indent + content + padding + right border

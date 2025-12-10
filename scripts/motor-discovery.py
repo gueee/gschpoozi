@@ -247,8 +247,8 @@ def generate_discovery_config(board: dict, mcu_serial: str, driver_type: str = "
             f"enable_pin: !{port_config['enable_pin']}",
             "microsteps: 16",
             "rotation_distance: 40",
-            "velocity: 500",  # High velocity for audible buzz
-            "accel: 50000",   # High accel for rapid direction changes
+            "velocity: 100",
+            "accel: 5000",
             "",
         ])
     
@@ -306,16 +306,17 @@ class MotorDiscovery:
         # XY motors
         # Note: In CoreXY, A belt = X/X1 motors, B belt = Y/Y1 motors
         # Standard positions: X=rear-left, Y=rear-right, X1=front-right, Y1=front-left
+        # For AWD: motors on same belt are interchangeable (identical motors)
         if self.kinematics == "corexy-awd":
-            # AWD: 4 XY motors (2 per belt)
+            # AWD: 4 XY motors (2 per belt, interchangeable within belt group)
             steppers.extend([
-                {"name": "stepper_x", "label": "X Motor (typically rear-left, A belt)", 
+                {"name": "stepper_x", "label": "A-belt motor (X/X1 - first)", 
                  "direction_prompt": "Did toolhead move diagonally toward FRONT-RIGHT?", "type": "xy"},
-                {"name": "stepper_y", "label": "Y Motor (typically rear-right, B belt)", 
+                {"name": "stepper_x1", "label": "A-belt motor (X/X1 - second)", 
+                 "direction_prompt": "Did toolhead move diagonally toward FRONT-RIGHT?", "type": "xy"},
+                {"name": "stepper_y", "label": "B-belt motor (Y/Y1 - first)", 
                  "direction_prompt": "Did toolhead move diagonally toward FRONT-LEFT?", "type": "xy"},
-                {"name": "stepper_x1", "label": "X1 Motor (typically front-right, A belt)", 
-                 "direction_prompt": "Did toolhead move diagonally toward FRONT-RIGHT?", "type": "xy"},
-                {"name": "stepper_y1", "label": "Y1 Motor (typically front-left, B belt)", 
+                {"name": "stepper_y1", "label": "B-belt motor (Y/Y1 - second)", 
                  "direction_prompt": "Did toolhead move diagonally toward FRONT-LEFT?", "type": "xy"},
             ])
         elif self.kinematics == "corexy":
@@ -338,12 +339,11 @@ class MotorDiscovery:
         return steppers
     
     def buzz_motor(self, port_name: str) -> bool:
-        """Buzz a motor with an audible tone.
+        """Buzz a motor with visible back-and-forth movement.
         
-        Creates rapid micro-oscillations that produce an audible tone from
-        the motor coils. This allows identifying which motor is being driven
-        even when motors are belt-connected (like X/X1 or Y/Y1 in CoreXY).
-        The driven motor will "sing", the passive motor will be silent.
+        For belt-connected motors (X/X1, Y/Y1 in AWD), this moves the belt
+        visibly. Since motors on the same belt are interchangeable, we just
+        need to identify which belt moved, not which specific motor.
         """
         stepper_name = f"stepper_{port_name.lower()}"
         try:
@@ -351,19 +351,13 @@ class MotorDiscovery:
             self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} ENABLE=1")
             time.sleep(0.2)
             
-            # Audible buzz: very rapid tiny oscillations create audible tone
-            # Tiny distance (0.02mm) + very high speed (500mm/s) + no delays
-            # This creates ~500Hz+ oscillation which is clearly audible
-            # The DRIVEN motor buzzes/sings, passive belt-connected motors are silent
-            for _ in range(200):  # Many rapid cycles
-                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=0.02 SPEED=500")
-                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=-0.02 SPEED=500")
-            
-            # Brief pause then repeat for longer audible period
-            time.sleep(0.1)
-            for _ in range(200):
-                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=0.02 SPEED=500")
-                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=-0.02 SPEED=500")
+            # Visible movement: 2mm back-and-forth, 5 times
+            # For belt-connected motors, watch which BELT moves
+            for _ in range(5):
+                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=2 SPEED=50")
+                time.sleep(0.2)
+                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=-2 SPEED=50")
+                time.sleep(0.2)
             
             # Disable stepper
             self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} ENABLE=0")
@@ -406,11 +400,12 @@ class MotorDiscovery:
         
         print(f"""
 {WHITE}We'll buzz each motor port one at a time.{RESET}
-{WHITE}Each motor will make an audible tone when buzzed.{RESET}
+{WHITE}Watch which motor or belt moves and tell us what it is.{RESET}
 
-{YELLOW}TIP for belt-connected motors (X/X1, Y/Y1):{RESET}
-{WHITE}  Both motors on the same belt will rotate, but only the{RESET}
-{WHITE}  DRIVEN motor makes a sound. Listen for which motor is buzzing!{RESET}
+{YELLOW}NOTE for AWD CoreXY:{RESET}
+{WHITE}  X and X1 are on the same belt (A-belt) - they're interchangeable.{RESET}
+{WHITE}  Y and Y1 are on the same belt (B-belt) - they're interchangeable.{RESET}
+{WHITE}  Just identify which BELT moves, we'll assign motors automatically.{RESET}
 
 {CYAN}Available motor types to identify:{RESET}
 """)
@@ -441,14 +436,12 @@ class MotorDiscovery:
                     print(f"  {i}...")
                     time.sleep(1)
                 
-                print(f"\n{GREEN}>>> BUZZING {port_name} NOW - LISTEN FOR THE TONE! <<<{RESET}\n")
+                print(f"\n{GREEN}>>> BUZZING {port_name} NOW <<<{RESET}\n")
                 
                 buzz_success = self.buzz_motor(port_name)
                 
                 if not buzz_success:
                     print_error("Motor didn't respond (may not be connected)")
-                else:
-                    print(f"{CYAN}🔊 Which motor was making the buzzing sound?{RESET}")
                 
                 # Show options - always allow repeat, skip, abort
                 remaining = [s for s in self.required_steppers if s['name'] not in identified]

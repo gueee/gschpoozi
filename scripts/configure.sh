@@ -2175,6 +2175,9 @@ init_state() {
         [probe_type]=""
         [probe_mode]=""              # "proximity" or "touch" for eddy current probes
         [beacon_revision]=""         # "revd" or "revh" for Beacon hardware version
+        [z_home_x]=""                # X position for Z homing (safe_z_home)
+        [z_home_y]=""                # Y position for Z homing (safe_z_home)
+        [mesh_margin]=""             # Edge margin for bed mesh (mm from edges)
         [has_filament_sensor]=""
         [filament_sensor_pin]=""
         [has_chamber_sensor]=""
@@ -5198,6 +5201,23 @@ menu_probe() {
             print_menu_item "3" "$endstop_status" "Z Endstop Position" "$endstop_pos"
         fi
 
+        # Z homing position (for all probes except none)
+        if [[ -n "$current_probe" && "$current_probe" != "none" ]]; then
+            print_empty_line
+            local bed_x="${WIZARD_STATE[bed_size_x]:-300}"
+            local bed_y="${WIZARD_STATE[bed_size_y]:-300}"
+            local z_home_x="${WIZARD_STATE[z_home_x]:-$((bed_x / 2))}"
+            local z_home_y="${WIZARD_STATE[z_home_y]:-$((bed_y / 2))}"
+            local z_home_info="X:${z_home_x}, Y:${z_home_y}"
+            local z_home_status=$([[ -n "${WIZARD_STATE[z_home_x]}" ]] && echo "done" || echo "")
+            print_menu_item "4" "$z_home_status" "Z Homing Position" "$z_home_info"
+            
+            # Mesh margin
+            local mesh_margin="${WIZARD_STATE[mesh_margin]:-30}"
+            local mesh_status=$([[ -n "${WIZARD_STATE[mesh_margin]}" ]] && echo "done" || echo "")
+            print_menu_item "5" "$mesh_status" "Mesh Edge Margin" "${mesh_margin}mm from edges"
+        fi
+
         print_separator
         print_action_item "B" "Back"
         print_footer
@@ -5225,6 +5245,16 @@ menu_probe() {
                     menu_z_endstop_position
                 elif [[ -n "$current_probe" ]]; then
                     menu_probe_port_or_mcu
+                fi
+                ;;
+            4)
+                if [[ -n "$current_probe" && "$current_probe" != "none" ]]; then
+                    menu_z_homing_position
+                fi
+                ;;
+            5)
+                if [[ -n "$current_probe" && "$current_probe" != "none" ]]; then
+                    menu_mesh_margin
                 fi
                 ;;
             [bB]) return ;;
@@ -5332,6 +5362,79 @@ menu_probe_type_select() {
     esac
 
     # Save state after probe type selection
+    save_state
+}
+
+menu_z_homing_position() {
+    clear_screen
+    print_header "Z Homing Position"
+    
+    print_box_line "${BWHITE}Configure where the toolhead moves before Z homing:${NC}"
+    print_empty_line
+    print_box_line "This is the XY position where the probe will home Z."
+    print_box_line "For most setups, the center of the bed is a good choice."
+    print_box_line "For Voron TAP or nozzle probes, this should be on the bed."
+    print_empty_line
+    
+    # Get bed size for defaults
+    local bed_x="${WIZARD_STATE[bed_size_x]:-300}"
+    local bed_y="${WIZARD_STATE[bed_size_y]:-300}"
+    local default_x=$((bed_x / 2))
+    local default_y=$((bed_y / 2))
+    
+    # Current values
+    local current_x="${WIZARD_STATE[z_home_x]:-$default_x}"
+    local current_y="${WIZARD_STATE[z_home_y]:-$default_y}"
+    
+    print_box_line "Bed size: ${bed_x}mm x ${bed_y}mm"
+    print_box_line "Current Z home position: X=${current_x}, Y=${current_y}"
+    print_empty_line
+    
+    print_separator
+    print_footer
+    
+    echo -en "  " >&2
+    WIZARD_STATE[z_home_x]=$(prompt_input "Z homing X position (mm)" "$current_x")
+    echo -en "  " >&2
+    WIZARD_STATE[z_home_y]=$(prompt_input "Z homing Y position (mm)" "$current_y")
+    
+    echo -e "${GREEN}✓${NC} Z homing position set to: X=${WIZARD_STATE[z_home_x]}, Y=${WIZARD_STATE[z_home_y]}"
+    sleep 1
+    
+    save_state
+}
+
+menu_mesh_margin() {
+    clear_screen
+    print_header "Bed Mesh Edge Margin"
+    
+    print_box_line "${BWHITE}Configure the margin from bed edges for mesh probing:${NC}"
+    print_empty_line
+    print_box_line "This is how far from each edge the bed mesh will start/end."
+    print_box_line "A larger margin keeps the probe away from bed clips or edges."
+    print_box_line "Klipper automatically compensates for probe offset."
+    print_empty_line
+    
+    # Get bed size for context
+    local bed_x="${WIZARD_STATE[bed_size_x]:-300}"
+    local bed_y="${WIZARD_STATE[bed_size_y]:-300}"
+    local current_margin="${WIZARD_STATE[mesh_margin]:-30}"
+    
+    print_box_line "Bed size: ${bed_x}mm x ${bed_y}mm"
+    print_box_line "Current margin: ${current_margin}mm from all edges"
+    print_box_line "Mesh area will be: (${current_margin}, ${current_margin}) to ($((bed_x - current_margin)), $((bed_y - current_margin)))"
+    print_empty_line
+    
+    print_separator
+    print_footer
+    
+    echo -en "  " >&2
+    WIZARD_STATE[mesh_margin]=$(prompt_input "Edge margin (mm)" "$current_margin")
+    
+    local new_margin="${WIZARD_STATE[mesh_margin]}"
+    echo -e "${GREEN}✓${NC} Mesh area: (${new_margin}, ${new_margin}) to ($((bed_x - new_margin)), $((bed_y - new_margin)))"
+    sleep 1
+    
     save_state
 }
 
@@ -7860,38 +7963,22 @@ generate_macros_cfg() {
 generate_homing_cfg() {
     local output="${OUTPUT_DIR}/homing.cfg"
     
-    cat > "${output}" << 'EOF'
+    # Get Z homing position from wizard state (for homing override example)
+    local z_home_x="${WIZARD_STATE[z_home_x]:-$((${WIZARD_STATE[bed_size_x]:-300} / 2))}"
+    local z_home_y="${WIZARD_STATE[z_home_y]:-$((${WIZARD_STATE[bed_size_y]:-300} / 2))}"
+    
+    cat > "${output}" << EOF
 # ═══════════════════════════════════════════════════════════════════════════════
 # HOMING
 # Generated by gschpoozi
 # ═══════════════════════════════════════════════════════════════════════════════
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SAFE Z HOME
-# ─────────────────────────────────────────────────────────────────────────────
-[safe_z_home]
-home_xy_position: 150, 150  # Center of bed - adjust for your printer
-speed: 100
-z_hop: 10
-z_hop_speed: 15
-
-# ─────────────────────────────────────────────────────────────────────────────
-# BED MESH
-# ─────────────────────────────────────────────────────────────────────────────
-[bed_mesh]
-speed: 300
-horizontal_move_z: 5
-mesh_min: 30, 30
-mesh_max: 270, 270        # Adjust for your bed size
-probe_count: 5, 5
-algorithm: bicubic
-fade_start: 0.6
-fade_end: 10
-fade_target: 0
+# NOTE: [safe_z_home] and [bed_mesh] are configured in hardware.cfg
+# based on your probe type and wizard settings.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HOMING OVERRIDE (Optional - uncomment if needed)
 # ─────────────────────────────────────────────────────────────────────────────
+# Use this if you need custom homing behavior (e.g., sensorless homing cleanup)
 #[homing_override]
 #axes: xyz
 #gcode:
@@ -7906,7 +7993,7 @@ fade_target: 0
 #    {% endif %}
 #    
 #    {% if home_all or 'Z' in params %}
-#        G1 X150 Y150 F6000
+#        G1 X${z_home_x} Y${z_home_y} F6000
 #        G28 Z
 #        G1 Z10 F3000
 #    {% endif %}

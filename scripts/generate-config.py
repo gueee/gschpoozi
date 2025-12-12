@@ -1210,8 +1210,13 @@ def generate_hardware_cfg(
     # Get bed dimensions for homing position calculations
     bed_x = int(wizard_state.get('bed_size_x', '300'))
     bed_y = int(wizard_state.get('bed_size_y', '300'))
-    home_x = bed_x // 2
-    home_y = bed_y // 2
+    
+    # Z homing position - user configurable, defaults to bed center
+    z_home_x = int(wizard_state.get('z_home_x', str(bed_x // 2)))
+    z_home_y = int(wizard_state.get('z_home_y', str(bed_y // 2)))
+    
+    # Mesh margin - user configurable, defaults to 30mm
+    mesh_margin = int(wizard_state.get('mesh_margin', '30'))
 
     if probe_type and probe_type != 'none' and probe_type != 'endstop':
         lines.append("# " + "─" * 77)
@@ -1237,7 +1242,7 @@ def generate_hardware_cfg(
                 lines.append("")
                 lines.append("# Contact mode settings (Beacon Rev H+ required)")
                 lines.append("home_method: contact")
-                lines.append(f"home_xy_position: {home_x}, {home_y}")
+                lines.append(f"home_xy_position: {z_home_x}, {z_home_y}")
                 lines.append("home_z_hop: 5")
                 lines.append("home_z_hop_speed: 30")
                 lines.append("contact_max_hotend_temperature: 180")
@@ -1371,7 +1376,7 @@ def generate_hardware_cfg(
             lines.append("# SAFE Z HOME")
             lines.append("# " + "─" * 77)
             lines.append("[safe_z_home]")
-            lines.append(f"home_xy_position: {home_x}, {home_y}  # Center of bed")
+            lines.append(f"home_xy_position: {z_home_x}, {z_home_y}")
             lines.append("z_hop: 10  # Lift Z before homing")
             lines.append("z_hop_speed: 25")
             lines.append("speed: 150")
@@ -1393,14 +1398,14 @@ def generate_hardware_cfg(
             lines.append("# BED_MESH_CALIBRATE METHOD=rapid_scan")
             if probe_type == 'btt-eddy':
                 lines.append("scan_overshoot: 8")
-            lines.append("mesh_min: 30, 30")
-            lines.append(f"mesh_max: {home_x * 2 - 30}, {home_y * 2 - 30}")
+            lines.append(f"mesh_min: {mesh_margin}, {mesh_margin}")
+            lines.append(f"mesh_max: {bed_x - mesh_margin}, {bed_y - mesh_margin}")
             lines.append("probe_count: 9, 9")
             lines.append("algorithm: bicubic")
         else:
             # Pin-based probes (BLTouch, Klicky, Inductive)
-            lines.append("mesh_min: 30, 30")
-            lines.append(f"mesh_max: {home_x * 2 - 30}, {home_y * 2 - 30}")
+            lines.append(f"mesh_min: {mesh_margin}, {mesh_margin}")
+            lines.append(f"mesh_max: {bed_x - mesh_margin}, {bed_y - mesh_margin}")
             lines.append("probe_count: 5, 5")
             lines.append("algorithm: bicubic")
             lines.append("# Use ADAPTIVE=1 for adaptive meshing: BED_MESH_CALIBRATE ADAPTIVE=1")

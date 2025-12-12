@@ -480,8 +480,8 @@ def generate_hardware_cfg(
             # Use correct virtual endstop based on probe type
             probe_type = wizard_state.get('probe_type', '')
             if probe_type == 'beacon':
-                # Beacon registers as 'probe' chip, not 'beacon'
-                lines.append("endstop_pin: probe:z_virtual_endstop")
+                # Beacon registers as 'beacon' chip
+                lines.append("endstop_pin: beacon:z_virtual_endstop")
                 lines.append("homing_retract_dist: 0  # Beacon requires this")
             elif probe_type == 'cartographer':
                 # Cartographer registers as 'cartographer' chip

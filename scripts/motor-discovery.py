@@ -369,9 +369,9 @@ class MotorDiscovery:
             # Visible movement: 20mm back-and-forth, 5 times
             # For belt-connected motors, watch which BELT moves
             for _ in range(5):
-                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=20 SPEED=50")
-                time.sleep(0.5)
-                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=0 SPEED=50")
+                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=20 SPEED=25")
+                time.sleep(1.0)
+                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=0 SPEED=25")
                 time.sleep(0.5)
             
             # Disable stepper
@@ -381,7 +381,7 @@ class MotorDiscovery:
             print_error(f"Failed to buzz motor: {e}")
             return False
     
-    def force_move_motor(self, port_name: str, distance: float = 30, velocity: float = 25) -> bool:
+    def force_move_motor(self, port_name: str, distance: float = 30, velocity: float = 15) -> bool:
         """Move a motor in one direction, then return to start.
         
         The FIRST movement is the one to observe for direction verification.

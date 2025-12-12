@@ -1159,6 +1159,20 @@ def select_endstop_port(endstop_func: str, endstop_ports: Dict, endstop_list: Li
         idx = int(choice) - 1
         if 0 <= idx < len(endstop_list):
             port_name = endstop_list[idx]
+            
+            # Check if port is already used by another function
+            used_by = None
+            for func, assigned_port in state.port_assignments.items():
+                if assigned_port == port_name and func != endstop_func and not func.endswith('_modifiers'):
+                    used_by = func.replace('_', ' ')
+                    break
+            
+            if used_by:
+                print(f"\n{Colors.YELLOW}⚠️  {port_name} is already assigned to '{used_by}'{Colors.NC}")
+                print(f"{Colors.WHITE}   Clear that assignment first if you want to use this port.{Colors.NC}")
+                wait_for_key()
+                return
+            
             state.port_assignments[endstop_func] = port_name
 
             # Configure pin modifiers (inversion, pull-up/pull-down)
@@ -1392,9 +1406,22 @@ def select_fan_port(fan_key: str, fan_name: str, fan_ports: Dict, fan_list: List
                 del state.port_assignments[fan_key]
             print(f"\n{Colors.GREEN}{fan_name} cleared{Colors.NC}")
         elif 1 <= idx < len(fan_list) + 1:
-            state.port_assignments[fan_key] = fan_list[idx - 1]
-            pin = fan_ports[fan_list[idx - 1]].get('pin', '?')
-            print(f"\n{Colors.GREEN}{fan_name} assigned to {fan_list[idx - 1]} (pin: {pin}){Colors.NC}")
+            selected_port = fan_list[idx - 1]
+            pin = fan_ports[selected_port].get('pin', '?')
+            
+            # Check if port is already used by another function
+            used_by = None
+            for func, assigned_port in state.port_assignments.items():
+                if assigned_port == selected_port and func != fan_key:
+                    used_by = func.replace('fan_', '').replace('_', ' ')
+                    break
+            
+            if used_by:
+                print(f"\n{Colors.YELLOW}⚠️  {selected_port} is already assigned to '{used_by}'{Colors.NC}")
+                print(f"{Colors.WHITE}   Clear that assignment first if you want to use this port.{Colors.NC}")
+            else:
+                state.port_assignments[fan_key] = selected_port
+                print(f"\n{Colors.GREEN}{fan_name} assigned to {selected_port} (pin: {pin}){Colors.NC}")
         wait_for_key()
     except ValueError:
         pass
@@ -2196,8 +2223,23 @@ def select_single_port(port_type: str, ports: Dict, assignment_key: str, title: 
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(port_list):
-            state.port_assignments[assignment_key] = port_list[idx]
-            print(f"\n{Colors.GREEN}Assigned {assignment_key} to {port_list[idx]}{Colors.NC}")
+            selected_port = port_list[idx]
+            
+            # Check if port is already used by another function
+            used_by = None
+            for func, assigned_port in state.port_assignments.items():
+                if assigned_port == selected_port and func != assignment_key and not func.endswith('_modifiers'):
+                    used_by = func.replace('_', ' ')
+                    break
+            
+            if used_by:
+                print(f"\n{Colors.YELLOW}⚠️  {selected_port} is already assigned to '{used_by}'{Colors.NC}")
+                print(f"{Colors.WHITE}   Clear that assignment first if you want to use this port.{Colors.NC}")
+                wait_for_key()
+                return False
+            
+            state.port_assignments[assignment_key] = selected_port
+            print(f"\n{Colors.GREEN}Assigned {assignment_key} to {selected_port}{Colors.NC}")
             return True
     except ValueError:
         pass
@@ -2395,6 +2437,25 @@ def select_flexible_port(port_type: str, assignment_key: str, title: str,
         if 0 <= idx < len(port_map):
             board_type, port_name = port_map[idx]
 
+            # Check if port is already used by another function
+            used_by = None
+            if board_type == 'mainboard':
+                for func, assigned_port in state.port_assignments.items():
+                    if assigned_port == port_name and func != assignment_key and not func.endswith('_modifiers'):
+                        used_by = func.replace('_', ' ')
+                        break
+            else:
+                for func, assigned_port in state.toolboard_assignments.items():
+                    if assigned_port == port_name and func != assignment_key and not func.endswith('_modifiers'):
+                        used_by = func.replace('_', ' ')
+                        break
+
+            if used_by:
+                print(f"\n{Colors.YELLOW}⚠️  {port_name} is already assigned to '{used_by}'{Colors.NC}")
+                print(f"{Colors.WHITE}   Clear that assignment first if you want to use this port.{Colors.NC}")
+                wait_for_key()
+                return False
+
             # Configure pin modifiers if supported
             modifiers = ""
             if supports_modifiers:
@@ -2490,8 +2551,23 @@ def select_toolboard_single_port(port_type: str, ports: Dict, assignment_key: st
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(port_list):
-            state.toolboard_assignments[assignment_key] = port_list[idx]
-            print(f"\n{Colors.GREEN}Assigned {assignment_key} to toolboard:{port_list[idx]}{Colors.NC}")
+            selected_port = port_list[idx]
+            
+            # Check if port is already used by another function
+            used_by = None
+            for func, assigned_port in state.toolboard_assignments.items():
+                if assigned_port == selected_port and func != assignment_key and not func.endswith('_modifiers'):
+                    used_by = func.replace('_', ' ')
+                    break
+            
+            if used_by:
+                print(f"\n{Colors.YELLOW}⚠️  {selected_port} is already assigned to '{used_by}'{Colors.NC}")
+                print(f"{Colors.WHITE}   Clear that assignment first if you want to use this port.{Colors.NC}")
+                wait_for_key()
+                return False
+            
+            state.toolboard_assignments[assignment_key] = selected_port
+            print(f"\n{Colors.GREEN}Assigned {assignment_key} to toolboard:{selected_port}{Colors.NC}")
             return True
     except ValueError:
         pass
@@ -2554,8 +2630,23 @@ def select_toolboard_endstop(axis: str, toolboard: Dict) -> bool:
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(port_list):
-            state.toolboard_assignments[assignment_key] = port_list[idx]
-            print(f"\n{Colors.GREEN}Assigned {assignment_key} to toolboard:{port_list[idx]}{Colors.NC}")
+            selected_port = port_list[idx]
+            
+            # Check if port is already used by another function
+            used_by = None
+            for func, assigned_port in state.toolboard_assignments.items():
+                if assigned_port == selected_port and func != assignment_key and not func.endswith('_modifiers'):
+                    used_by = func.replace('_', ' ')
+                    break
+            
+            if used_by:
+                print(f"\n{Colors.YELLOW}⚠️  {selected_port} is already assigned to '{used_by}'{Colors.NC}")
+                print(f"{Colors.WHITE}   Clear that assignment first if you want to use this port.{Colors.NC}")
+                wait_for_key()
+                return False
+            
+            state.toolboard_assignments[assignment_key] = selected_port
+            print(f"\n{Colors.GREEN}Assigned {assignment_key} to toolboard:{selected_port}{Colors.NC}")
             return True
     except ValueError:
         pass

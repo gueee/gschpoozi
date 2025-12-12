@@ -296,8 +296,8 @@ def generate_hardware_cfg(
     lines.append("# " + "─" * 77)
     lines.append("[mcu]")
     
-    # MCU serial - required for Klipper to function
-    mcu_serial = hardware_state.get('mcu_serial')
+    # MCU serial - check wizard_state first, then hardware_state
+    mcu_serial = wizard_state.get('mcu_serial') or hardware_state.get('mcu_serial')
     if mcu_serial:
         lines.append(f"serial: {mcu_serial}")
     else:
@@ -313,14 +313,14 @@ def generate_hardware_cfg(
         lines.append(f"[mcu toolboard]")
         
         if tb_connection == 'CAN':
-            canbus_uuid = hardware_state.get('toolboard_canbus_uuid')
+            canbus_uuid = wizard_state.get('toolboard_canbus_uuid') or hardware_state.get('toolboard_canbus_uuid')
             if canbus_uuid:
                 lines.append(f"canbus_uuid: {canbus_uuid}")
             else:
                 lines.append("canbus_uuid: SET_YOUR_CANBUS_UUID_HERE")
                 lines.append("# ^^^ Run: ~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0")
         else:
-            tb_serial = hardware_state.get('toolboard_serial')
+            tb_serial = wizard_state.get('toolboard_serial') or hardware_state.get('toolboard_serial')
             if tb_serial:
                 lines.append(f"serial: {tb_serial}")
             else:

@@ -3355,6 +3355,8 @@ menu_steppers() {
         
         print_separator
         print_action_item "A" "Set ALL axes to same driver"
+        print_action_item "G" "Set all XY gantry drivers (X, X1, Y, Y1)"
+        print_action_item "Z" "Set all Z drivers"
         print_action_item "B" "Back"
         print_footer
         
@@ -3391,6 +3393,76 @@ menu_steppers() {
                     done
                     # Also set legacy stepper_driver for compatibility
                     WIZARD_STATE[stepper_driver]="$driver"
+                fi
+                ;;
+            [gG])
+                # Set all XY gantry drivers (X, X1, Y, Y1)
+                clear_screen
+                print_header "Set XY Gantry Drivers"
+                print_box_line "${WHITE}Sets driver for: X, X1, Y, Y1${NC}"
+                print_empty_line
+                print_menu_item "1" "" "TMC2209 (UART)"
+                print_menu_item "2" "" "TMC2240 (SPI)"
+                print_menu_item "3" "" "TMC5160 (SPI)"
+                print_menu_item "4" "" "TMC2208 (Standalone)"
+                print_menu_item "5" "" "A4988 (Basic)"
+                print_footer
+                
+                echo -en "${BYELLOW}Select driver for XY gantry${NC}: "
+                read -r driver_choice
+                
+                local driver=""
+                case "$driver_choice" in
+                    1) driver="TMC2209" ;;
+                    2) driver="TMC2240" ;;
+                    3) driver="TMC5160" ;;
+                    4) driver="TMC2208" ;;
+                    5) driver="A4988" ;;
+                esac
+                
+                if [[ -n "$driver" ]]; then
+                    for axis in X X1 Y Y1; do
+                        # Only set if this axis is in the required axes
+                        if [[ " $axes " == *" $axis "* ]]; then
+                            WIZARD_STATE[driver_${axis}]="$driver"
+                        fi
+                    done
+                    # Update legacy stepper_driver
+                    WIZARD_STATE[stepper_driver]="${WIZARD_STATE[driver_X]}"
+                fi
+                ;;
+            [zZ])
+                # Set all Z drivers
+                clear_screen
+                print_header "Set Z Drivers"
+                print_box_line "${WHITE}Sets driver for: Z, Z1, Z2, Z3${NC}"
+                print_empty_line
+                print_menu_item "1" "" "TMC2209 (UART)"
+                print_menu_item "2" "" "TMC2240 (SPI)"
+                print_menu_item "3" "" "TMC5160 (SPI)"
+                print_menu_item "4" "" "TMC2208 (Standalone)"
+                print_menu_item "5" "" "A4988 (Basic)"
+                print_footer
+                
+                echo -en "${BYELLOW}Select driver for Z axes${NC}: "
+                read -r driver_choice
+                
+                local driver=""
+                case "$driver_choice" in
+                    1) driver="TMC2209" ;;
+                    2) driver="TMC2240" ;;
+                    3) driver="TMC5160" ;;
+                    4) driver="TMC2208" ;;
+                    5) driver="A4988" ;;
+                esac
+                
+                if [[ -n "$driver" ]]; then
+                    for axis in Z Z1 Z2 Z3; do
+                        # Only set if this axis is in the required axes
+                        if [[ " $axes " == *" $axis "* ]]; then
+                            WIZARD_STATE[driver_${axis}]="$driver"
+                        fi
+                    done
                 fi
                 ;;
             [bB])

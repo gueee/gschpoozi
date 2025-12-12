@@ -8948,7 +8948,11 @@ generate_config() {
     echo -e "\nFiles created in: ${CYAN}${OUTPUT_DIR}${NC}"
     echo -e "Main config: ${CYAN}${PRINTER_CFG}${NC}"
     
-    if confirm "Add Moonraker update manager entry?"; then
+    # Only ask about update manager if not already installed
+    local moonraker_conf="${DEFAULT_CONFIG_DIR}/moonraker.conf"
+    if [[ -f "${moonraker_conf}" ]] && grep -q "\[update_manager gschpoozi\]" "${moonraker_conf}"; then
+        echo -e "${GREEN}✓ Update manager entry already configured${NC}"
+    elif confirm "Add Moonraker update manager entry?"; then
         add_moonraker_entry
     fi
     

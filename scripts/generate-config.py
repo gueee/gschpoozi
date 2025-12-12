@@ -1360,17 +1360,22 @@ def generate_hardware_cfg(
         lines.append("")
         
         # ─────────────────────────────────────────────────────────────────────
-        # SAFE Z HOME - Required for ALL probe types
+        # SAFE Z HOME - Required unless probe handles homing itself
         # ─────────────────────────────────────────────────────────────────────
-        lines.append("# " + "─" * 77)
-        lines.append("# SAFE Z HOME")
-        lines.append("# " + "─" * 77)
-        lines.append("[safe_z_home]")
-        lines.append(f"home_xy_position: {home_x}, {home_y}  # Center of bed")
-        lines.append("z_hop: 10  # Lift Z before homing")
-        lines.append("z_hop_speed: 25")
-        lines.append("speed: 150")
-        lines.append("")
+        # Beacon touch mode handles Z homing via home_method: contact
+        # and has its own home_xy_position, so safe_z_home would conflict
+        skip_safe_z_home = (probe_type == 'beacon' and probe_mode == 'touch')
+        
+        if not skip_safe_z_home:
+            lines.append("# " + "─" * 77)
+            lines.append("# SAFE Z HOME")
+            lines.append("# " + "─" * 77)
+            lines.append("[safe_z_home]")
+            lines.append(f"home_xy_position: {home_x}, {home_y}  # Center of bed")
+            lines.append("z_hop: 10  # Lift Z before homing")
+            lines.append("z_hop_speed: 25")
+            lines.append("speed: 150")
+            lines.append("")
         
         # ─────────────────────────────────────────────────────────────────────
         # BED MESH - Required for ALL probe types

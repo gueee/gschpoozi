@@ -1218,15 +1218,15 @@ def generate_hardware_cfg(
     probe_canbus_uuid = wizard_state.get('probe_canbus_uuid', hardware_state.get('probe_canbus_uuid'))
     
     # Get bed dimensions for homing position calculations
-    bed_x = int(wizard_state.get('bed_size_x', '300'))
-    bed_y = int(wizard_state.get('bed_size_y', '300'))
+    bed_x = int(wizard_state.get('bed_size_x', '300') or '300')
+    bed_y = int(wizard_state.get('bed_size_y', '300') or '300')
     
     # Z homing position - user configurable, defaults to bed center
-    z_home_x = int(wizard_state.get('z_home_x', str(bed_x // 2)))
-    z_home_y = int(wizard_state.get('z_home_y', str(bed_y // 2)))
+    z_home_x = int(wizard_state.get('z_home_x', '') or str(bed_x // 2))
+    z_home_y = int(wizard_state.get('z_home_y', '') or str(bed_y // 2))
     
     # Mesh margin - user configurable, defaults to 30mm
-    mesh_margin = int(wizard_state.get('mesh_margin', '30'))
+    mesh_margin = int(wizard_state.get('mesh_margin', '30') or '30')
 
     if probe_type and probe_type != 'none' and probe_type != 'endstop':
         lines.append("# " + "─" * 77)

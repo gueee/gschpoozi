@@ -363,13 +363,16 @@ class MotorDiscovery:
             self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} ENABLE=1")
             time.sleep(0.2)
             
-            # Visible movement: 2mm back-and-forth, 5 times
+            # Set position reference to 0 (required for MOVE to work correctly)
+            self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} SET_POSITION=0")
+            
+            # Visible movement: 20mm back-and-forth, 5 times
             # For belt-connected motors, watch which BELT moves
             for _ in range(5):
-                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=2 SPEED=50")
-                time.sleep(0.2)
-                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=-2 SPEED=50")
-                time.sleep(0.2)
+                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=20 SPEED=50")
+                time.sleep(0.5)
+                self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=0 SPEED=50")
+                time.sleep(0.5)
             
             # Disable stepper
             self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} ENABLE=0")
@@ -378,7 +381,7 @@ class MotorDiscovery:
             print_error(f"Failed to buzz motor: {e}")
             return False
     
-    def force_move_motor(self, port_name: str, distance: float = 10, velocity: float = 20) -> bool:
+    def force_move_motor(self, port_name: str, distance: float = 30, velocity: float = 25) -> bool:
         """Move a motor in one direction, then return to start.
         
         The FIRST movement is the one to observe for direction verification.
@@ -389,6 +392,9 @@ class MotorDiscovery:
             self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} ENABLE=1")
             time.sleep(0.2)
             
+            # Set position reference to 0 (required for MOVE to work correctly)
+            self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} SET_POSITION=0")
+            
             # FIRST movement - this is the direction to observe
             self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE={distance} SPEED={velocity}")
             time.sleep(abs(distance) / velocity + 0.5)
@@ -396,8 +402,8 @@ class MotorDiscovery:
             # Pause to let user observe
             time.sleep(1.0)
             
-            # Return to start position
-            self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE={-distance} SPEED={velocity}")
+            # Return to start position (back to 0)
+            self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} MOVE=0 SPEED={velocity}")
             time.sleep(abs(distance) / velocity + 0.5)
             
             self.api.send_gcode(f"MANUAL_STEPPER STEPPER={stepper_name} ENABLE=0")

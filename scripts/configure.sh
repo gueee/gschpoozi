@@ -2727,11 +2727,12 @@ show_klipper_setup_menu() {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 show_machine_setup_menu() {
-    # Load hardware state from Python script's output
-    load_hardware_state
+    while true; do
+        # Load hardware state from Python script's output
+        load_hardware_state
 
-    clear_screen
-    print_header "gschpoozi Configuration Wizard"
+        clear_screen
+        print_header "gschpoozi Configuration Wizard"
 
     # Calculate required motor ports based on selections
     local motor_count=2  # X, Y minimum
@@ -2809,14 +2810,25 @@ show_machine_setup_menu() {
     print_empty_line
     print_box_line "${BWHITE}COMPONENTS${NC}"
 
-    # Hotend
+    # Extruder (motor configuration)
+    local extruder_info=""
+    if [[ -n "${WIZARD_STATE[extruder_type]}" ]]; then
+        extruder_info="${WIZARD_STATE[extruder_type]}"
+        [[ -n "${WIZARD_STATE[driver_E]}" ]] && extruder_info="${extruder_info}, ${WIZARD_STATE[driver_E]}"
+    else
+        extruder_info="not configured"
+    fi
+    local extruder_status=$([[ -n "${WIZARD_STATE[extruder_type]}" ]] && echo "done" || echo "")
+    print_menu_item "5" "$extruder_status" "Extruder" "${extruder_info}"
+
+    # Hotend (thermistor + heater)
     local hotend_info=""
     if [[ -n "${WIZARD_STATE[hotend_thermistor]}" ]]; then
         hotend_info="${WIZARD_STATE[hotend_thermistor]}"
     else
         hotend_info="not configured"
     fi
-    print_menu_item "5" "$(get_step_status hotend)" "Hotend" "${hotend_info}"
+    print_menu_item "6" "$(get_step_status hotend)" "Hotend" "${hotend_info}"
 
     # Heated Bed
     local bed_info=""
@@ -2826,7 +2838,7 @@ show_machine_setup_menu() {
     else
         bed_info="not configured"
     fi
-    print_menu_item "6" "$(get_step_status bed)" "Heated Bed" "${bed_info}"
+    print_menu_item "7" "$(get_step_status bed)" "Heated Bed" "${bed_info}"
 
     # Endstops (including probe as Z endstop)
     local endstop_info=""
@@ -2839,7 +2851,7 @@ show_machine_setup_menu() {
     if [[ -n "${WIZARD_STATE[home_x]}" ]]; then
         endstop_info="${endstop_info} (X:${WIZARD_STATE[home_x]}, Y:${WIZARD_STATE[home_y]})"
     fi
-    print_menu_item "7" "$(get_step_status endstops)" "Endstops" "${endstop_info}"
+    print_menu_item "8" "$(get_step_status endstops)" "Endstops" "${endstop_info}"
 
     # Fans - check HARDWARE_STATE port assignments (mainboard or toolboard)
     local fan_count=0
@@ -2852,12 +2864,12 @@ show_machine_setup_menu() {
     [[ -n "${HARDWARE_STATE[fan_radiator]}" ]] && fan_count=$((fan_count + 1))
     local fan_info="${fan_count} configured"
     local fan_status=$([[ $fan_count -gt 0 ]] && echo "done" || echo "")
-    print_menu_item "8" "$fan_status" "Fans" "${fan_info}"
+    print_menu_item "9" "$fan_status" "Fans" "${fan_info}"
 
     # Lighting
     local light_info="${WIZARD_STATE[lighting_type]:-not configured}"
     local light_status=$([[ -n "${WIZARD_STATE[lighting_type]}" && "${WIZARD_STATE[lighting_type]}" != "none" ]] && echo "done" || echo "")
-    print_menu_item "9" "$light_status" "Lighting" "${light_info}"
+    print_menu_item "A" "$light_status" "Lighting" "${light_info}"
 
     # ─────────────────────────────────────────────────────────────────────────
     # EXTRAS
@@ -2872,6 +2884,7 @@ show_machine_setup_menu() {
     print_action_item "F" "MCU Firmware Update"
     print_action_item "G" "Generate Configuration"
     print_action_item "S" "Save Progress"
+    print_action_item "B" "Back to Main Menu"
     print_action_item "Q" "Quit"
     print_footer
 
@@ -2883,11 +2896,12 @@ show_machine_setup_menu() {
         2) menu_toolboard ;;
         3) menu_misc_mcus ;;
         4) menu_kinematics ;;
-        5) menu_hotend ;;
-        6) menu_bed ;;
-        7) menu_endstops ;;
-        8) menu_fans ;;
-        9) menu_lighting ;;
+        5) menu_extruder ;;
+        6) menu_hotend ;;
+        7) menu_bed ;;
+        8) menu_endstops ;;
+        9) menu_fans ;;
+        [aA]) menu_lighting ;;
         [eE]) menu_extras ;;
         [mM]) menu_macros ;;
         [cC]) menu_can_setup ;;
@@ -2895,9 +2909,11 @@ show_machine_setup_menu() {
         [fF]) menu_mcu_firmware_update ;;
         [gG]) generate_config ;;
         [sS]) save_state; echo -e "${GREEN}Progress saved!${NC}"; wait_for_key ;;
+        [bB]) return ;;
         [qQ]) exit_wizard ;;
         *) ;;
     esac
+    done
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4086,6 +4102,162 @@ menu_pullup_resistor() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# EXTRUDER CONFIGURATION (motor, driver, port)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+menu_extruder() {
+    while true; do
+        clear_screen
+        print_header "Extruder Configuration"
+
+        print_box_line "${BWHITE}Extruder Motor Settings:${NC}"
+        print_empty_line
+
+        # 1. Extruder Type (direct drive / bowden)
+        local type_status=$([[ -n "${WIZARD_STATE[extruder_type]}" ]] && echo "done" || echo "")
+        print_menu_item "1" "$type_status" "Extruder Type" "${WIZARD_STATE[extruder_type]:-not set}"
+
+        # 2. Extruder Driver
+        local driver_status=$([[ -n "${WIZARD_STATE[driver_E]}" ]] && echo "done" || echo "")
+        print_menu_item "2" "$driver_status" "Driver Type" "${WIZARD_STATE[driver_E]:-not set}"
+
+        # 3. Motor Port Assignment (depends on toolboard or mainboard)
+        print_empty_line
+        print_box_line "${BWHITE}Motor Port:${NC}"
+        
+        local has_toolboard="no"
+        if [[ -n "${WIZARD_STATE[toolboard]}" && "${WIZARD_STATE[toolboard]}" != "none" ]]; then
+            has_toolboard="yes"
+        fi
+
+        if [[ "$has_toolboard" == "yes" ]]; then
+            # Extruder on toolboard
+            local tb_motor_port="${HARDWARE_STATE[toolboard_extruder]:-not assigned}"
+            local motor_status=$([[ -n "${HARDWARE_STATE[toolboard_extruder]}" ]] && echo "done" || echo "")
+            print_menu_item "3" "$motor_status" "Motor Port (Toolboard)" "$tb_motor_port"
+        else
+            # Extruder on mainboard
+            if [[ -n "${WIZARD_STATE[board]}" ]]; then
+                local motor_port="${HARDWARE_STATE[extruder]:-not assigned}"
+                local dir_invert="${HARDWARE_STATE[extruder_dir_invert]}"
+                [[ "$dir_invert" == "true" || "$dir_invert" == "True" ]] && motor_port="${motor_port} [DIR INV]"
+                local motor_status=$([[ -n "${HARDWARE_STATE[extruder]}" ]] && echo "done" || echo "")
+                print_menu_item "3" "$motor_status" "Motor Port (Mainboard)" "$motor_port"
+            else
+                print_box_line "${YELLOW}3) Motor Port: select board first${NC}"
+            fi
+        fi
+
+        # 4. Rotation Distance
+        print_empty_line
+        local e_status=$([[ -n "${WIZARD_STATE[stepper_e_rotation_distance]}" ]] && echo "done" || echo "")
+        local e_info=""
+        if [[ -n "${WIZARD_STATE[stepper_e_rotation_distance]}" ]]; then
+            e_info="${WIZARD_STATE[stepper_e_rotation_distance]}mm"
+        else
+            e_info="not set"
+        fi
+        print_menu_item "4" "$e_status" "Rotation Distance" "$e_info"
+
+        print_separator
+        print_action_item "B" "Back"
+        print_footer
+
+        echo -en "${BYELLOW}Select option${NC}: "
+        read -r choice
+
+        case "$choice" in
+            1) menu_extruder_type ;;
+            2) menu_extruder_driver ;;
+            3)
+                if [[ "$has_toolboard" == "yes" ]]; then
+                    # Assign on toolboard
+                    save_state
+                    python3 "${SCRIPT_DIR}/setup-hardware.py" --toolboard-motor
+                    load_hardware_state
+                elif [[ -n "${WIZARD_STATE[board]}" ]]; then
+                    # Assign on mainboard - call motor port assignment for extruder only
+                    save_state
+                    python3 "${SCRIPT_DIR}/setup-hardware.py" --extruder-motor
+                    load_hardware_state
+                fi
+                ;;
+            4) menu_axis_config "e" "Extruder" "extruder" ;;
+            [bB]) return ;;
+            *) ;;
+        esac
+    done
+}
+
+menu_extruder_type() {
+    clear_screen
+    print_header "Extruder Type"
+
+    print_box_line "${BWHITE}Select Extruder Type:${NC}"
+    print_empty_line
+    print_box_line "Direct Drive: Motor mounted on toolhead (Voron, Stealthburner)"
+    print_box_line "Bowden: Motor separate, filament tube to hotend (Ender-style)"
+    print_empty_line
+    
+    local dd_status=$([[ "${WIZARD_STATE[extruder_type]}" == "direct-drive" ]] && echo "done" || echo "")
+    local bd_status=$([[ "${WIZARD_STATE[extruder_type]}" == "bowden" ]] && echo "done" || echo "")
+    
+    print_menu_item "1" "$dd_status" "Direct Drive"
+    print_menu_item "2" "$bd_status" "Bowden"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select type${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) WIZARD_STATE[extruder_type]="direct-drive"; save_state ;;
+        2) WIZARD_STATE[extruder_type]="bowden"; save_state ;;
+        [bB]) return ;;
+        *) ;;
+    esac
+}
+
+menu_extruder_driver() {
+    clear_screen
+    print_header "Extruder Driver Type"
+
+    print_box_line "${BWHITE}Select stepper driver for Extruder:${NC}"
+    print_empty_line
+
+    local current="${WIZARD_STATE[driver_E]}"
+    local status_2209=$([[ "$current" == "TMC2209" ]] && echo "done" || echo "")
+    local status_2240=$([[ "$current" == "TMC2240" ]] && echo "done" || echo "")
+    local status_5160=$([[ "$current" == "TMC5160" ]] && echo "done" || echo "")
+    local status_2208=$([[ "$current" == "TMC2208" ]] && echo "done" || echo "")
+    local status_a4988=$([[ "$current" == "A4988" ]] && echo "done" || echo "")
+
+    print_menu_item "1" "$status_2209" "TMC2209 (UART)" "Most common, StallGuard"
+    print_menu_item "2" "$status_2240" "TMC2240 (SPI)" "High performance"
+    print_menu_item "3" "$status_5160" "TMC5160 (SPI)" "High power"
+    print_menu_item "4" "$status_2208" "TMC2208 (Standalone)" "No UART"
+    print_menu_item "5" "$status_a4988" "A4988 (Basic)" "Legacy driver"
+    print_separator
+    print_action_item "B" "Back"
+    print_footer
+
+    echo -en "${BYELLOW}Select driver${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) WIZARD_STATE[driver_E]="TMC2209" ;;
+        2) WIZARD_STATE[driver_E]="TMC2240" ;;
+        3) WIZARD_STATE[driver_E]="TMC5160" ;;
+        4) WIZARD_STATE[driver_E]="TMC2208" ;;
+        5) WIZARD_STATE[driver_E]="A4988" ;;
+        [bB]) return ;;
+        *) return ;;
+    esac
+    save_state
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # HOTEND CONFIGURATION (thermistor, heater, ports)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -4094,22 +4266,18 @@ menu_hotend() {
         clear_screen
         print_header "Hotend Configuration"
 
-        print_box_line "${BWHITE}Hotend Settings:${NC}"
+        print_box_line "${BWHITE}Hotend Settings (Thermistor + Heater):${NC}"
         print_empty_line
 
-        # 1. Extruder type (direct drive / bowden)
-        local ext_status=$([[ -n "${WIZARD_STATE[extruder_type]}" ]] && echo "done" || echo "")
-        print_menu_item "1" "$ext_status" "Extruder Type" "${WIZARD_STATE[extruder_type]:-not set}"
-
-        # 2. Thermistor type
+        # 1. Thermistor type
         local therm_status=$([[ -n "${WIZARD_STATE[hotend_thermistor]}" ]] && echo "done" || echo "")
         local therm_info="${WIZARD_STATE[hotend_thermistor]:-not set}"
         if [[ -n "${WIZARD_STATE[hotend_pullup_resistor]}" ]]; then
             therm_info="${therm_info} (pullup: ${WIZARD_STATE[hotend_pullup_resistor]}Ω)"
         fi
-        print_menu_item "2" "$therm_status" "Thermistor Type" "${therm_info}"
+        print_menu_item "1" "$therm_status" "Thermistor Type" "${therm_info}"
 
-        # 3. Port assignment (heater + thermistor)
+        # 2-3. Port assignment (heater + thermistor)
         print_empty_line
         print_box_line "${BWHITE}Port Assignment:${NC}"
 
@@ -4124,39 +4292,38 @@ menu_hotend() {
                 heater_status="done"
                 heater_info="${HARDWARE_STATE[heater_extruder]}"
             fi
-            print_menu_item "3" "$heater_status" "Heater Port" "$heater_info"
+            print_menu_item "2" "$heater_status" "Heater Port" "$heater_info"
 
             # Show thermistor port - check both mainboard and toolboard assignments
-            local therm_status=""
-            local therm_info="not assigned"
+            local therm_port_status=""
+            local therm_port_info="not assigned"
             if [[ -n "${HARDWARE_STATE[toolboard_thermistor_extruder]}" ]]; then
-                therm_status="done"
-                therm_info="toolboard:${HARDWARE_STATE[toolboard_thermistor_extruder]}"
+                therm_port_status="done"
+                therm_port_info="toolboard:${HARDWARE_STATE[toolboard_thermistor_extruder]}"
             elif [[ -n "${HARDWARE_STATE[thermistor_extruder]}" ]]; then
-                therm_status="done"
-                therm_info="${HARDWARE_STATE[thermistor_extruder]}"
+                therm_port_status="done"
+                therm_port_info="${HARDWARE_STATE[thermistor_extruder]}"
             fi
-            print_menu_item "4" "$therm_status" "Thermistor Port" "$therm_info"
+            print_menu_item "3" "$therm_port_status" "Thermistor Port" "$therm_port_info"
         else
             print_box_line "${YELLOW}Select a main board first to assign ports${NC}"
         fi
 
         print_separator
-        print_action_item "B" "Back to Main Menu"
+        print_action_item "B" "Back"
         print_footer
 
         echo -en "${BYELLOW}Select option${NC}: "
         read -r choice
 
         case "$choice" in
-            1) menu_extruder_type ;;
-            2) menu_hotend_thermistor ;;
-            3)
+            1) menu_hotend_thermistor ;;
+            2)
                 if [[ -n "${WIZARD_STATE[board]}" ]]; then
                     menu_hotend_heater_port
                 fi
                 ;;
-            4)
+            3)
                 if [[ -n "${WIZARD_STATE[board]}" ]]; then
                     menu_hotend_thermistor_port
                 fi
@@ -4165,28 +4332,6 @@ menu_hotend() {
             *) ;;
         esac
     done
-}
-
-menu_extruder_type() {
-    clear_screen
-    print_header "Extruder Type"
-
-    print_box_line "${BWHITE}Select Extruder Type:${NC}"
-    print_menu_item "1" "" "Direct Drive"
-    print_menu_item "2" "" "Bowden"
-    print_separator
-    print_action_item "B" "Back"
-    print_footer
-
-    echo -en "${BYELLOW}Select type${NC}: "
-    read -r choice
-
-    case "$choice" in
-        1) WIZARD_STATE[extruder_type]="direct-drive" ;;
-        2) WIZARD_STATE[extruder_type]="bowden" ;;
-        [bB]) return ;;
-        *) ;;
-    esac
 }
 
 menu_hotend_heater_port() {

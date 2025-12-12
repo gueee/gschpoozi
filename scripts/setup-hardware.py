@@ -855,12 +855,18 @@ def assign_motor_ports(board: Dict, functions: List[str]):
             if current in motor_ports:
                 port_info = f" ({motor_ports[current].get('label', '')})"
             
+            # Show direction inversion status
+            dir_invert = state.port_assignments.get(f"{func}_dir_invert", False)
+            if dir_invert:
+                port_info += f" {Colors.YELLOW}[DIR INV]{Colors.NC}"
+            
             status = "done" if current != "not assigned" else ""
             print_menu_item(str(num), func.replace('_', ' ').title(), f"{current}{port_info}", status)
             num += 1
         
         print_separator()
         print_action("A", "Set ALL to sequential defaults")
+        print_action("C", "Clear a motor assignment")
         print_action("D", "Done - Save assignments")
         print_action("B", "Back without saving")
         print_footer()
@@ -877,6 +883,65 @@ def assign_motor_ports(board: Dict, functions: List[str]):
             for i, func in enumerate(functions):
                 if i < len(port_names):
                     state.port_assignments[func] = port_names[i]
+                    # Clear any existing direction inversion when auto-assigning
+                    if f"{func}_dir_invert" in state.port_assignments:
+                        del state.port_assignments[f"{func}_dir_invert"]
+            continue
+        elif choice.lower() == 'c':
+            # Clear a motor assignment - show sub-menu
+            clear_screen()
+            print_header("Clear Motor Assignment")
+            print_info("Select which motor assignment to clear:")
+            print_info("")
+            
+            clear_num = 1
+            clearable = []
+            for func in functions:
+                current = state.port_assignments.get(func, "not assigned")
+                if current != "not assigned":
+                    dir_invert = state.port_assignments.get(f"{func}_dir_invert", False)
+                    inv_str = " [DIR INV]" if dir_invert else ""
+                    print_menu_item(str(clear_num), func.replace('_', ' ').title(), f"{current}{inv_str}", "done")
+                    clearable.append(func)
+                    clear_num += 1
+            
+            if not clearable:
+                print_info(f"{Colors.YELLOW}No assignments to clear.{Colors.NC}")
+                wait_for_key()
+                continue
+            
+            print_separator()
+            print_action("X", "Clear ALL motor assignments")
+            print_action("B", "Back")
+            print_footer()
+            
+            clear_choice = prompt("Select to clear").strip()
+            
+            if clear_choice.lower() == 'b':
+                continue
+            elif clear_choice.lower() == 'x':
+                # Clear all motor assignments
+                for func in functions:
+                    if func in state.port_assignments:
+                        del state.port_assignments[func]
+                    if f"{func}_dir_invert" in state.port_assignments:
+                        del state.port_assignments[f"{func}_dir_invert"]
+                print(f"\n{Colors.GREEN}All motor assignments cleared.{Colors.NC}")
+                wait_for_key()
+                continue
+            
+            try:
+                clear_idx = int(clear_choice) - 1
+                if 0 <= clear_idx < len(clearable):
+                    func_to_clear = clearable[clear_idx]
+                    if func_to_clear in state.port_assignments:
+                        del state.port_assignments[func_to_clear]
+                    if f"{func_to_clear}_dir_invert" in state.port_assignments:
+                        del state.port_assignments[f"{func_to_clear}_dir_invert"]
+                    print(f"\n{Colors.GREEN}{func_to_clear} assignment cleared.{Colors.NC}")
+                    wait_for_key()
+            except ValueError:
+                pass
             continue
         
         try:
@@ -892,37 +957,48 @@ def select_port_for_function(function: str, ports: Dict, port_type: str):
     clear_screen()
     print_header(f"Select Port for: {function.replace('_', ' ').title()}")
     
+    # Show current assignment if any
+    current_port = state.port_assignments.get(function, "")
+    current_dir_invert = state.port_assignments.get(f"{function}_dir_invert", False)
+    if current_port:
+        invert_str = " (DIR INVERTED)" if current_dir_invert else ""
+        print_info(f"Current: {Colors.CYAN}{current_port}{invert_str}{Colors.NC}")
+        print_info("")
+    
     print_info(f"Available {port_type} ports:")
     print_info("")
     
     num = 1
     port_list = list(ports.keys())
     
-    # Show which ports are already used
-    used_ports = {v for v in state.port_assignments.values()}
+    # Build list of used ports and who uses them
+    used_by_map = {}
+    for func, assigned_port in state.port_assignments.items():
+        # Skip modifier entries and the current function
+        if func.endswith('_dir_invert') or func.endswith('_modifiers'):
+            continue
+        if assigned_port and func != function:
+            used_by_map[assigned_port] = func
     
     for port_name in port_list:
         port = ports[port_name]
         label = port.get('label', '')
         
-        # Check if port is already used
-        used_by = None
-        for func, assigned_port in state.port_assignments.items():
-            if assigned_port == port_name and func != function:
-                used_by = func
-                break
+        # Check if port is already used by another function
+        used_by = used_by_map.get(port_name)
         
         if used_by:
             status_text = f"{Colors.YELLOW}(used by {used_by}){Colors.NC}"
         else:
             status_text = ""
         
-        current = state.port_assignments.get(function, "")
-        status = "done" if current == port_name else ""
+        status = "done" if current_port == port_name else ""
         print_menu_item(str(num), f"{port_name} - {label}", status_text, status)
         num += 1
     
     print_separator()
+    if current_port:
+        print_action("C", "Clear assignment")
     print_action("B", "Back")
     print_footer()
     
@@ -931,10 +1007,57 @@ def select_port_for_function(function: str, ports: Dict, port_type: str):
     if choice.lower() == 'b':
         return
     
+    if choice.lower() == 'c' and current_port:
+        # Clear the assignment
+        if function in state.port_assignments:
+            del state.port_assignments[function]
+        if f"{function}_dir_invert" in state.port_assignments:
+            del state.port_assignments[f"{function}_dir_invert"]
+        print(f"\n{Colors.GREEN}Assignment cleared for {function}{Colors.NC}")
+        wait_for_key()
+        return
+    
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(port_list):
-            state.port_assignments[function] = port_list[idx]
+            selected_port = port_list[idx]
+            
+            # Check if port is already used by another function
+            used_by = used_by_map.get(selected_port)
+            if used_by:
+                print(f"\n{Colors.YELLOW}⚠️  {selected_port} is already assigned to '{used_by}'{Colors.NC}")
+                print(f"{Colors.WHITE}   Clear that assignment first, or select a different port.{Colors.NC}")
+                wait_for_key()
+                return
+            
+            # Assign the port
+            state.port_assignments[function] = selected_port
+            
+            # For motor/stepper functions, ask about direction inversion
+            if port_type == "motor" and (function.startswith('stepper') or function == 'extruder'):
+                print_info("")
+                print_info(f"{Colors.BWHITE}Direction Pin Inversion:{Colors.NC}")
+                print_info("")
+                print_info("If your motor runs the wrong direction, you can invert the")
+                print_info("direction pin here instead of rewiring or running discovery.")
+                print_info("")
+                print_info(f"  {Colors.WHITE}N){Colors.NC} Normal direction (default)")
+                print_info(f"  {Colors.WHITE}I){Colors.NC} Invert direction pin")
+                print_info("")
+                
+                dir_choice = prompt("Direction [N/i]", "n").strip().lower()
+                if dir_choice == 'i':
+                    state.port_assignments[f"{function}_dir_invert"] = True
+                    print(f"\n{Colors.GREEN}✓ {function} assigned to {selected_port} (DIR INVERTED){Colors.NC}")
+                else:
+                    # Remove any existing inversion setting
+                    if f"{function}_dir_invert" in state.port_assignments:
+                        del state.port_assignments[f"{function}_dir_invert"]
+                    print(f"\n{Colors.GREEN}✓ {function} assigned to {selected_port}{Colors.NC}")
+            else:
+                print(f"\n{Colors.GREEN}✓ {function} assigned to {selected_port}{Colors.NC}")
+            
+            wait_for_key()
     except ValueError:
         pass
 
@@ -2800,6 +2923,8 @@ def main():
     parser.add_argument('--board', action='store_true', help='Board setup only')
     parser.add_argument('--toolboard', action='store_true', help='Toolboard setup only')
     parser.add_argument('--motors', action='store_true', help='Motor port assignment only')
+    parser.add_argument('--extruder-motor', action='store_true', help='Assign extruder motor port on mainboard')
+    parser.add_argument('--toolboard-motor', action='store_true', help='Assign extruder motor port on toolboard')
     parser.add_argument('--heater-extruder', action='store_true', help='Assign hotend heater port')
     parser.add_argument('--thermistor-extruder', action='store_true', help='Assign hotend thermistor port')
     parser.add_argument('--heater-bed', action='store_true', help='Assign bed heater port')
@@ -2860,6 +2985,36 @@ def main():
         if assign_motor_ports(board, functions):
             state.save()
             print(f"\n{Colors.GREEN}Motor port assignments saved.{Colors.NC}")
+    elif getattr(args, 'extruder_motor', False):
+        # Assign extruder motor port on mainboard
+        if not state.board_id:
+            print(f"{Colors.RED}Error: No board selected. Run setup-hardware.py --board first.{Colors.NC}")
+            sys.exit(1)
+        boards = load_available_boards()
+        board = boards.get(state.board_id)
+        if not board:
+            print(f"{Colors.RED}Error: Board '{state.board_id}' not found.{Colors.NC}")
+            sys.exit(1)
+        motor_ports = board.get('motor_ports', {})
+        if motor_ports:
+            select_port_for_function('extruder', motor_ports, 'motor')
+            state.save()
+            print(f"\n{Colors.GREEN}Extruder motor port saved.{Colors.NC}")
+        else:
+            print(f"{Colors.RED}Error: No motor ports defined for this board.{Colors.NC}")
+    elif getattr(args, 'toolboard_motor', False):
+        # Assign extruder motor port on toolboard
+        if not state.toolboard_id:
+            print(f"{Colors.RED}Error: No toolboard selected. Run setup-hardware.py --toolboard first.{Colors.NC}")
+            sys.exit(1)
+        toolboards = load_available_toolboards()
+        toolboard = toolboards.get(state.toolboard_id)
+        if not toolboard:
+            print(f"{Colors.RED}Error: Toolboard '{state.toolboard_id}' not found.{Colors.NC}")
+            sys.exit(1)
+        # Toolboard motor assignment
+        assign_toolboard_motor(toolboard)
+        state.save()
     elif getattr(args, 'heater_extruder', False):
         if not state.board_id:
             print(f"{Colors.RED}Error: No board selected.{Colors.NC}")

@@ -24,7 +24,7 @@ gschpoozi is a complete Klipper installation and configuration system. You only 
 
 ```bash
 # 1. Clone the repository
-cd ~ && git clone https://github.com/gueee/gschpoozi.git
+cd ~ && git clone https://github.com/gm-tc-collaborators/gschpoozi.git
 
 # 2. Run the configuration wizard
 ~/gschpoozi/scripts/configure.sh
@@ -54,7 +54,7 @@ That's it! The script handles everything including Klipper installation if neede
 2. **Clone gschpoozi:**
    ```bash
    cd ~
-   git clone https://github.com/gueee/gschpoozi.git
+   git clone https://github.com/gm-tc-collaborators/gschpoozi.git
    ```
 
 3. **Run the wizard:**
@@ -879,7 +879,7 @@ To update a single setting, just run the wizard and navigate to that option - pr
 
 ## Getting Help
 
-- **GitHub Issues**: [github.com/gueee/gschpoozi/issues](https://github.com/gueee/gschpoozi/issues)
+- **GitHub Issues**: [github.com/gm-tc-collaborators/gschpoozi/issues](https://github.com/gm-tc-collaborators/gschpoozi/issues)
 - **Klipper Documentation**: [klipper3d.org](https://www.klipper3d.org)
 - **Klipper Discord**: General Klipper help
 

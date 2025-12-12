@@ -6,7 +6,7 @@ Generates Klipper config files from wizard state and hardware assignments
 Usage:
     ./generate-config.py --output-dir ~/printer_data/config/gschpoozi
 
-https://github.com/gueee/gschpoozi
+https://github.com/gm-tc-collaborators/gschpoozi
 """
 
 import json

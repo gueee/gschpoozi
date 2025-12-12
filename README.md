@@ -36,7 +36,7 @@ Inspired by [Klippain](https://github.com/Frix-x/klippain), but built from the g
 
 ```bash
 # 1. Clone the repository
-cd ~ && git clone https://github.com/gueee/gschpoozi.git
+cd ~ && git clone https://github.com/gm-tc-collaborators/gschpoozi.git
 
 # 2. Run the configuration wizard
 ~/gschpoozi/scripts/configure.sh

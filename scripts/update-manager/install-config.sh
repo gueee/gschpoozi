@@ -7,7 +7,7 @@
 #   ./install-config.sh                    # Normal install
 #   ./install-config.sh --backup-only      # Only create backup
 #
-# https://github.com/gueee/gschpoozi
+# https://github.com/gm-tc-collaborators/gschpoozi
 #
 
 set -eo pipefail

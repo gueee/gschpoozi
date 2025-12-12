@@ -3,7 +3,7 @@
 # Moonraker Update Script - Entry point for Moonraker Update Manager
 # This script is called by Moonraker when updates are detected.
 #
-# https://github.com/gueee/gschpoozi
+# https://github.com/gm-tc-collaborators/gschpoozi
 #
 
 set -eo pipefail

@@ -9,7 +9,7 @@ Usage:
     ./setup-hardware.py --toolboard        # Toolboard setup only
     ./setup-hardware.py --list-boards      # List available boards
 
-https://github.com/gueee/gschpoozi
+https://github.com/gm-tc-collaborators/gschpoozi
 """
 
 import json

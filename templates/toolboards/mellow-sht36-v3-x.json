@@ -3,6 +3,7 @@
   "name": "Mellow SHT36 v3.x",
   "manufacturer": "Mellow",
   "source": "Extracted from Klippain (GPL-3.0)",
+  "connections": ["USB", "CAN"],
   "motor_ports": {},
   "heater_ports": {
     "HE0": {

@@ -587,7 +587,10 @@ def assign_mcu_serials():
         print_menu_item("1", "Main MCU (USB)", mcu_display, mcu_status)
         
         if has_toolboard:
-            tb_connection = toolboard.get('connection', 'USB').upper() if toolboard else 'USB'
+            # Use stored connection type from state, or default from board definition
+            tb_connection = state.toolboard_connection.upper() if state.toolboard_connection else (
+                toolboard.get('connection', 'USB').upper() if toolboard else 'USB'
+            )
             
             if tb_connection == 'CAN':
                 tb_status = "done" if state.toolboard_canbus_uuid else ""
@@ -621,7 +624,10 @@ def assign_mcu_serials():
             if result:
                 state.mcu_serial = result
         elif choice == '2' and has_toolboard:
-            tb_connection = toolboard.get('connection', 'USB').upper() if toolboard else 'USB'
+            # Use stored connection type from state
+            tb_connection = state.toolboard_connection.upper() if state.toolboard_connection else (
+                toolboard.get('connection', 'USB').upper() if toolboard else 'USB'
+            )
             if tb_connection == 'CAN':
                 result = select_mcu_serial("toolboard", "can")
                 if result:
@@ -649,6 +655,7 @@ class HardwareState:
         self.board_name: Optional[str] = None
         self.toolboard_id: Optional[str] = None
         self.toolboard_name: Optional[str] = None
+        self.toolboard_connection: Optional[str] = None  # 'USB' or 'CAN'
         self.port_assignments: Dict[str, str] = {}  # function -> port
         self.toolboard_assignments: Dict[str, str] = {}
         # MCU serial IDs
@@ -665,6 +672,7 @@ class HardwareState:
             'board_name': self.board_name,
             'toolboard_id': self.toolboard_id,
             'toolboard_name': self.toolboard_name,
+            'toolboard_connection': self.toolboard_connection,
             'port_assignments': self.port_assignments,
             'toolboard_assignments': self.toolboard_assignments,
             'mcu_serial': self.mcu_serial,
@@ -688,6 +696,7 @@ class HardwareState:
             self.board_name = data.get('board_name')
             self.toolboard_id = data.get('toolboard_id')
             self.toolboard_name = data.get('toolboard_name')
+            self.toolboard_connection = data.get('toolboard_connection')
             self.port_assignments = data.get('port_assignments', {})
             self.toolboard_assignments = data.get('toolboard_assignments', {})
             self.mcu_serial = data.get('mcu_serial')
@@ -772,6 +781,63 @@ def select_board() -> Optional[Dict]:
         except ValueError:
             pass
 
+
+def get_board_connections(board: Dict) -> List[str]:
+    """Get list of supported connection types for a board.
+    
+    Handles both new 'connections' array and legacy 'connection' string.
+    """
+    if not board:
+        return ['USB']
+    
+    # New format: connections array
+    connections = board.get('connections')
+    if connections:
+        return connections
+    
+    # Legacy format: single connection string
+    conn = board.get('connection', 'USB')
+    return [conn]
+
+
+def select_toolboard_connection(board: Dict) -> Optional[str]:
+    """Prompt user to select connection type if board supports multiple."""
+    connections = get_board_connections(board)
+    
+    if len(connections) == 1:
+        return connections[0]
+    
+    clear_screen()
+    print_header(f"Connection Type for {board.get('name', 'Toolboard')}")
+    
+    print_info(f"{Colors.WHITE}This board supports multiple connection types.{Colors.NC}")
+    print_info(f"{Colors.WHITE}Select how your toolboard is connected:{Colors.NC}")
+    print_info("")
+    
+    for i, conn in enumerate(connections, 1):
+        desc = "Serial over USB cable" if conn == "USB" else "CAN bus network"
+        print_menu_item(str(i), conn, desc, "")
+    
+    print_separator()
+    print_action("B", "Back")
+    print_footer()
+    
+    choice = prompt("Select connection type").strip()
+    
+    if choice.lower() == 'b':
+        return None
+    
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(connections):
+            return connections[idx]
+    except ValueError:
+        pass
+    
+    # Default to first option
+    return connections[0]
+
+
 def select_toolboard() -> Optional[Dict]:
     """Interactive toolboard selection menu."""
     toolboards = load_available_toolboards()
@@ -798,8 +864,10 @@ def select_toolboard() -> Optional[Dict]:
         if toolboards:
             for board_id, board in toolboards.items():
                 status = "done" if state.toolboard_id == board_id else ""
-                conn = board.get('connection', 'USB')
-                print_menu_item(str(num), board['name'], f"({conn})", status)
+                # Show all supported connection types
+                connections = get_board_connections(board)
+                conn_display = "/".join(connections)
+                print_menu_item(str(num), board['name'], f"({conn_display})", status)
                 board_list.append((board_id, board))
                 num += 1
         else:
@@ -822,11 +890,23 @@ def select_toolboard() -> Optional[Dict]:
                 state.toolboard_name = board['name'] if board else "None"
                 
                 if board:
+                    # Prompt for connection type if multiple options
+                    connections = get_board_connections(board)
+                    if len(connections) > 1:
+                        conn = select_toolboard_connection(board)
+                        if conn is None:
+                            continue  # User pressed back, return to board selection
+                        state.toolboard_connection = conn
+                    else:
+                        state.toolboard_connection = connections[0]
+                    
                     # Load default assignments for toolboard
                     defaults = board.get('default_assignments', {})
                     for func, port in defaults.items():
                         if func not in state.toolboard_assignments:
                             state.toolboard_assignments[func] = port
+                else:
+                    state.toolboard_connection = None
                 
                 return board
         except ValueError:
@@ -2866,9 +2946,8 @@ def main_menu():
             mcu_status = "done" if state.mcu_serial else ""
             tb_serial_status = ""
             if has_toolboard:
-                toolboards = load_available_toolboards()
-                tb = toolboards.get(state.toolboard_id)
-                tb_conn = tb.get('connection', 'USB').upper() if tb else 'USB'
+                # Use stored connection type from state
+                tb_conn = state.toolboard_connection.upper() if state.toolboard_connection else 'USB'
                 if tb_conn == 'CAN':
                     tb_serial_status = "done" if state.toolboard_canbus_uuid else ""
                 else:

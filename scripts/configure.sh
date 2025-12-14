@@ -2088,10 +2088,13 @@ try:
     board_name = data.get('board_name') or ''
     toolboard_id = data.get('toolboard_id') or ''
     toolboard_name = data.get('toolboard_name') or ''
+    toolboard_connection = data.get('toolboard_connection') or ''
     print(f\"WIZARD_STATE[board]='{board_id}'\")
     print(f\"WIZARD_STATE[board_name]='{board_name}'\")
     print(f\"WIZARD_STATE[toolboard]='{toolboard_id}'\")
     print(f\"WIZARD_STATE[toolboard_name]='{toolboard_name}'\")
+    if toolboard_connection:
+        print(f\"WIZARD_STATE[toolboard_connection]='{toolboard_connection.lower()}'\")
 
     # Load port_assignments into HARDWARE_STATE
     port_assignments = data.get('port_assignments', {})
@@ -2158,6 +2161,7 @@ init_state() {
         [board_name]=""
         [toolboard]=""
         [toolboard_name]=""
+        [toolboard_connection]=""
         [kinematics]=""
         [z_stepper_count]=""
         [leveling_method]=""

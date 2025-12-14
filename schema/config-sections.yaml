@@ -1,0 +1,442 @@
+# config-sections.yaml
+# Jinja2 templates for generating Klipper configuration from wizard state
+# Version: 2.0
+
+# Template syntax:
+#   {{ variable }} - Insert value from wizard state
+#   {% if condition %} - Conditional block
+#   {# comment #} - Template comment
+#   Filters: | default(value), | int, | float, | lower
+
+# -----------------------------------------------------------------------------
+# MCU Configuration
+# -----------------------------------------------------------------------------
+mcu:
+  main:
+    template: |
+      [mcu]
+      serial: {{ mcu.main.serial }}
+      {% if mcu.main.restart_method != 'command' %}
+      restart_method: {{ mcu.main.restart_method }}
+      {% endif %}
+
+  toolboard:
+    condition: "mcu.toolboard.enabled"
+    template: |
+      [mcu toolboard]
+      {% if mcu.toolboard.connection_type == 'CAN' %}
+      canbus_uuid: {{ mcu.toolboard.canbus_uuid }}
+      {% else %}
+      serial: {{ mcu.toolboard.serial }}
+      {% endif %}
+
+  host:
+    condition: "mcu.host.enabled"
+    template: |
+      [mcu rpi]
+      serial: /tmp/klipper_host_mcu
+
+# -----------------------------------------------------------------------------
+# Printer Settings
+# -----------------------------------------------------------------------------
+printer:
+  template: |
+    [printer]
+    kinematics: {{ printer.kinematics }}
+    max_velocity: {{ printer.max_velocity | default(300) }}
+    max_accel: {{ printer.max_accel | default(3000) }}
+    max_z_velocity: {{ printer.max_z_velocity | default(15) }}
+    max_z_accel: {{ printer.max_z_accel | default(350) }}
+    {% if printer.square_corner_velocity %}
+    square_corner_velocity: {{ printer.square_corner_velocity }}
+    {% endif %}
+    {% if printer.minimum_cruise_ratio %}
+    minimum_cruise_ratio: {{ printer.minimum_cruise_ratio }}
+    {% endif %}
+
+# -----------------------------------------------------------------------------
+# Steppers
+# -----------------------------------------------------------------------------
+stepper_x:
+  template: |
+    [stepper_x]
+    step_pin: {{ board.pins[stepper_x.motor_port].step }}
+    dir_pin: {% if stepper_x.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_x.motor_port].dir }}
+    enable_pin: !{{ board.pins[stepper_x.motor_port].enable }}
+    rotation_distance: {{ stepper_x.belt_pitch * stepper_x.pulley_teeth }}
+    microsteps: {{ stepper_x.microsteps | default(32) }}
+    full_steps_per_rotation: {{ stepper_x.full_steps_per_rotation | default(200) }}
+    {% if stepper_x.endstop_type == 'sensorless' %}
+    endstop_pin: tmc2209_stepper_x:virtual_endstop
+    {% else %}
+    endstop_pin: {{ pin_config[stepper_x.endstop_config] }}{{ board.pins[stepper_x.endstop_port].signal }}
+    {% endif %}
+    position_endstop: {{ stepper_x.position_endstop }}
+    position_min: {{ stepper_x.position_min | default(0) }}
+    position_max: {{ stepper_x.position_max | default(printer.bed_size_x) }}
+    homing_speed: {{ stepper_x.homing_speed | default(50) }}
+    homing_retract_dist: {{ stepper_x.homing_retract_dist | default(5) }}
+    {% if stepper_x.second_homing_speed %}
+    second_homing_speed: {{ stepper_x.second_homing_speed }}
+    {% endif %}
+
+stepper_y:
+  template: |
+    [stepper_y]
+    step_pin: {{ board.pins[stepper_y.motor_port].step }}
+    dir_pin: {% if stepper_y.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_y.motor_port].dir }}
+    enable_pin: !{{ board.pins[stepper_y.motor_port].enable }}
+    rotation_distance: {{ stepper_y.belt_pitch * stepper_y.pulley_teeth }}
+    microsteps: {{ stepper_y.microsteps | default(32) }}
+    full_steps_per_rotation: {{ stepper_y.full_steps_per_rotation | default(200) }}
+    {% if stepper_y.endstop_type == 'sensorless' %}
+    endstop_pin: tmc2209_stepper_y:virtual_endstop
+    {% else %}
+    endstop_pin: {{ pin_config[stepper_y.endstop_config] }}{{ board.pins[stepper_y.endstop_port].signal }}
+    {% endif %}
+    position_endstop: {{ stepper_y.position_endstop }}
+    position_min: {{ stepper_y.position_min | default(0) }}
+    position_max: {{ stepper_y.position_max | default(printer.bed_size_y) }}
+    homing_speed: {{ stepper_y.homing_speed | default(50) }}
+    homing_retract_dist: {{ stepper_y.homing_retract_dist | default(5) }}
+
+stepper_z:
+  template: |
+    [stepper_z]
+    step_pin: {{ board.pins[stepper_z.motor_port].step }}
+    dir_pin: {% if stepper_z.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_z.motor_port].dir }}
+    enable_pin: !{{ board.pins[stepper_z.motor_port].enable }}
+    {% if stepper_z.drive_type == 'leadscrew' %}
+    rotation_distance: {{ stepper_z.leadscrew_pitch }}
+    {% else %}
+    rotation_distance: {{ stepper_z.belt_pitch * stepper_z.pulley_teeth }}
+    {% endif %}
+    {% if stepper_z.gear_ratio %}
+    gear_ratio: {{ stepper_z.gear_ratio }}
+    {% endif %}
+    microsteps: {{ stepper_z.microsteps | default(32) }}
+    full_steps_per_rotation: {{ stepper_z.full_steps_per_rotation | default(200) }}
+    {% if stepper_z.endstop_type == 'probe' %}
+    endstop_pin: probe:z_virtual_endstop
+    {% elif stepper_z.endstop_type == 'physical_mainboard' %}
+    endstop_pin: {{ pin_config[stepper_z.switch_config] }}{{ board.pins[stepper_z.endstop_port].signal }}
+    {% elif stepper_z.endstop_type == 'physical_toolboard' %}
+    endstop_pin: toolboard:{{ pin_config[stepper_z.switch_config] }}{{ toolboard.pins[stepper_z.toolboard_endstop_port].signal }}
+    {% endif %}
+    position_min: {{ stepper_z.position_min | default(-5) }}
+    position_max: {{ stepper_z.position_max | default(printer.bed_size_z) }}
+    homing_speed: {{ stepper_z.homing_speed | default(10) }}
+    homing_retract_dist: {{ stepper_z.homing_retract_dist | default(0) }}
+
+# -----------------------------------------------------------------------------
+# TMC Drivers
+# -----------------------------------------------------------------------------
+tmc_stepper_x:
+  template: |
+    [{{ stepper_x.driver_type | lower }} stepper_x]
+    uart_pin: {{ board.pins[stepper_x.motor_port].uart }}
+    run_current: {{ stepper_x.run_current }}
+    interpolate: {{ stepper_x.interpolate | default(false) | lower }}
+    {% if stepper_x.endstop_type == 'sensorless' %}
+    diag_pin: ^{{ board.pins[stepper_x.motor_port].diag }}
+    driver_SGTHRS: {{ stepper_x.driver_SGTHRS | default(70) }}
+    {% endif %}
+
+tmc_stepper_y:
+  template: |
+    [{{ stepper_y.driver_type | lower }} stepper_y]
+    uart_pin: {{ board.pins[stepper_y.motor_port].uart }}
+    run_current: {{ stepper_y.run_current }}
+    interpolate: {{ stepper_y.interpolate | default(false) | lower }}
+    {% if stepper_y.endstop_type == 'sensorless' %}
+    diag_pin: ^{{ board.pins[stepper_y.motor_port].diag }}
+    driver_SGTHRS: {{ stepper_y.driver_SGTHRS | default(70) }}
+    {% endif %}
+
+tmc_stepper_z:
+  template: |
+    [{{ stepper_z.driver_type | lower }} stepper_z]
+    uart_pin: {{ board.pins[stepper_z.motor_port].uart }}
+    run_current: {{ stepper_z.run_current | default(0.8) }}
+    interpolate: {{ stepper_z.interpolate | default(false) | lower }}
+
+# -----------------------------------------------------------------------------
+# Extruder
+# -----------------------------------------------------------------------------
+extruder:
+  template: |
+    [extruder]
+    {% if extruder.location == 'toolboard' %}
+    step_pin: toolboard:{{ toolboard.pins[extruder.motor_port_toolboard].step }}
+    dir_pin: {% if extruder.dir_pin_inverted %}!{% endif %}toolboard:{{ toolboard.pins[extruder.motor_port_toolboard].dir }}
+    enable_pin: !toolboard:{{ toolboard.pins[extruder.motor_port_toolboard].enable }}
+    {% else %}
+    step_pin: {{ board.pins[extruder.motor_port_mainboard].step }}
+    dir_pin: {% if extruder.dir_pin_inverted %}!{% endif %}{{ board.pins[extruder.motor_port_mainboard].dir }}
+    enable_pin: !{{ board.pins[extruder.motor_port_mainboard].enable }}
+    {% endif %}
+    rotation_distance: {{ extruder_presets[extruder.extruder_type].rotation_distance }}
+    gear_ratio: {{ extruder_presets[extruder.extruder_type].gear_ratio }}
+    microsteps: {{ extruder.microsteps | default(16) }}
+    full_steps_per_rotation: {{ extruder.full_steps_per_rotation | default(200) }}
+    nozzle_diameter: {{ extruder.nozzle_diameter | default(0.4) }}
+    filament_diameter: {{ extruder.filament_diameter | default(1.75) }}
+    {% if extruder.heater_location == 'toolboard' %}
+    heater_pin: toolboard:{{ toolboard.pins[extruder.heater_port_toolboard].signal }}
+    {% else %}
+    heater_pin: {{ board.pins[extruder.heater_port_mainboard].signal }}
+    {% endif %}
+    max_power: {{ extruder.max_power | default(1.0) }}
+    {% if extruder.sensor_location == 'toolboard' %}
+    sensor_pin: toolboard:{{ toolboard.pins[extruder.sensor_port_toolboard].signal }}
+    {% else %}
+    sensor_pin: {{ board.pins[extruder.sensor_port_mainboard].signal }}
+    {% endif %}
+    sensor_type: {{ extruder.sensor_type }}
+    {% if extruder.pullup_resistor %}
+    pullup_resistor: {{ extruder.pullup_resistor }}
+    {% endif %}
+    min_temp: {{ extruder.min_temp | default(0) }}
+    max_temp: {{ extruder.max_temp | default(300) }}
+    min_extrude_temp: {{ extruder.min_extrude_temp | default(170) }}
+    max_extrude_only_distance: {{ extruder.max_extrude_only_distance | default(150) }}
+    max_extrude_cross_section: {{ extruder.max_extrude_cross_section | default(5) }}
+    pressure_advance: {{ extruder_presets[extruder.extruder_type].default_pa | default(0.04) }}
+    pressure_advance_smooth_time: 0.040
+    # PID values - run PID_CALIBRATE HEATER=extruder TARGET=240
+    control: pid
+    pid_Kp: 0
+    pid_Ki: 0
+    pid_Kd: 0
+
+# -----------------------------------------------------------------------------
+# Heater Bed
+# -----------------------------------------------------------------------------
+heater_bed:
+  template: |
+    [heater_bed]
+    heater_pin: {{ board.pins[heater_bed.heater_pin].signal }}
+    sensor_pin: {{ board.pins[heater_bed.sensor_port].signal }}
+    sensor_type: {{ heater_bed.sensor_type }}
+    {% if heater_bed.pullup_resistor %}
+    pullup_resistor: {{ heater_bed.pullup_resistor }}
+    {% endif %}
+    max_power: {{ heater_bed.max_power | default(1.0) }}
+    {% if heater_bed.pwm_cycle_time != 0.0166 %}
+    pwm_cycle_time: {{ heater_bed.pwm_cycle_time }}
+    {% endif %}
+    min_temp: {{ heater_bed.min_temp | default(0) }}
+    max_temp: {{ heater_bed.max_temp | default(120) }}
+    # PID values - run PID_CALIBRATE HEATER=heater_bed TARGET=60
+    control: {{ heater_bed.control | default('pid') }}
+    pid_Kp: 0
+    pid_Ki: 0
+    pid_Kd: 0
+
+# -----------------------------------------------------------------------------
+# Fans
+# -----------------------------------------------------------------------------
+fan:
+  template: |
+    [fan]
+    {% if fans.part_cooling.location == 'toolboard' %}
+    pin: toolboard:{{ toolboard.pins[fans.part_cooling.pin_toolboard].signal }}
+    {% else %}
+    pin: {{ board.pins[fans.part_cooling.pin_mainboard].signal }}
+    {% endif %}
+    max_power: {{ fans.part_cooling.max_power | default(1.0) }}
+    kick_start_time: {{ fans.part_cooling.kick_start_time | default(0.5) }}
+    off_below: {{ fans.part_cooling.off_below | default(0.1) }}
+    cycle_time: {{ fans.part_cooling.cycle_time | default(0.010) }}
+
+heater_fan:
+  template: |
+    [heater_fan hotend_fan]
+    {% if fans.hotend.location == 'toolboard' %}
+    pin: toolboard:{{ toolboard.pins[fans.hotend.pin_toolboard].signal }}
+    {% else %}
+    pin: {{ board.pins[fans.hotend.pin_mainboard].signal }}
+    {% endif %}
+    heater: {{ fans.hotend.heater | default('extruder') }}
+    heater_temp: {{ fans.hotend.heater_temp | default(50) }}
+    fan_speed: {{ fans.hotend.fan_speed | default(1.0) }}
+
+controller_fan:
+  condition: "fans.controller.enabled"
+  template: |
+    [controller_fan controller_fan]
+    pin: {{ board.pins[fans.controller.pin].signal }}
+    kick_start_time: {{ fans.controller.kick_start_time | default(0.5) }}
+    stepper: {{ fans.controller.stepper | default('stepper_x') }}
+    idle_timeout: {{ fans.controller.idle_timeout | default(60) }}
+    idle_speed: {{ fans.controller.idle_speed | default(0.5) }}
+
+# -----------------------------------------------------------------------------
+# Probe
+# -----------------------------------------------------------------------------
+probe:
+  condition: "probe.probe_type in ['inductive', 'klicky', 'tap']"
+  template: |
+    [probe]
+    {% if probe.location == 'toolboard' %}
+    pin: toolboard:{{ pin_config[probe.pin_config] }}{{ toolboard.pins[probe.probe_pin_toolboard].signal }}
+    {% else %}
+    pin: {{ pin_config[probe.pin_config] }}{{ board.pins[probe.probe_pin_mainboard].signal }}
+    {% endif %}
+    x_offset: {{ probe.x_offset | default(0) }}
+    y_offset: {{ probe.y_offset | default(0) }}
+    #z_offset: 0  # Calibrate with PROBE_CALIBRATE
+    speed: {{ probe.speed | default(5) }}
+    samples: {{ probe.samples | default(3) }}
+    sample_retract_dist: {{ probe.sample_retract_dist | default(2) }}
+    samples_result: {{ probe.samples_result | default('median') }}
+    samples_tolerance: {{ probe.samples_tolerance | default(0.006) }}
+    samples_tolerance_retries: {{ probe.samples_tolerance_retries | default(3) }}
+
+bltouch:
+  condition: "probe.probe_type == 'bltouch'"
+  template: |
+    [bltouch]
+    sensor_pin: {{ probe.sensor_pin }}
+    control_pin: {{ probe.control_pin }}
+    x_offset: {{ probe.x_offset | default(0) }}
+    y_offset: {{ probe.y_offset | default(0) }}
+    #z_offset: 0  # Calibrate with PROBE_CALIBRATE
+    speed: {{ probe.speed | default(5) }}
+    samples: {{ probe.samples | default(3) }}
+    sample_retract_dist: {{ probe.sample_retract_dist | default(3) }}
+
+# -----------------------------------------------------------------------------
+# Homing
+# -----------------------------------------------------------------------------
+safe_z_home:
+  condition: "homing.homing_method == 'safe_z_home'"
+  template: |
+    [safe_z_home]
+    {% if homing.home_xy_position == 'bed_center' %}
+    home_xy_position: {{ (printer.bed_size_x / 2) | int }}, {{ (printer.bed_size_y / 2) | int }}
+    {% else %}
+    home_xy_position: {{ homing.home_xy_position }}
+    {% endif %}
+    speed: {{ homing.speed | default(100) }}
+    z_hop: {{ homing.z_hop | default(10) }}
+    z_hop_speed: {{ homing.z_hop_speed | default(15) }}
+
+# -----------------------------------------------------------------------------
+# Bed Leveling
+# -----------------------------------------------------------------------------
+bed_mesh:
+  condition: "bed_leveling.bed_mesh.enabled"
+  template: |
+    [bed_mesh]
+    speed: {{ bed_leveling.bed_mesh.speed | default(200) }}
+    horizontal_move_z: {{ bed_leveling.bed_mesh.horizontal_move_z | default(5) }}
+    {% if bed_leveling.bed_mesh.mesh_min == 'auto' %}
+    mesh_min: {{ (probe.x_offset | abs + 10) | int }}, {{ (probe.y_offset | abs + 10) | int }}
+    {% else %}
+    mesh_min: {{ bed_leveling.bed_mesh.mesh_min }}
+    {% endif %}
+    {% if bed_leveling.bed_mesh.mesh_max == 'auto' %}
+    mesh_max: {{ (printer.bed_size_x - probe.x_offset | abs - 10) | int }}, {{ (printer.bed_size_y - probe.y_offset | abs - 10) | int }}
+    {% else %}
+    mesh_max: {{ bed_leveling.bed_mesh.mesh_max }}
+    {% endif %}
+    probe_count: {{ bed_leveling.bed_mesh.probe_count | default('5,5') }}
+    algorithm: {{ bed_leveling.bed_mesh.algorithm | default('bicubic') }}
+    fade_start: {{ bed_leveling.bed_mesh.fade_start | default(0.6) }}
+    fade_end: {{ bed_leveling.bed_mesh.fade_end | default(10.0) }}
+    fade_target: {{ bed_leveling.bed_mesh.fade_target | default(0) }}
+
+z_tilt:
+  condition: "bed_leveling.leveling_type == 'z_tilt'"
+  template: |
+    [z_tilt]
+    z_positions: {{ bed_leveling.z_tilt.z_positions }}
+    points: {{ bed_leveling.z_tilt.points }}
+    speed: {{ bed_leveling.z_tilt.speed | default(200) }}
+    horizontal_move_z: {{ bed_leveling.z_tilt.horizontal_move_z | default(10) }}
+    retries: {{ bed_leveling.z_tilt.retries | default(5) }}
+    retry_tolerance: {{ bed_leveling.z_tilt.retry_tolerance | default(0.0075) }}
+
+quad_gantry_level:
+  condition: "bed_leveling.leveling_type == 'qgl'"
+  template: |
+    [quad_gantry_level]
+    gantry_corners: {{ bed_leveling.qgl.gantry_corners }}
+    points: {{ bed_leveling.qgl.points }}
+    speed: {{ bed_leveling.qgl.speed | default(200) }}
+    horizontal_move_z: {{ bed_leveling.qgl.horizontal_move_z | default(10) }}
+    retries: {{ bed_leveling.qgl.retries | default(5) }}
+    retry_tolerance: {{ bed_leveling.qgl.retry_tolerance | default(0.0075) }}
+    max_adjust: {{ bed_leveling.qgl.max_adjust | default(10) }}
+
+# -----------------------------------------------------------------------------
+# Common Sections (always included)
+# -----------------------------------------------------------------------------
+common:
+  virtual_sdcard:
+    template: |
+      [virtual_sdcard]
+      path: {{ tuning.virtual_sdcard.path | default('~/printer_data/gcodes') }}
+      on_error_gcode: {{ tuning.virtual_sdcard.on_error_gcode | default('CANCEL_PRINT') }}
+
+  idle_timeout:
+    template: |
+      [idle_timeout]
+      timeout: {{ tuning.idle_timeout.timeout | default(600) }}
+      gcode:
+          {{ tuning.idle_timeout.gcode | default('TURN_OFF_HEATERS') | indent(4) }}
+
+  pause_resume:
+    template: |
+      [pause_resume]
+      recover_velocity: {{ tuning.pause_resume.recover_velocity | default(50) }}
+
+  exclude_object:
+    condition: "tuning.exclude_object.enabled"
+    template: |
+      [exclude_object]
+
+  gcode_arcs:
+    condition: "tuning.arc_support.enabled"
+    template: |
+      [gcode_arcs]
+      resolution: {{ tuning.arc_support.resolution | default(0.1) }}
+
+  respond:
+    condition: "tuning.respond.enabled"
+    template: |
+      [respond]
+      default_type: {{ tuning.respond.default_type | default('echo') }}
+      default_prefix: {{ tuning.respond.default_prefix | default('echo: ') }}
+
+  save_variables:
+    condition: "tuning.save_variables.enabled"
+    template: |
+      [save_variables]
+      filename: {{ tuning.save_variables.filename | default('~/printer_data/config/variables.cfg') }}
+
+  force_move:
+    condition: "advanced.force_move.enable_force_move"
+    template: |
+      [force_move]
+      enable_force_move: True
+
+  firmware_retraction:
+    condition: "advanced.firmware_retraction.enabled"
+    template: |
+      [firmware_retraction]
+      retract_length: {{ advanced.firmware_retraction.retract_length | default(0.5) }}
+      retract_speed: {{ advanced.firmware_retraction.retract_speed | default(35) }}
+      unretract_extra_length: {{ advanced.firmware_retraction.unretract_extra_length | default(0) }}
+      unretract_speed: {{ advanced.firmware_retraction.unretract_speed | default(35) }}
+
+# -----------------------------------------------------------------------------
+# Pin Configuration Mappings
+# -----------------------------------------------------------------------------
+pin_config:
+  nc_gnd: "^"      # NC switch to GND (pull-up)
+  no_gnd: "^!"     # NO switch to GND (pull-up + invert)
+  nc_vcc: "!"      # NC switch to VCC (invert)
+  no_vcc: ""       # NO switch to VCC (no modifiers)
+

@@ -302,7 +302,7 @@ categories:
                 range: [0, 255]
                 condition: "2.3.1.endstop_type == 'sensorless'"
 
-      # 2.4 Y Axis (same structure as X)
+      # 2.4 Y Axis (explicit definition to ensure correct condition references)
       - id: "2.4"
         name: "Y Axis"
         sections:
@@ -310,13 +310,94 @@ categories:
             name: "Stepper Y"
             klipper_section: "[stepper_y]"
             required: true
-            inherit: "2.3.1"
+            parameters:
+              - name: "motor_port"
+                type: "select"
+                source: "board.motor_ports"
+                required: true
+              - name: "belt_pitch"
+                type: "choice"
+                options: [2, 3, 1.5]
+                labels: ["2mm GT2", "3mm HTD3M", "1.5mm (rare)"]
+                default: 2
+                required: true
+              - name: "pulley_teeth"
+                type: "choice"
+                options: [16, 20, 24, 32, 40]
+                default: 20
+                required: true
+              - name: "microsteps"
+                type: "choice"
+                options: [16, 32, 64]
+                default: 32
+                required: true
+              - name: "full_steps_per_rotation"
+                type: "choice"
+                options: [200, 400]
+                labels: ["200 (1.8°)", "400 (0.9°)"]
+                default: 200
+                required: true
+              - name: "dir_pin_inverted"
+                type: "bool"
+                default: false
+              - name: "endstop_type"
+                type: "choice"
+                options: ["physical", "sensorless"]
+                default: "physical"
+                required: true
+              - name: "endstop_port"
+                type: "select"
+                source: "board.endstop_ports"
+                condition: "endstop_type == 'physical'"
+              - name: "endstop_config"
+                type: "choice"
+                options: ["nc_gnd", "no_gnd", "nc_vcc", "no_vcc"]
+                labels: ["NC to GND (^pin) - recommended", "NO to GND (^!pin)", "NC to VCC (!pin)", "NO to VCC (pin)"]
+                default: "nc_gnd"
+                condition: "endstop_type == 'physical'"
+              - name: "position_endstop"
+                type: "int"
+                required: true
+              - name: "position_min"
+                type: "int"
+                default: 0
+              - name: "position_max"
+                type: "int"
+                default: "bed_size_y"
+                required: true
+              - name: "homing_speed"
+                type: "int"
+                default: 50
+                range: [10, 100]
+              - name: "homing_retract_dist"
+                type: "float"
+                default: 5
+              - name: "second_homing_speed"
+                type: "int"
+                default: 10
             
           - id: "2.4.2"
             name: "TMC Driver Y"
             klipper_section: "[tmc2209 stepper_y]"
             required: true
-            inherit: "2.3.2"
+            parameters:
+              - name: "driver_type"
+                type: "choice"
+                options: ["TMC2209", "TMC5160", "TMC2130", "TMC2660"]
+                default: "TMC2209"
+                required: true
+              - name: "run_current"
+                type: "float"
+                range: [0.1, 2.5]
+                required: true
+              - name: "interpolate"
+                type: "bool"
+                default: false
+              - name: "driver_SGTHRS"
+                type: "int"
+                default: 70
+                range: [0, 255]
+                condition: "2.4.1.endstop_type == 'sensorless'"
 
       # 2.5 Z Axis
       - id: "2.5"

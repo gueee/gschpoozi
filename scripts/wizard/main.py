@@ -564,7 +564,7 @@ class GschpooziWizard:
                         tag = f"{i+1}. {short_name}"
                         serial_map[tag] = str(d)
                         device_items.append((tag, "", False))
-                    
+
                     device_items.append(("manual", "Enter path manually", False))
 
                     selected = self.ui.radiolist(
@@ -920,8 +920,16 @@ class GschpooziWizard:
         )
 
     def _extruder_setup(self) -> None:
-        """Configure extruder."""
-        # Extruder type
+        """Configure extruder motor and hotend."""
+        # Get current values for pre-selection
+        current_type = self.state.get("extruder.extruder_type", "")
+        current_motor_loc = self.state.get("extruder.motor_location", "")
+        current_sensor_type = self.state.get("hotend.sensor_type", "")
+        current_sensor_loc = self.state.get("hotend.sensor_location", "")
+        current_heater_loc = self.state.get("hotend.heater_location", "")
+        current_max_temp = self.state.get("hotend.max_temp", 300)
+
+        # === EXTRUDER MOTOR SECTION ===
         extruder_types = [
             ("sherpa_mini", "Sherpa Mini"),
             ("orbiter_v2", "Orbiter v2.0/v2.5"),
@@ -935,59 +943,115 @@ class GschpooziWizard:
         ]
 
         extruder_type = self.ui.radiolist(
-            "Select your extruder type:",
-            [(k, v, False) for k, v in extruder_types],
-            title="Extruder - Type"
+            "Select your extruder type:\n\n"
+            "(This sets rotation_distance and gear_ratio)",
+            [(k, v, k == current_type) for k, v in extruder_types],
+            title="Extruder Motor - Type"
         )
+        if extruder_type is None:
+            return
 
-        # Location
+        # Motor location
         has_toolboard = self.state.get("mcu.toolboard.enabled", False)
         if has_toolboard:
-            location = self.ui.radiolist(
-                "Where is the extruder motor connected?",
+            motor_location = self.ui.radiolist(
+                "Where is the extruder MOTOR connected?",
                 [
-                    ("mainboard", "Mainboard", False),
-                    ("toolboard", "Toolboard", True),
+                    ("mainboard", "Mainboard", current_motor_loc == "mainboard"),
+                    ("toolboard", "Toolboard", current_motor_loc == "toolboard" or not current_motor_loc),
                 ],
-                title="Extruder - Location"
+                title="Extruder Motor - Location"
             )
         else:
-            location = "mainboard"
+            motor_location = "mainboard"
+        if motor_location is None:
+            return
 
-        # Thermistor
-        sensor_type = self.ui.radiolist(
-            "Hotend thermistor type:",
-            [
-                ("Generic 3950", "Generic 3950 (most common)", True),
-                ("ATC Semitec 104GT-2", "ATC Semitec 104GT-2", False),
-                ("PT1000", "PT1000", False),
-                ("SliceEngineering 450", "SliceEngineering 450°C", False),
-            ],
-            title="Extruder - Thermistor"
+        # === HOTEND SECTION ===
+        self.ui.msgbox(
+            "Now configuring the HOTEND:\n\n"
+            "• Heater location\n"
+            "• Thermistor type & location\n"
+            "• Max temperature",
+            title="Hotend Configuration"
         )
+
+        # Heater location
+        if has_toolboard:
+            heater_location = self.ui.radiolist(
+                "Where is the hotend HEATER connected?",
+                [
+                    ("mainboard", "Mainboard", current_heater_loc == "mainboard"),
+                    ("toolboard", "Toolboard", current_heater_loc == "toolboard" or not current_heater_loc),
+                ],
+                title="Hotend - Heater Location"
+            )
+        else:
+            heater_location = "mainboard"
+        if heater_location is None:
+            return
+
+        # Thermistor type
+        sensor_types = [
+            ("Generic 3950", "Generic 3950 (most common)"),
+            ("ATC Semitec 104GT-2", "ATC Semitec 104GT-2"),
+            ("PT1000", "PT1000 (high temp)"),
+            ("SliceEngineering 450", "SliceEngineering 450°C"),
+            ("PT100 INA826", "PT100 with INA826 amp"),
+        ]
+        sensor_type = self.ui.radiolist(
+            "Hotend thermistor/sensor type:",
+            [(k, v, k == current_sensor_type or (not current_sensor_type and k == "Generic 3950")) 
+             for k, v in sensor_types],
+            title="Hotend - Thermistor"
+        )
+        if sensor_type is None:
+            return
+
+        # Sensor location
+        if has_toolboard:
+            sensor_location = self.ui.radiolist(
+                "Where is the thermistor connected?",
+                [
+                    ("mainboard", "Mainboard", current_sensor_loc == "mainboard"),
+                    ("toolboard", "Toolboard", current_sensor_loc == "toolboard" or not current_sensor_loc),
+                ],
+                title="Hotend - Thermistor Location"
+            )
+        else:
+            sensor_location = "mainboard"
+        if sensor_location is None:
+            return
 
         # Max temp
         max_temp = self.ui.inputbox(
             "Maximum hotend temperature (°C):",
-            default="300",
-            title="Extruder - Max Temp"
+            default=str(current_max_temp),
+            title="Hotend - Max Temp"
         )
+        if max_temp is None:
+            return
 
-        # Save
-        self.state.set("extruder.extruder_type", extruder_type or "clockwork2")
-        self.state.set("extruder.location", location)
-        self.state.set("extruder.heater_location", location)
-        self.state.set("extruder.sensor_location", location)
-        self.state.set("extruder.sensor_type", sensor_type or "Generic 3950")
-        self.state.set("extruder.max_temp", int(max_temp or 300))
+        # Save extruder motor settings
+        self.state.set("extruder.extruder_type", extruder_type)
+        self.state.set("extruder.motor_location", motor_location)
+        
+        # Save hotend settings (separate from extruder motor)
+        self.state.set("hotend.heater_location", heater_location)
+        self.state.set("hotend.sensor_type", sensor_type)
+        self.state.set("hotend.sensor_location", sensor_location)
+        self.state.set("hotend.max_temp", int(max_temp or 300))
         self.state.save()
 
         self.ui.msgbox(
-            f"Extruder configured!\n\n"
-            f"Type: {extruder_type}\n"
-            f"Location: {location}\n"
-            f"Thermistor: {sensor_type}\n"
-            f"Max temp: {max_temp}°C",
+            f"Extruder & Hotend configured!\n\n"
+            f"EXTRUDER MOTOR:\n"
+            f"  Type: {extruder_type}\n"
+            f"  Location: {motor_location}\n\n"
+            f"HOTEND:\n"
+            f"  Heater: {heater_location}\n"
+            f"  Thermistor: {sensor_type} ({sensor_location})\n"
+            f"  Max temp: {max_temp}°C",
             title="Configuration Saved"
         )
 

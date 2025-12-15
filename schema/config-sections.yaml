@@ -75,7 +75,11 @@ stepper_x:
     position_min: {{ stepper_x.position_min | default(0) }}
     position_max: {{ stepper_x.position_max | default(printer.bed_size_x) }}
     homing_speed: {{ stepper_x.homing_speed | default(50) }}
-    homing_retract_dist: {{ stepper_x.homing_retract_dist | default(5) }}
+    {% if stepper_x.endstop_type != 'sensorless' %}
+    homing_retract_dist: {{ stepper_x.homing_retract_dist if (stepper_x.homing_retract_dist is defined and stepper_x.homing_retract_dist != 0) else 5 }}
+    {% else %}
+    homing_retract_dist: {{ stepper_x.homing_retract_dist | default(0) }}
+    {% endif %}
     {% if stepper_x.second_homing_speed %}
     second_homing_speed: {{ stepper_x.second_homing_speed }}
     {% endif %}
@@ -98,7 +102,11 @@ stepper_y:
     position_min: {{ stepper_y.position_min | default(0) }}
     position_max: {{ stepper_y.position_max | default(printer.bed_size_y) }}
     homing_speed: {{ stepper_y.homing_speed | default(50) }}
-    homing_retract_dist: {{ stepper_y.homing_retract_dist | default(5) }}
+    {% if stepper_y.endstop_type != 'sensorless' %}
+    homing_retract_dist: {{ stepper_y.homing_retract_dist if (stepper_y.homing_retract_dist is defined and stepper_y.homing_retract_dist != 0) else 5 }}
+    {% else %}
+    homing_retract_dist: {{ stepper_y.homing_retract_dist | default(0) }}
+    {% endif %}
 
 stepper_z:
   template: |

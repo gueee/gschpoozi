@@ -264,6 +264,25 @@ class GschpooziWizard:
             items = [k for k, v in completion.items() if v]
             return f"Status: {done}/{total} sections configured ({', '.join(items)})"
 
+    def _format_menu_item(self, base_label: str, status_info: str = None) -> str:
+        """Format a menu item with checkmark and status info.
+
+        Args:
+            base_label: Base menu label (e.g., "Main Board")
+            status_info: Optional status info to append (e.g., "BTT Octopus v1.1")
+
+        Returns:
+            Formatted label with checkmark if configured, status info if provided
+        """
+        if status_info:
+            # Truncate long status info to keep menu readable
+            max_status_len = 30
+            if len(status_info) > max_status_len:
+                status_info = status_info[:max_status_len-3] + "..."
+            return f"✓ {base_label:<25} ({status_info})"
+        else:
+            return base_label
+
     # -------------------------------------------------------------------------
     # Category 1: Klipper Setup
     # -------------------------------------------------------------------------
@@ -387,27 +406,100 @@ class GschpooziWizard:
             # Build menu items dynamically based on config
             awd_enabled = self.state.get("printer.awd_enabled", False)
 
+            # Get status info for each section
+            # MCU Configuration
+            main_board_id = self.state.get("mcu.main.board_type", "")
+            main_board_name = self._get_board_name(main_board_id, "boards") if main_board_id else None
+            toolboard_id = self.state.get("mcu.toolboard.board_type", "")
+            toolboard_name = self._get_board_name(toolboard_id, "toolboards") if toolboard_id else None
+            mcu_status = None
+            if main_board_name:
+                mcu_status = main_board_name
+                if toolboard_name:
+                    mcu_status += f", {toolboard_name}"
+
+            # Printer Settings
+            kinematics = self.state.get("printer.kinematics", "")
+            printer_status = None
+            if kinematics:
+                printer_status = kinematics.capitalize()
+                if awd_enabled:
+                    printer_status += " - AWD"
+
+            # Stepper status helper
+            def get_stepper_status(axis):
+                driver = self.state.get(f"stepper_{axis}.driver_type", "")
+                if driver:
+                    return driver
+                return None
+
+            # X Axis
+            x_status = get_stepper_status("x")
+
+            # Y Axis
+            y_status = get_stepper_status("y")
+
+            # X1 Axis
+            x1_status = get_stepper_status("x1") if awd_enabled else None
+
+            # Y1 Axis
+            y1_status = get_stepper_status("y1") if awd_enabled else None
+
+            # Z Axis
+            z_count = self.state.get("stepper_z.z_motor_count", None)
+            z_status = None
+            if z_count:
+                z_status = f"{z_count} motors"
+
+            # Extruder
+            extruder_type = self.state.get("extruder.extruder_type", "")
+            nozzle = self.state.get("extruder.nozzle_diameter", None)
+            extruder_status = None
+            if extruder_type:
+                extruder_status = extruder_type.replace("_", " ").title()
+                if nozzle:
+                    extruder_status += f", {nozzle}mm"
+
+            # Heated Bed
+            bed_sensor = self.state.get("heater_bed.sensor_type", "")
+            bed_status = bed_sensor if bed_sensor else None
+
+            # Fans
+            part_loc = self.state.get("fans.part_cooling.location", "")
+            hotend_loc = self.state.get("fans.hotend.location", "")
+            controller_enabled = self.state.get("fans.controller.enabled", False)
+            fans_status = None
+            if part_loc or hotend_loc or controller_enabled:
+                parts = []
+                if part_loc:
+                    parts.append(f"Part:{part_loc[:2]}")
+                if hotend_loc:
+                    parts.append(f"Hotend:{hotend_loc[:2]}")
+                if controller_enabled:
+                    parts.append("Ctrl")
+                fans_status = ", ".join(parts)
+
             menu_items = [
-                ("2.1", "MCU Configuration     (Boards & connections)"),
-                ("2.2", "Printer Settings      (Kinematics & limits)"),
-                ("2.3", "X Axis                (Stepper & driver)"),
+                ("2.1", self._format_menu_item("MCU Configuration", mcu_status) if mcu_status else "MCU Configuration     (Boards & connections)"),
+                ("2.2", self._format_menu_item("Printer Settings", printer_status) if printer_status else "Printer Settings      (Kinematics & limits)"),
+                ("2.3", self._format_menu_item("X Axis", x_status) if x_status else "X Axis                (Stepper & driver)"),
             ]
 
             # Show AWD X1 option if AWD enabled
             if awd_enabled:
-                menu_items.append(("2.3.1", "X1 Axis (AWD)        (Secondary X stepper)"))
+                menu_items.append(("2.3.1", self._format_menu_item("X1 Axis (AWD)", x1_status) if x1_status else "X1 Axis (AWD)        (Secondary X stepper)"))
 
-            menu_items.append(("2.4", "Y Axis                (Stepper & driver)"))
+            menu_items.append(("2.4", self._format_menu_item("Y Axis", y_status) if y_status else "Y Axis                (Stepper & driver)"))
 
             # Show AWD Y1 option if AWD enabled
             if awd_enabled:
-                menu_items.append(("2.4.1", "Y1 Axis (AWD)        (Secondary Y stepper)"))
+                menu_items.append(("2.4.1", self._format_menu_item("Y1 Axis (AWD)", y1_status) if y1_status else "Y1 Axis (AWD)        (Secondary Y stepper)"))
 
             menu_items.extend([
-                ("2.5", "Z Axis                (Stepper(s) & driver(s))"),
-                ("2.6", "Extruder              (Motor & hotend)"),
-                ("2.7", "Heated Bed            (Heater & thermistor)"),
-                ("2.8", "Fans                  (Part cooling, hotend, etc.)"),
+                ("2.5", self._format_menu_item("Z Axis", z_status) if z_status else "Z Axis                (Stepper(s) & driver(s))"),
+                ("2.6", self._format_menu_item("Extruder", extruder_status) if extruder_status else "Extruder              (Motor & hotend)"),
+                ("2.7", self._format_menu_item("Heated Bed", bed_status) if bed_status else "Heated Bed            (Heater & thermistor)"),
+                ("2.8", self._format_menu_item("Fans", fans_status) if fans_status else "Fans                  (Part cooling, hotend, etc.)"),
                 ("2.9", "Probe                 (BLTouch, Beacon, etc.)"),
                 ("2.10", "Homing               (Safe Z home, sensorless)"),
                 ("2.11", "Bed Leveling         (Mesh, Z tilt, QGL)"),
@@ -473,16 +565,33 @@ class GschpooziWizard:
     def _mcu_setup(self) -> None:
         """MCU configuration wizard."""
         while True:
+            # Get current configuration status
+            main_board_id = self.state.get("mcu.main.board_type", "")
+            main_board_name = self._get_board_name(main_board_id, "boards") if main_board_id else None
+
+            toolboard_id = self.state.get("mcu.toolboard.board_type", "")
+            toolboard_conn = self.state.get("mcu.toolboard.connection_type", "")
+            toolboard_name = None
+            if toolboard_id:
+                toolboard_name = self._get_board_name(toolboard_id, "toolboards")
+                if toolboard_conn:
+                    toolboard_name = f"{toolboard_name} - {toolboard_conn}"
+
+            host_enabled = self.state.get("mcu.host.enabled", False)
+
+            # Format menu items with status
+            menu_items = [
+                ("2.1.1", self._format_menu_item("Main Board", main_board_name) if main_board_name else "Main Board            (Required)"),
+                ("2.1.2", self._format_menu_item("Toolhead Board", toolboard_name) if toolboard_name else "Toolhead Board        (Optional)"),
+                ("2.1.3", self._format_menu_item("Host MCU", "Enabled" if host_enabled else None) if host_enabled else "Host MCU              (For ADXL, GPIO)"),
+                ("2.1.4", "Additional MCUs       (Multi-board setups)"),
+                ("B", "Back"),
+            ]
+
             choice = self.ui.menu(
                 "MCU Configuration\n\n"
                 "Configure your printer's control boards.",
-                [
-                    ("2.1.1", "Main Board            (Required)"),
-                    ("2.1.2", "Toolhead Board        (Optional)"),
-                    ("2.1.3", "Host MCU              (For ADXL, GPIO)"),
-                    ("2.1.4", "Additional MCUs       (Multi-board setups)"),
-                    ("B", "Back"),
-                ],
+                menu_items,
                 title="2.1 MCU Configuration",
             )
 
@@ -524,6 +633,22 @@ class GschpooziWizard:
         # Always add manual option at the end
         boards.append(("other", "Other / Manual"))
         return boards
+
+    def _get_board_name(self, board_id: str, board_type: str = "boards") -> str:
+        """Get board display name from board ID.
+
+        Args:
+            board_id: Board ID (e.g., "btt-octopus-v1.1")
+            board_type: "boards" or "toolboards"
+
+        Returns:
+            Board name or "Other" if not found
+        """
+        if not board_id or board_id == "other":
+            return "Other"
+
+        board_data = self._load_board_data(board_id, board_type)
+        return board_data.get("name", board_id)
 
     def _configure_main_board(self) -> None:
         """Configure main board."""
@@ -730,7 +855,7 @@ class GschpooziWizard:
             # USB toolboard - scan for devices
             # Load saved serial path to preselect it
             current_serial = self.state.get("mcu.toolboard.serial", "")
-            
+
             self.ui.infobox("Scanning for USB devices...", title="Detecting")
             import time
             time.sleep(1)
@@ -787,13 +912,16 @@ class GschpooziWizard:
 
     def _configure_host_mcu(self) -> None:
         """Configure host MCU (Raspberry Pi)."""
+        # Load saved state
+        current_enabled = self.state.get("mcu.host.enabled", False)
         enabled = self.ui.yesno(
             "Enable Host MCU?\n\n"
             "This allows using Raspberry Pi GPIO pins for:\n"
             "• ADXL345 accelerometer\n"
             "• Additional GPIO outputs\n"
             "• Neopixel on Pi GPIO",
-            title="Host MCU"
+            title="Host MCU",
+            default_no=not current_enabled
         )
 
         self.state.set("mcu.host.enabled", enabled)
@@ -809,14 +937,15 @@ class GschpooziWizard:
 
     def _printer_settings(self) -> None:
         """Configure printer settings."""
-        # Kinematics
+        # Kinematics - load saved value
+        current_kinematics = self.state.get("printer.kinematics", "corexy")
         kinematics = self.ui.radiolist(
             "Select your printer's kinematics:",
             [
-                ("corexy", "CoreXY (Voron, VzBot, etc.)", True),
-                ("cartesian", "Cartesian (Ender, Prusa, etc.)", False),
-                ("corexz", "CoreXZ", False),
-                ("delta", "Delta", False),
+                ("corexy", "CoreXY (Voron, VzBot, etc.)", current_kinematics == "corexy"),
+                ("cartesian", "Cartesian (Ender, Prusa, etc.)", current_kinematics == "cartesian"),
+                ("corexz", "CoreXZ", current_kinematics == "corexz"),
+                ("delta", "Delta", current_kinematics == "delta"),
             ],
             title="Kinematics"
         )
@@ -824,34 +953,43 @@ class GschpooziWizard:
         if kinematics is None:
             return
 
-        # AWD (All Wheel Drive) - only for CoreXY
+        # AWD (All Wheel Drive) - only for CoreXY - load saved value
         awd_enabled = False
         if kinematics == "corexy":
+            current_awd = self.state.get("printer.awd_enabled", False)
             awd_enabled = self.ui.yesno(
                 "Do you have AWD (All Wheel Drive)?\n\n"
                 "AWD uses 4 motors for X/Y motion:\n"
                 "• stepper_x and stepper_x1 for X axis\n"
                 "• stepper_y and stepper_y1 for Y axis\n\n"
                 "Common on VzBot, some Voron mods, etc.",
-                title="AWD Configuration"
+                title="AWD Configuration",
+                default_no=not current_awd
             )
 
-        # Bed size
-        bed_x = self.ui.inputbox("Bed X size (mm):", default="350")
+        # Bed size - load saved values
+        current_bed_x = self.state.get("printer.bed_size_x", 350)
+        current_bed_y = self.state.get("printer.bed_size_y", 350)
+        current_bed_z = self.state.get("printer.bed_size_z", 350)
+
+        bed_x = self.ui.inputbox("Bed X size (mm):", default=str(current_bed_x))
         if bed_x is None:
             return
 
-        bed_y = self.ui.inputbox("Bed Y size (mm):", default="350")
+        bed_y = self.ui.inputbox("Bed Y size (mm):", default=str(current_bed_y))
         if bed_y is None:
             return
 
-        bed_z = self.ui.inputbox("Z height (mm):", default="350")
+        bed_z = self.ui.inputbox("Z height (mm):", default=str(current_bed_z))
         if bed_z is None:
             return
 
-        # Velocity limits
-        max_velocity = self.ui.inputbox("Max velocity (mm/s):", default="300")
-        max_accel = self.ui.inputbox("Max acceleration (mm/s²):", default="3000")
+        # Velocity limits - load saved values
+        current_max_velocity = self.state.get("printer.max_velocity", 300)
+        current_max_accel = self.state.get("printer.max_accel", 3000)
+
+        max_velocity = self.ui.inputbox("Max velocity (mm/s):", default=str(current_max_velocity))
+        max_accel = self.ui.inputbox("Max acceleration (mm/s²):", default=str(current_max_accel))
 
         # Save
         self.state.set("printer.kinematics", kinematics)
@@ -1297,10 +1435,12 @@ class GschpooziWizard:
             if homing_retract_dist is None:
                 return
 
-            # Optional second homing speed
+            # Optional second homing speed - check if already configured
+            current_has_second = self.state.get(f"{state_key}.second_homing_speed") is not None
             if self.ui.yesno(
                 f"Use second (slower) homing speed for {axis_upper}?",
-                title=f"Stepper {axis_upper} - Second Homing Speed"
+                title=f"Stepper {axis_upper} - Second Homing Speed",
+                default_no=not current_has_second
             ):
                 current_second = self.state.get(f"{state_key}.second_homing_speed", 10)
                 second_homing_speed = self.ui.inputbox(
@@ -1367,14 +1507,22 @@ class GschpooziWizard:
 
     def _stepper_z(self) -> None:
         """Configure Z axis stepper(s)."""
+        # Load saved values
+        current_z_count = self.state.get("stepper_z.z_motor_count", 4)
+        current_drive_type = self.state.get("stepper_z.drive_type", "leadscrew")
+        current_pitch = self.state.get("stepper_z.leadscrew_pitch", 8)
+        current_endstop = self.state.get("stepper_z.endstop_type", "probe")
+        current_position_max = self.state.get("stepper_z.position_max", None)
+        current_run_current = self.state.get("stepper_z.run_current", 0.8)
+
         # Number of Z motors
         z_count = self.ui.radiolist(
             "How many Z motors?",
             [
-                ("1", "Single Z motor", False),
-                ("2", "Dual Z (Z tilt)", False),
-                ("3", "Triple Z", False),
-                ("4", "Quad Z (QGL)", True),
+                ("1", "Single Z motor", current_z_count == 1),
+                ("2", "Dual Z (Z tilt)", current_z_count == 2),
+                ("3", "Triple Z", current_z_count == 3),
+                ("4", "Quad Z (QGL)", current_z_count == 4),
             ],
             title="Z Axis - Motor Count"
         )
@@ -1383,8 +1531,8 @@ class GschpooziWizard:
         drive_type = self.ui.radiolist(
             "Z drive type:",
             [
-                ("leadscrew", "Leadscrew (T8, TR8)", True),
-                ("belt", "Belt driven", False),
+                ("leadscrew", "Leadscrew (T8, TR8)", current_drive_type == "leadscrew"),
+                ("belt", "Belt driven", current_drive_type == "belt"),
             ],
             title="Z Axis - Drive"
         )
@@ -1393,9 +1541,9 @@ class GschpooziWizard:
             pitch = self.ui.radiolist(
                 "Leadscrew pitch:",
                 [
-                    ("8", "8mm (T8 standard)", True),
-                    ("4", "4mm (high speed)", False),
-                    ("2", "2mm (TR8x2)", False),
+                    ("8", "8mm (T8 standard)", current_pitch == 8),
+                    ("4", "4mm (high speed)", current_pitch == 4),
+                    ("2", "2mm (TR8x2)", current_pitch == 2),
                 ],
                 title="Z Axis - Leadscrew"
             )
@@ -1406,25 +1554,26 @@ class GschpooziWizard:
         endstop_type = self.ui.radiolist(
             "Z endstop type:",
             [
-                ("probe", "Probe (virtual endstop)", True),
-                ("physical_mainboard", "Physical switch (mainboard)", False),
-                ("physical_toolboard", "Physical switch (toolboard)", False),
+                ("probe", "Probe (virtual endstop)", current_endstop == "probe"),
+                ("physical_mainboard", "Physical switch (mainboard)", current_endstop == "physical_mainboard"),
+                ("physical_toolboard", "Physical switch (toolboard)", current_endstop == "physical_toolboard"),
             ],
             title="Z Axis - Endstop"
         )
 
-        # Position
+        # Position - use saved value or bed_z
         bed_z = self.state.get("printer.bed_size_z", 350)
+        position_default = current_position_max if current_position_max is not None else bed_z
         position_max = self.ui.inputbox(
             "Z position max (mm):",
-            default=str(bed_z),
+            default=str(position_default),
             title="Z Axis - Position"
         )
 
         # Current
         run_current = self.ui.inputbox(
             "TMC run current for Z (A):",
-            default="0.8",
+            default=str(current_run_current),
             title="Z Axis - Driver"
         )
 
@@ -1772,9 +1921,14 @@ class GschpooziWizard:
         if max_extrude_only_distance is None:
             return
 
+        # Load saved values for extrusion parameters
+        current_max_cross_section = self.state.get("extruder.max_extrude_cross_section", 5.0)
+        current_min_extrude_temp = self.state.get("extruder.min_extrude_temp", 170)
+        current_corner_velocity = self.state.get("extruder.instantaneous_corner_velocity", 1.0)
+
         max_extrude_cross_section = self.ui.inputbox(
             "Max extrude cross section (mm²):",
-            default="5.0",
+            default=str(current_max_cross_section),
             title="Extruder - Max Cross Section"
         )
         if max_extrude_cross_section is None:
@@ -1782,7 +1936,7 @@ class GschpooziWizard:
 
         min_extrude_temp = self.ui.inputbox(
             "Minimum extrude temperature (°C):",
-            default="170",
+            default=str(current_min_extrude_temp),
             title="Extruder - Min Extrude Temp"
         )
         if min_extrude_temp is None:
@@ -1790,7 +1944,7 @@ class GschpooziWizard:
 
         instantaneous_corner_velocity = self.ui.inputbox(
             "Instantaneous corner velocity (mm/s):",
-            default="1.0",
+            default=str(current_corner_velocity),
             title="Extruder - Corner Velocity"
         )
         if instantaneous_corner_velocity is None:
@@ -1986,7 +2140,7 @@ class GschpooziWizard:
             if pullup_resistor == "custom":
                 pullup_resistor = self.ui.inputbox(
                     "Enter pullup resistor value (Ω):",
-                    default="4700",
+                    default=str(current_pullup),
                     title="Heated Bed - Custom Pullup"
                 )
             if pullup_resistor:
@@ -2085,12 +2239,16 @@ class GschpooziWizard:
                         self.state.get("mcu.toolboard.enabled", False)
 
         # === PART COOLING FAN ===
+        # Load saved location
+        current_part_location = self.state.get("fans.part_cooling.location", "")
         if has_toolboard:
+            # Default to toolboard if no saved value, otherwise use saved value
+            default_is_toolboard = (current_part_location == "toolboard") or (not current_part_location)
             part_location = self.ui.radiolist(
                 "Part cooling fan connected to:",
                 [
-                    ("mainboard", "Mainboard", False),
-                    ("toolboard", "Toolboard", True),
+                    ("mainboard", "Mainboard", current_part_location == "mainboard"),
+                    ("toolboard", "Toolboard", default_is_toolboard),
                 ],
                 title="Fans - Part Cooling Location"
             )
@@ -2163,12 +2321,16 @@ class GschpooziWizard:
             return
 
         # === HOTEND FAN ===
+        # Load saved location
+        current_hotend_location = self.state.get("fans.hotend.location", "")
         if has_toolboard:
+            # Default to toolboard if no saved value, otherwise use saved value
+            default_is_toolboard = (current_hotend_location == "toolboard") or (not current_hotend_location)
             hotend_location = self.ui.radiolist(
                 "Hotend fan connected to:",
                 [
-                    ("mainboard", "Mainboard", False),
-                    ("toolboard", "Toolboard", True),
+                    ("mainboard", "Mainboard", current_hotend_location == "mainboard"),
+                    ("toolboard", "Toolboard", default_is_toolboard),
                 ],
                 title="Fans - Hotend Location"
             )
@@ -2237,9 +2399,12 @@ class GschpooziWizard:
             return
 
         # === CONTROLLER FAN ===
+        # Load saved state
+        current_controller_enabled = self.state.get("fans.controller.enabled", False)
         has_controller_fan = self.ui.yesno(
             "Do you have an electronics cooling fan?",
-            title="Fans - Controller"
+            title="Fans - Controller",
+            default_no=not current_controller_enabled
         )
 
         controller_pin = None

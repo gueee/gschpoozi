@@ -3037,6 +3037,9 @@ class GschpooziWizard:
         """Configure bed leveling."""
         z_count = self.state.get("stepper_z.z_motor_count", 1)
         current_leveling_type = self.state.get("bed_leveling.leveling_type", "")
+        probe_type = self.state.get("probe.probe_type", "none")
+        eddy_probes = {"beacon", "cartographer", "btt_eddy"}
+        is_eddy_probe = probe_type in eddy_probes
 
         # Leveling type based on Z motor count
         if z_count == 4:
@@ -3068,27 +3071,86 @@ class GschpooziWizard:
             default_no=not current_mesh_enabled
         )
 
+        # Mesh boundaries and/or probe count
         current_probe_count = self.state.get("bed_leveling.bed_mesh.probe_count", "5,5")
+        current_mesh_min = self.state.get("bed_leveling.bed_mesh.mesh_min", None)
+        current_mesh_max = self.state.get("bed_leveling.bed_mesh.mesh_max", None)
+
+        probe_count = current_probe_count
+        mesh_min = current_mesh_min
+        mesh_max = current_mesh_max
+
         if enable_mesh:
-            probe_count = self.ui.inputbox(
-                "Mesh probe count (e.g., 5,5):",
-                default=current_probe_count,
-                title="Bed Mesh - Probe Count"
-            )
-        else:
-            probe_count = current_probe_count
+            # Defaults for mesh boundaries (same logic as schema/config-sections.yaml "auto")
+            bed_x = float(self.state.get("printer.bed_size_x", 300))
+            bed_y = float(self.state.get("printer.bed_size_y", 300))
+            x_off = float(self.state.get("probe.x_offset", 0.0))
+            y_off = float(self.state.get("probe.y_offset", 0.0))
+            default_mesh_min = f"{int(abs(x_off) + 10)}, {int(abs(y_off) + 10)}"
+            default_mesh_max = f"{int(bed_x - abs(x_off) - 10)}, {int(bed_y - abs(y_off) - 10)}"
+
+            if is_eddy_probe:
+                # Eddy probes (beacon/cartographer/btt_eddy) use rapid scanning; boundaries matter most.
+                mesh_min = self.ui.inputbox(
+                    "Mesh minimum (x, y):\n\n"
+                    "Defines the start of the scan area.\n"
+                    "Example: 15, 28\n"
+                    "You can also enter 'auto' to let gschpoozi calculate safe bounds.",
+                    default=(mesh_min if mesh_min not in [None, ""] else default_mesh_min),
+                    title="Bed Mesh - Mesh Min"
+                )
+                if mesh_min is None:
+                    return
+
+                mesh_max = self.ui.inputbox(
+                    "Mesh maximum (x, y):\n\n"
+                    "Defines the end of the scan area.\n"
+                    "Example: 315, 280\n"
+                    "You can also enter 'auto' to let gschpoozi calculate safe bounds.",
+                    default=(mesh_max if mesh_max not in [None, ""] else default_mesh_max),
+                    title="Bed Mesh - Mesh Max"
+                )
+                if mesh_max is None:
+                    return
+
+                # Keep probe_count as-is for compatibility with [bed_mesh] config, but don't force the user to set it here.
+                probe_count = current_probe_count
+            else:
+                # Standard probes: probe_count is the primary setting; default boundaries to auto if not set.
+                probe_count = self.ui.inputbox(
+                    "Mesh probe count (e.g., 5,5):",
+                    default=current_probe_count,
+                    title="Bed Mesh - Probe Count"
+                )
+                if probe_count is None:
+                    return
+                if not mesh_min:
+                    mesh_min = "auto"
+                if not mesh_max:
+                    mesh_max = "auto"
 
         # Save
         self.state.set("bed_leveling.leveling_type", leveling_type or "none")
         self.state.set("bed_leveling.bed_mesh.enabled", enable_mesh)
         self.state.set("bed_leveling.bed_mesh.probe_count", probe_count)
+        if enable_mesh:
+            # Always store boundaries (template supports "auto")
+            self.state.set("bed_leveling.bed_mesh.mesh_min", mesh_min or "auto")
+            self.state.set("bed_leveling.bed_mesh.mesh_max", mesh_max or "auto")
         self.state.save()
+
+        mesh_details = ""
+        if enable_mesh:
+            if is_eddy_probe:
+                mesh_details = f"Mesh min/max: {mesh_min} → {mesh_max}\n"
+            else:
+                mesh_details = f"Probe count: {probe_count}\n"
 
         self.ui.msgbox(
             f"Bed leveling configured!\n\n"
             f"Type: {leveling_type}\n"
             f"Mesh: {'Enabled' if enable_mesh else 'Disabled'}\n"
-            f"Probe count: {probe_count}",
+            f"{mesh_details}",
             title="Configuration Saved"
         )
 

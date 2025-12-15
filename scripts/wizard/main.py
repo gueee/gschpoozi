@@ -34,6 +34,55 @@ class GschpooziWizard:
         )
         self.state = get_state()
 
+    def _format_serial_name(self, full_path: str) -> str:
+        """Format a serial device path for display.
+        
+        Extracts meaningful info from paths like:
+        /dev/serial/by-id/usb-Klipper_stm32h723xx_240041000451323336333538-if00
+        → "Klipper stm32h723xx (...3538)"
+        """
+        name = Path(full_path).name
+        
+        # Remove common prefixes
+        if name.startswith("usb-"):
+            name = name[4:]
+        
+        # Remove -if00 suffix
+        if name.endswith("-if00"):
+            name = name[:-5]
+        
+        # Parse Klipper format: Klipper_mcu_serialnumber
+        if name.startswith("Klipper_"):
+            parts = name.split("_", 2)
+            if len(parts) >= 3:
+                mcu = parts[1]
+                serial = parts[2]
+                # Show last 4 chars of serial
+                short_serial = serial[-4:] if len(serial) > 4 else serial
+                return f"Klipper {mcu} (...{short_serial})"
+            elif len(parts) == 2:
+                return f"Klipper {parts[1]}"
+        
+        # Parse Beacon format: Beacon_Beacon_RevH_SERIAL
+        if "Beacon" in name:
+            parts = name.split("_")
+            if len(parts) >= 3:
+                rev = parts[2] if len(parts) > 2 else ""
+                serial = parts[-1] if len(parts) > 3 else ""
+                short_serial = serial[-4:] if len(serial) > 4 else serial
+                return f"Beacon {rev} (...{short_serial})"
+            return "Beacon"
+        
+        # Parse Cartographer format
+        if "Cartographer" in name or "cartographer" in name:
+            return "Cartographer"
+        
+        # Generic: truncate if too long
+        if len(name) > 40:
+            return name[:20] + "..." + name[-10:]
+        
+        return name
+
     def run(self) -> int:
         """Run the wizard. Returns exit code."""
         try:
@@ -389,14 +438,17 @@ class GschpooziWizard:
         if serial_dir.exists():
             devices = list(serial_dir.iterdir())
             if devices:
-                # Show selection
-                device_items = [(str(d), d.name) for d in devices]
+                # Show selection with formatted names
+                device_items = [
+                    (str(d), self._format_serial_name(str(d)))
+                    for d in devices
+                ]
                 device_items.append(("manual", "Enter manually"))
 
                 selected = self.ui.radiolist(
                     "Select the serial device for your main board:",
                     [(d, n, False) for d, n in device_items],
-                    title="Serial Device",
+                    title="Main Board - Serial",
                 )
 
                 if selected == "manual":
@@ -1119,8 +1171,10 @@ class GschpooziWizard:
                                   if pattern.lower() in d.name.lower()]
 
             if serial_devices:
-                device_items = [(d, Path(d).name, i == 0)
-                                for i, d in enumerate(serial_devices)]
+                device_items = [
+                    (d, self._format_serial_name(d), i == 0)
+                    for i, d in enumerate(serial_devices)
+                ]
                 device_items.append(("manual", "Enter manually", False))
 
                 serial = self.ui.radiolist(

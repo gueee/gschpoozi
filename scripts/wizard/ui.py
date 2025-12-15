@@ -73,12 +73,14 @@ class WizardUI:
             Selected tag or None if cancelled
         """
         # Auto-calculate dimensions if not specified
+        # Use generous defaults for modern terminals
         if height == 0:
-            height = min(len(items) + 8, 20)
+            height = min(len(items) + 10, 30)
         if width == 0:
-            width = max(60, max(len(d) for _, d in items) + 20)
+            max_desc = max(len(d) for _, d in items) if items else 40
+            width = min(max(78, max_desc + 20), 100)  # Cap at 100
         if menu_height == 0:
-            menu_height = min(len(items), 10)
+            menu_height = min(len(items), 15)
         
         args = [
             "--title", title or self.title,
@@ -113,12 +115,14 @@ class WizardUI:
         Returns:
             Selected tag or None if cancelled
         """
+        # Use generous defaults for modern terminals
         if height == 0:
-            height = min(len(items) + 8, 20)
+            height = min(len(items) + 10, 30)
         if width == 0:
-            width = max(60, max(len(d) for _, d, _ in items) + 20)
+            max_desc = max(len(d) for _, d, _ in items) if items else 40
+            width = min(max(78, max_desc + 20), 100)  # Cap at 100
         if list_height == 0:
-            list_height = min(len(items), 10)
+            list_height = min(len(items), 15)
         
         args = [
             "--title", title or self.title,

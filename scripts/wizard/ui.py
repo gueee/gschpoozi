@@ -29,15 +29,27 @@ class WizardUI:
         """Run whiptail command and return (returncode, output)."""
         cmd = ["whiptail", "--backtitle", self.backtitle] + args
         
-        result = subprocess.run(
-            cmd,
-            input=input_text,
-            capture_output=True,
-            text=True
-        )
-        
-        # whiptail outputs to stderr (not stdout)
-        return result.returncode, result.stderr.strip()
+        # whiptail needs direct terminal access for its UI
+        # It writes the UI to /dev/tty and returns selection via stderr
+        try:
+            with open("/dev/tty", "r+") as tty:
+                result = subprocess.run(
+                    cmd,
+                    stdin=tty,
+                    stdout=tty,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                # whiptail outputs selection to stderr
+                return result.returncode, result.stderr.strip()
+        except OSError:
+            # Fallback if /dev/tty not available (unlikely on Linux)
+            result = subprocess.run(
+                cmd,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            return result.returncode, result.stderr.strip()
     
     def menu(
         self,

@@ -1874,7 +1874,7 @@ class GschpooziWizard:
             if pullup_resistor == "custom":
                 pullup_resistor = self.ui.inputbox(
                     "Enter pullup resistor value (Ω):",
-                    default="4700",
+                    default=str(current_pullup),
                     title="Hotend - Custom Pullup"
                 )
             if pullup_resistor:
@@ -2973,33 +2973,158 @@ class GschpooziWizard:
             })
 
         # Chamber temperature sensor
+        # Load saved state
+        current_chamber_enabled = self.state.get("temperature_sensors.chamber.enabled", False)
+        current_chamber_type = self.state.get("temperature_sensors.chamber.sensor_type", "")
+        current_chamber_location = self.state.get("temperature_sensors.chamber.sensor_location", "")
+        current_chamber_port = self.state.get("temperature_sensors.chamber.sensor_port_mainboard", "")
+
         if self.ui.yesno(
             "Do you have a chamber temperature sensor?",
-            title="Temperature Sensors"
+            title="Temperature Sensors",
+            default_no=not current_chamber_enabled
         ):
+            # Sensor type
             sensor_type = self.ui.radiolist(
                 "Chamber sensor type:",
                 [
-                    ("Generic 3950", "Generic 3950 (NTC)", True),
-                    ("ATC Semitec 104GT-2", "ATC Semitec 104GT-2", False),
-                    ("PT1000", "PT1000", False),
+                    ("Generic 3950", "Generic 3950 (NTC)", current_chamber_type == "Generic 3950" or not current_chamber_type),
+                    ("ATC Semitec 104GT-2", "ATC Semitec 104GT-2", current_chamber_type == "ATC Semitec 104GT-2"),
+                    ("PT1000", "PT1000", current_chamber_type == "PT1000"),
+                    ("DS18B20", "DS18B20 (1-wire)", current_chamber_type == "DS18B20"),
                 ],
                 title="Chamber Sensor Type"
             )
+            if sensor_type is None:
+                return
 
-            sensor_pin = self.ui.inputbox(
-                "Chamber sensor pin (e.g., PF5):",
-                default="",
-                title="Chamber Sensor Pin"
+            # Sensor location (mainboard or rpi)
+            # Default to mainboard if no saved value
+            default_is_rpi = current_chamber_location == "rpi"
+            sensor_location = self.ui.radiolist(
+                "Chamber sensor connected to:",
+                [
+                    ("mainboard", "Mainboard", current_chamber_location == "mainboard" or not current_chamber_location),
+                    ("rpi", "Raspberry Pi GPIO", default_is_rpi),
+                ],
+                title="Chamber Sensor Location"
             )
+            if sensor_location is None:
+                return
+
+            sensor_pin = None
+            pullup_resistor = None
+
+            if sensor_location == "mainboard":
+                # Use board template port selection
+                sensor_ports = self._get_board_ports("thermistor_ports", "boards", current_chamber_port)
+                if sensor_ports:
+                    sensor_port = self.ui.radiolist(
+                        "Select chamber sensor port on mainboard:",
+                        sensor_ports,
+                        title="Chamber Sensor Port"
+                    )
+                else:
+                    sensor_port = self.ui.inputbox(
+                        "Enter chamber sensor port on mainboard:",
+                        default=current_chamber_port or "",
+                        title="Chamber Sensor Port"
+                    )
+
+                if sensor_port is None:
+                    return
+                sensor_pin = sensor_port
+
+                # Pullup resistor (only for NTC sensors, not PT1000 or DS18B20)
+                if sensor_type not in ["PT1000", "DS18B20"]:
+                    current_pullup = self.state.get("temperature_sensors.chamber.pullup_resistor", 4700)
+                    pullup_resistor = self.ui.radiolist(
+                        "Chamber thermistor pullup resistor value:\n\n"
+                        "(Most mainboards use 4.7kΩ standard)",
+                        [
+                            ("4700", "4.7kΩ (standard)", current_pullup == 4700),
+                            ("2200", "2.2kΩ", current_pullup == 2200),
+                            ("10000", "10kΩ", current_pullup == 10000),
+                            ("custom", "Enter custom value", False),
+                        ],
+                        title="Chamber Sensor - Pullup Resistor"
+                    )
+                    if pullup_resistor == "custom":
+                        pullup_resistor = self.ui.inputbox(
+                            "Enter pullup resistor value (Ω):",
+                            default=str(current_pullup),
+                            title="Chamber Sensor - Custom Pullup"
+                        )
+                    if pullup_resistor:
+                        pullup_resistor = int(pullup_resistor)
+            else:  # rpi
+                # For RPi, only DS18B20 uses GPIO pin (gpio4 default)
+                if sensor_type == "DS18B20":
+                    current_rpi_pin = self.state.get("temperature_sensors.chamber.sensor_pin_rpi", "gpio4")
+                    sensor_pin = self.ui.inputbox(
+                        "Raspberry Pi GPIO pin (e.g., gpio4):",
+                        default=current_rpi_pin,
+                        title="Chamber Sensor - RPi GPIO"
+                    )
+                else:
+                    # For NTC on RPi, still need a pin
+                    current_rpi_pin = self.state.get("temperature_sensors.chamber.sensor_pin_rpi", "")
+                    sensor_pin = self.ui.inputbox(
+                        "Raspberry Pi GPIO pin:",
+                        default=current_rpi_pin,
+                        title="Chamber Sensor - RPi GPIO"
+                    )
+                    # Pullup resistor for NTC on RPi
+                    if sensor_type not in ["PT1000"]:
+                        current_pullup = self.state.get("temperature_sensors.chamber.pullup_resistor", 4700)
+                        pullup_resistor = self.ui.radiolist(
+                            "Chamber thermistor pullup resistor value:",
+                            [
+                                ("4700", "4.7kΩ (standard)", current_pullup == 4700),
+                                ("2200", "2.2kΩ", current_pullup == 2200),
+                                ("10000", "10kΩ", current_pullup == 10000),
+                                ("custom", "Enter custom value", False),
+                            ],
+                            title="Chamber Sensor - Pullup Resistor"
+                        )
+                        if pullup_resistor == "custom":
+                            pullup_resistor = self.ui.inputbox(
+                                "Enter pullup resistor value (Ω):",
+                                default=str(current_pullup),
+                                title="Chamber Sensor - Custom Pullup"
+                            )
+                        if pullup_resistor:
+                            pullup_resistor = int(pullup_resistor)
 
             if sensor_pin:
+                # Save to state
+                self.state.set("temperature_sensors.chamber.enabled", True)
+                self.state.set("temperature_sensors.chamber.sensor_type", sensor_type)
+                self.state.set("temperature_sensors.chamber.sensor_location", sensor_location)
+                if sensor_location == "mainboard":
+                    self.state.set("temperature_sensors.chamber.sensor_port_mainboard", sensor_pin)
+                    self.state.delete("temperature_sensors.chamber.sensor_pin_rpi")
+                else:
+                    self.state.set("temperature_sensors.chamber.sensor_pin_rpi", sensor_pin)
+                    self.state.delete("temperature_sensors.chamber.sensor_port_mainboard")
+                if pullup_resistor:
+                    self.state.set("temperature_sensors.chamber.pullup_resistor", pullup_resistor)
+                else:
+                    self.state.delete("temperature_sensors.chamber.pullup_resistor")
+                self.state.save()
+
                 sensors.append({
                     "name": "chamber",
                     "type": "temperature_sensor",
                     "sensor_type": sensor_type,
-                    "sensor_pin": sensor_pin
+                    "sensor_location": sensor_location,
+                    "sensor_pin": sensor_pin,
+                    "pullup_resistor": pullup_resistor
                 })
+        else:
+            # Disable chamber sensor
+            self.state.delete("temperature_sensors.chamber")
+            self.state.save()
 
         # Additional sensors
         while self.ui.yesno(

@@ -2950,27 +2950,63 @@ class GschpooziWizard:
         """Configure temperature sensors."""
         sensors = []
 
+        # Load saved state for MCU/host/toolboard sensors
+        current_mcu_enabled = self.state.get("temperature_sensors.mcu_main.enabled", False)
+        current_host_enabled = self.state.get("temperature_sensors.host.enabled", False)
+        current_toolboard_enabled = self.state.get("temperature_sensors.toolboard.enabled", False)
+
         # MCU temperature sensor (always available)
         if self.ui.yesno(
             "Add MCU temperature sensor?\n\n"
             "Shows mainboard MCU temperature in Klipper.",
-            title="Temperature Sensors"
+            title="Temperature Sensors",
+            default_no=not current_mcu_enabled
         ):
             sensors.append({
                 "name": "mcu_temp",
                 "type": "temperature_mcu",
                 "mcu": "mcu"
             })
+            self.state.set("temperature_sensors.mcu_main.enabled", True)
+        else:
+            self.state.set("temperature_sensors.mcu_main.enabled", False)
 
         # Host (Raspberry Pi) temperature
         if self.ui.yesno(
             "Add host (Raspberry Pi) temperature sensor?",
-            title="Temperature Sensors"
+            title="Temperature Sensors",
+            default_no=not current_host_enabled
         ):
             sensors.append({
                 "name": "host_temp",
                 "type": "temperature_host"
             })
+            self.state.set("temperature_sensors.host.enabled", True)
+        else:
+            self.state.set("temperature_sensors.host.enabled", False)
+
+        # Toolboard MCU temperature (if toolboard configured)
+        has_toolboard = self.state.get("mcu.toolboard.connection_type")
+        if has_toolboard:
+            toolboard_id = self.state.get("mcu.toolboard.board_type", "")
+            toolboard_name = self._get_board_name(toolboard_id, "toolboards") if toolboard_id else "toolboard"
+            if self.ui.yesno(
+                f"Add toolboard MCU temperature sensor?\n\n"
+                f"Shows {toolboard_name} MCU temperature in Klipper.",
+                title="Temperature Sensors - Toolboard",
+                default_no=not current_toolboard_enabled
+            ):
+                sensors.append({
+                    "name": "toolboard_temp",
+                    "type": "temperature_mcu",
+                    "mcu": "toolboard"
+                })
+                self.state.set("temperature_sensors.toolboard.enabled", True)
+            else:
+                self.state.set("temperature_sensors.toolboard.enabled", False)
+        else:
+            # Clear toolboard sensor state if no toolboard configured
+            self.state.delete("temperature_sensors.toolboard")
 
         # Chamber temperature sensor
         # Load saved state

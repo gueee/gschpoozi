@@ -136,9 +136,9 @@ stepper_x1:
     step_pin: {{ board.pins[stepper_x1.motor_port].step }}
     dir_pin: {% if stepper_x1.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_x1.motor_port].dir }}
     enable_pin: !{{ board.pins[stepper_x1.motor_port].enable }}
-    rotation_distance: {{ stepper_x.belt_pitch * stepper_x.pulley_teeth }}
-    microsteps: {{ stepper_x.microsteps | default(32) }}
-    full_steps_per_rotation: {{ stepper_x.full_steps_per_rotation | default(200) }}
+    rotation_distance: {{ stepper_x1.belt_pitch | default(stepper_x.belt_pitch) * stepper_x1.pulley_teeth | default(stepper_x.pulley_teeth) }}
+    microsteps: {{ stepper_x1.microsteps | default(stepper_x.microsteps) | default(32) }}
+    full_steps_per_rotation: {{ stepper_x1.full_steps_per_rotation | default(stepper_x.full_steps_per_rotation) | default(200) }}
 
 stepper_y1:
   condition: "printer.awd_enabled"
@@ -147,9 +147,9 @@ stepper_y1:
     step_pin: {{ board.pins[stepper_y1.motor_port].step }}
     dir_pin: {% if stepper_y1.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_y1.motor_port].dir }}
     enable_pin: !{{ board.pins[stepper_y1.motor_port].enable }}
-    rotation_distance: {{ stepper_y.belt_pitch * stepper_y.pulley_teeth }}
-    microsteps: {{ stepper_y.microsteps | default(32) }}
-    full_steps_per_rotation: {{ stepper_y.full_steps_per_rotation | default(200) }}
+    rotation_distance: {{ stepper_y1.belt_pitch | default(stepper_y.belt_pitch) * stepper_y1.pulley_teeth | default(stepper_y.pulley_teeth) }}
+    microsteps: {{ stepper_y1.microsteps | default(stepper_y.microsteps) | default(32) }}
+    full_steps_per_rotation: {{ stepper_y1.full_steps_per_rotation | default(stepper_y.full_steps_per_rotation) | default(200) }}
 
 # -----------------------------------------------------------------------------
 # TMC Drivers

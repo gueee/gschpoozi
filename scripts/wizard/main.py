@@ -1109,11 +1109,13 @@ class GschpooziWizard:
 
             # For primary axes (Y), still need endstop config
             if not is_secondary:
+                # Load saved endstop type
+                current_endstop_type = self.state.get(f"{state_key}.endstop_type", "physical")
                 endstop_type = self.ui.radiolist(
                     f"Endstop type for {axis_upper} axis:",
                     [
-                        ("physical", "Physical switch", True),
-                        ("sensorless", "Sensorless (StallGuard)", False),
+                        ("physical", "Physical switch", current_endstop_type == "physical"),
+                        ("sensorless", "Sensorless (StallGuard)", current_endstop_type == "sensorless"),
                     ],
                     title=f"Stepper {axis_upper} - Endstop"
                 )
@@ -1124,29 +1126,31 @@ class GschpooziWizard:
                 endstop_port = None
                 endstop_config = None
                 if endstop_type == "physical":
+                    current_endstop_port = self.state.get(f"{state_key}.endstop_port", "")
                     endstop_ports = self._get_board_ports("endstop_ports", "boards")
                     if endstop_ports:
                         endstop_port = self.ui.radiolist(
                             f"Select endstop port for {axis_upper} axis:",
-                            [(p, l, d) for p, l, d in endstop_ports],
+                            [(p, l, p == current_endstop_port or d) for p, l, d in endstop_ports],
                             title=f"Stepper {axis_upper} - Endstop Port"
                         )
                     else:
                         endstop_port = self.ui.inputbox(
                             f"Enter endstop port for {axis_upper} axis:",
-                            default="",
+                            default=current_endstop_port or "",
                             title=f"Stepper {axis_upper} - Endstop Port"
                         )
                     if endstop_port is None:
                         return
 
+                    current_endstop_config = self.state.get(f"{state_key}.endstop_config", "nc_gnd")
                     endstop_config = self.ui.radiolist(
                         f"Endstop switch configuration for {axis_upper}:",
                         [
-                            ("nc_gnd", "NC to GND (^pin) - recommended", True),
-                            ("no_gnd", "NO to GND (^!pin)", False),
-                            ("nc_vcc", "NC to VCC (!pin)", False),
-                            ("no_vcc", "NO to VCC (pin)", False),
+                            ("nc_gnd", "NC to GND (^pin) - recommended", current_endstop_config == "nc_gnd"),
+                            ("no_gnd", "NO to GND (^!pin)", current_endstop_config == "no_gnd"),
+                            ("nc_vcc", "NC to VCC (!pin)", current_endstop_config == "nc_vcc"),
+                            ("no_vcc", "NO to VCC (pin)", current_endstop_config == "no_vcc"),
                         ],
                         title=f"Stepper {axis_upper} - Endstop Config"
                     )
@@ -1154,32 +1158,36 @@ class GschpooziWizard:
                         return
 
                 bed_size = self.state.get(f"printer.bed_size_{axis}", 350)
+                current_position_max = self.state.get(f"{state_key}.position_max", bed_size)
                 position_max = self.ui.inputbox(
                     f"Position max for {axis_upper} (mm):",
-                    default=str(bed_size),
+                    default=str(current_position_max),
                     title=f"Stepper {axis_upper} - Position"
                 )
                 if position_max is None:
                     return
 
+                current_position_endstop = self.state.get(f"{state_key}.position_endstop", position_max)
                 position_endstop = self.ui.inputbox(
                     f"Position endstop for {axis_upper} (0 for min, {position_max} for max):",
-                    default=position_max,
+                    default=str(current_position_endstop),
                     title=f"Stepper {axis_upper} - Endstop Position"
                 )
                 if position_endstop is None:
                     return
 
                 # Homing settings
+                current_homing_speed = self.state.get(f"{state_key}.homing_speed", 50)
                 homing_speed = self.ui.inputbox(
                     f"Homing speed for {axis_upper} (mm/s):",
-                    default="50",
+                    default=str(current_homing_speed),
                     title=f"Stepper {axis_upper} - Homing Speed"
                 )
                 if homing_speed is None:
                     return
 
-                default_retract = "0" if endstop_type == "sensorless" else "5"
+                current_retract = self.state.get(f"{state_key}.homing_retract_dist", 5.0 if endstop_type == "physical" else 0.0)
+                default_retract = "0" if endstop_type == "sensorless" else str(int(current_retract))
                 homing_retract_dist = self.ui.inputbox(
                     f"Homing retract distance for {axis_upper} (mm):",
                     default=default_retract,
@@ -1189,13 +1197,16 @@ class GschpooziWizard:
                     return
 
                 second_homing_speed = None
+                current_has_second = self.state.get(f"{state_key}.second_homing_speed") is not None
                 if self.ui.yesno(
                     f"Use second (slower) homing speed for {axis_upper}?",
-                    title=f"Stepper {axis_upper} - Second Homing Speed"
+                    title=f"Stepper {axis_upper} - Second Homing Speed",
+                    default_no=not current_has_second
                 ):
+                    current_second = self.state.get(f"{state_key}.second_homing_speed", 10)
                     second_homing_speed = self.ui.inputbox(
                         f"Second homing speed for {axis_upper} (mm/s):",
-                        default="10",
+                        default=str(current_second),
                         title=f"Stepper {axis_upper} - Second Homing Speed"
                     )
 
@@ -2477,93 +2488,139 @@ class GschpooziWizard:
                 return
 
         # === ADDITIONAL FANS ===
-        additional_fans = []
-        if self.ui.yesno(
-            "Do you have additional fans?\n\n"
-            "Examples:\n"
-            "• Exhaust fan\n"
-            "• RSCS (Remote Side Cooling)\n"
-            "• Nevermore/chamber filter\n"
-            "• Bed fans",
-            title="Additional Fans"
-        ):
-            while True:
+        # Load existing additional fans from state
+        additional_fans = self.state.get("fans.additional_fans", [])
+        if not isinstance(additional_fans, list):
+            additional_fans = []
+
+        def _edit_fan(fan=None):
+            """Edit or add an additional fan. If fan is None, add new."""
+            if fan:
                 fan_name = self.ui.inputbox(
-                    "Fan name (e.g., exhaust_fan, nevermore):\n\n"
-                    "(Leave empty to finish)",
+                    "Fan name:",
+                    default=fan.get("name", ""),
+                    title="Edit Fan"
+                )
+            else:
+                fan_name = self.ui.inputbox(
+                    "Fan name (e.g., exhaust_fan, nevermore):",
                     default="",
                     title="Add Fan"
                 )
 
-                if not fan_name:
-                    break
+            if not fan_name:
+                return None
 
-                # Multi-pin support
-                is_multi_pin = self.ui.yesno(
-                    f"Does '{fan_name}' use multiple pins?\n\n"
-                    "(e.g., two fans running together as one)",
-                    title=f"{fan_name} - Multi-Pin"
-                )
+            # Multi-pin support
+            current_is_multi = fan.get("pin_type") == "multi_pin" if fan else None
+            is_multi_pin = self.ui.yesno(
+                f"Does '{fan_name}' use multiple pins?\n\n"
+                "(e.g., two fans running together as one)",
+                title=f"{fan_name} - Multi-Pin",
+                default_no=not current_is_multi if current_is_multi is not None else True
+            )
 
-                fan_config = {"name": fan_name}
+            fan_config = {"name": fan_name}
 
-                if is_multi_pin:
-                    # For multi-pin, need to select multiple ports
-                    fan_ports = self._get_board_ports("fan_ports", "boards")
-                    if fan_ports:
-                        pins_list = []
-                        self.ui.msgbox(
-                            f"Select fan ports for '{fan_name}'.\n\n"
-                            "You'll select them one at a time.",
-                            title=f"{fan_name} - Multi-Pin Setup"
-                        )
-                        while True:
-                            port = self.ui.radiolist(
-                                f"Select a fan port for '{fan_name}':\n"
-                                f"Currently selected: {', '.join(pins_list) if pins_list else 'none'}",
-                                [(p, l, False) for p, l, d in fan_ports if p not in pins_list],
-                                title=f"{fan_name} - Select Port"
-                            )
-                            if port:
-                                pins_list.append(port)
-                            if not self.ui.yesno(f"Add another port to '{fan_name}'?", title="More Ports"):
-                                break
-                        pins = ", ".join(pins_list)
-                    else:
-                        pins = self.ui.inputbox(
-                            f"Enter pins for '{fan_name}' (comma-separated):\n\n"
-                            "Example: PA15, PB11",
-                            default="",
-                            title=f"{fan_name} - Pins"
-                        )
-                    fan_config["pin_type"] = "multi_pin"
-                    fan_config["pins"] = pins
-                    fan_config["multi_pin_name"] = fan_name
-                else:
-                    # Single pin fan - select from available ports
-                    fan_ports = self._get_board_ports("fan_ports", "boards")
-                    if fan_ports:
+            if is_multi_pin:
+                # For multi-pin, need to select multiple ports
+                current_pins = fan.get("pins", "") if fan else None
+                fan_ports = self._get_board_ports("fan_ports", "boards")
+                if fan_ports:
+                    pins_list = []
+                    if current_pins:
+                        # Parse existing pins
+                        pins_list = [p.strip() for p in current_pins.split(",")]
+
+                    self.ui.msgbox(
+                        f"Select fan ports for '{fan_name}'.\n\n"
+                        "You'll select them one at a time.",
+                        title=f"{fan_name} - Multi-Pin Setup"
+                    )
+                    while True:
                         port = self.ui.radiolist(
-                            f"Select fan port for '{fan_name}':",
-                            [(p, l, False) for p, l, d in fan_ports],
-                            title=f"{fan_name} - Port"
+                            f"Select a fan port for '{fan_name}':\n"
+                            f"Currently selected: {', '.join(pins_list) if pins_list else 'none'}",
+                            [(p, l, p in pins_list) for p, l, d in fan_ports],
+                            title=f"{fan_name} - Select Port"
                         )
                         if port:
-                            fan_config["pin_type"] = "single"
-                            fan_config["port"] = port
-                    else:
-                        pin = self.ui.inputbox(
-                            f"Pin for '{fan_name}':",
-                            default="",
-                            title=f"{fan_name} - Pin"
-                        )
+                            if port in pins_list:
+                                pins_list.remove(port)
+                            else:
+                                pins_list.append(port)
+                        if not self.ui.yesno(f"Add/remove another port to '{fan_name}'?", title="More Ports"):
+                            break
+                    pins = ", ".join(pins_list)
+                else:
+                    pins = self.ui.inputbox(
+                        f"Enter pins for '{fan_name}' (comma-separated):\n\n"
+                        "Example: PA15, PB11",
+                        default=current_pins or "",
+                        title=f"{fan_name} - Pins"
+                    )
+                fan_config["pin_type"] = "multi_pin"
+                fan_config["pins"] = pins
+                fan_config["multi_pin_name"] = fan_name
+            else:
+                # Single pin fan - select from available ports
+                current_port = fan.get("port", "") if fan else None
+                current_pin = fan.get("pin", "") if fan else None
+                fan_ports = self._get_board_ports("fan_ports", "boards")
+                if fan_ports:
+                    port = self.ui.radiolist(
+                        f"Select fan port for '{fan_name}':",
+                        [(p, l, p == current_port or d) for p, l, d in fan_ports],
+                        title=f"{fan_name} - Port"
+                    )
+                    if port:
                         fan_config["pin_type"] = "single"
-                        fan_config["pin"] = pin
+                        fan_config["port"] = port
+                else:
+                    pin = self.ui.inputbox(
+                        f"Pin for '{fan_name}':",
+                        default=current_pin or "",
+                        title=f"{fan_name} - Pin"
+                    )
+                    fan_config["pin_type"] = "single"
+                    fan_config["pin"] = pin
 
-                additional_fans.append(fan_config)
+            return fan_config
 
-                if not self.ui.yesno("Add another fan?", title="More Fans"):
-                    break
+        # Management loop
+        while True:
+            menu_items = [("ADD", "Add new fan")]
+            for i, fan in enumerate(additional_fans):
+                menu_items.append((f"EDIT_{i}", f"Edit: {fan.get('name', 'Unknown')}"))
+            for i, fan in enumerate(additional_fans):
+                menu_items.append((f"DELETE_{i}", f"Delete: {fan.get('name', 'Unknown')}"))
+            menu_items.append(("DONE", "Done (save and exit)"))
+
+            choice = self.ui.menu(
+                f"Additional Fans Configuration\n\n"
+                f"Currently configured: {len(additional_fans)} fan(s)\n"
+                f"{', '.join(f.get('name', 'Unknown') for f in additional_fans) if additional_fans else 'None'}",
+                menu_items,
+                title="Additional Fans Management"
+            )
+
+            if choice is None or choice == "DONE":
+                break
+            elif choice == "ADD":
+                new_fan = _edit_fan()
+                if new_fan:
+                    additional_fans.append(new_fan)
+            elif choice.startswith("EDIT_"):
+                idx = int(choice.split("_")[1])
+                if 0 <= idx < len(additional_fans):
+                    edited = _edit_fan(additional_fans[idx])
+                    if edited:
+                        additional_fans[idx] = edited
+            elif choice.startswith("DELETE_"):
+                idx = int(choice.split("_")[1])
+                if 0 <= idx < len(additional_fans):
+                    if self.ui.yesno(f"Delete fan '{additional_fans[idx].get('name', 'Unknown')}'?", title="Confirm Delete"):
+                        additional_fans.pop(idx)
 
         # Multi-pin groups (for hotend cooling with multiple fans, etc.)
         multi_pins = []
@@ -2649,9 +2706,11 @@ class GschpooziWizard:
             ("btt_eddy", "BTT Eddy"),
         ]
 
+        # Load saved probe type
+        current_probe_type = self.state.get("probe.probe_type", "tap")
         probe_type = self.ui.radiolist(
             "Select your probe type:",
-            [(k, v, k == "tap") for k, v in probe_types],
+            [(k, v, k == current_probe_type) for k, v in probe_types],
             title="Probe - Type"
         )
 
@@ -2665,14 +2724,17 @@ class GschpooziWizard:
 
         # Offsets (for non-Tap probes)
         if probe_type != "tap":
+            current_x_offset = self.state.get("probe.x_offset", 0.0)
+            current_y_offset = self.state.get("probe.y_offset", 0.0)
+            default_y = str(int(current_y_offset)) if current_y_offset else ("25" if probe_type in eddy_probes else "0")
             x_offset = self.ui.inputbox(
                 "Probe X offset from nozzle (mm):",
-                default="0",
+                default=str(int(current_x_offset)),
                 title="Probe - X Offset"
             )
             y_offset = self.ui.inputbox(
                 "Probe Y offset from nozzle (mm):",
-                default="0" if probe_type not in eddy_probes else "25",
+                default=default_y,
                 title="Probe - Y Offset"
             )
         else:
@@ -2705,15 +2767,23 @@ class GschpooziWizard:
                 serial_devices = [str(d) for d in serial_dir.iterdir()
                                   if pattern.lower() in d.name.lower()]
 
+            # Load saved serial
+            current_serial = self.state.get("probe.serial", "")
+
             if serial_devices:
                 # Build mapping: short_name -> full_path
                 serial_map = {}
                 device_items = []
+                selected_index = 0
                 for i, d in enumerate(serial_devices):
                     short_name = self._format_serial_name(d)
                     tag = f"{i+1}. {short_name}"
                     serial_map[tag] = d
-                    device_items.append((tag, "", i == 0))
+                    # Check if this matches saved serial
+                    is_current = str(d) == current_serial
+                    if is_current:
+                        selected_index = i
+                    device_items.append((tag, "", is_current))
 
                 device_items.append(("manual", "Enter manually", False))
 
@@ -2729,7 +2799,7 @@ class GschpooziWizard:
                 elif selected == "manual":
                     serial = self.ui.inputbox(
                         "Enter serial path:",
-                        default="/dev/serial/by-id/usb-"
+                        default=current_serial or "/dev/serial/by-id/usb-"
                     )
                 else:
                     serial = None
@@ -2737,25 +2807,27 @@ class GschpooziWizard:
                 serial = self.ui.inputbox(
                     f"Enter {probe_type} serial path:\n\n"
                     "(No devices auto-detected)",
-                    default="/dev/serial/by-id/usb-"
+                    default=current_serial or "/dev/serial/by-id/usb-"
                 )
 
             # Homing mode selection
+            current_homing_mode = self.state.get("probe.homing_mode", "")
             if probe_type == "beacon":
                 homing_mode = self.ui.radiolist(
                     "Beacon homing mode:",
                     [
-                        ("contact", "Contact (nozzle touches bed)", True),
-                        ("proximity", "Proximity (non-contact)", False),
+                        ("contact", "Contact (nozzle touches bed)", current_homing_mode == "contact" or (not current_homing_mode and True)),
+                        ("proximity", "Proximity (non-contact)", current_homing_mode == "proximity"),
                     ],
                     title="Beacon - Homing Mode"
                 )
 
                 if homing_mode == "contact":
+                    current_contact_temp = self.state.get("probe.contact_max_hotend_temperature", 180)
                     contact_max_temp = self.ui.inputbox(
                         "Max hotend temp for contact probing (°C):\n\n"
                         "(Prevents damage from hot nozzle contact)",
-                        default="180",
+                        default=str(current_contact_temp),
                         title="Beacon - Contact Temp"
                     )
 
@@ -2763,8 +2835,8 @@ class GschpooziWizard:
                 homing_mode = self.ui.radiolist(
                     "Cartographer homing mode:",
                     [
-                        ("touch", "Touch (contact homing)", True),
-                        ("scan", "Scan (proximity homing)", False),
+                        ("touch", "Touch (contact homing)", current_homing_mode == "touch" or (not current_homing_mode and True)),
+                        ("scan", "Scan (proximity homing)", current_homing_mode == "scan"),
                     ],
                     title="Cartographer - Homing Mode"
                 )
@@ -2773,27 +2845,29 @@ class GschpooziWizard:
                 homing_mode = self.ui.radiolist(
                     "BTT Eddy mesh method:",
                     [
-                        ("rapid_scan", "Rapid Scan (fast)", True),
-                        ("scan", "Standard Scan", False),
+                        ("rapid_scan", "Rapid Scan (fast)", current_homing_mode == "rapid_scan" or (not current_homing_mode and True)),
+                        ("scan", "Standard Scan", current_homing_mode == "scan"),
                     ],
                     title="BTT Eddy - Mesh Method"
                 )
 
             # Mesh settings for eddy probes
+            current_mesh_direction = self.state.get("probe.mesh_main_direction", "y")
             mesh_main_direction = self.ui.radiolist(
                 "Mesh scan direction:",
                 [
-                    ("x", "X direction", False),
-                    ("y", "Y direction", True),
+                    ("x", "X direction", current_mesh_direction == "x"),
+                    ("y", "Y direction", current_mesh_direction == "y" or (not current_mesh_direction and True)),
                 ],
                 title="Probe - Mesh Direction"
             )
 
+            current_mesh_runs = self.state.get("probe.mesh_runs", 1)
             mesh_runs = self.ui.radiolist(
                 "Mesh scan passes:",
                 [
-                    ("1", "1 pass (faster)", True),
-                    ("2", "2 passes (more accurate)", False),
+                    ("1", "1 pass (faster)", current_mesh_runs == 1 or (not current_mesh_runs and True)),
+                    ("2", "2 passes (more accurate)", current_mesh_runs == 2),
                 ],
                 title="Probe - Mesh Runs"
             )
@@ -2802,12 +2876,13 @@ class GschpooziWizard:
         has_toolboard = self.state.get("mcu.toolboard.connection_type")
         location = None
         if probe_type not in eddy_probes:
+            current_location = self.state.get("probe.location", "toolboard" if has_toolboard else "mainboard")
             if has_toolboard:
                 location = self.ui.radiolist(
                     "Probe connected to:",
                     [
-                        ("mainboard", "Mainboard", False),
-                        ("toolboard", "Toolboard", True),
+                        ("mainboard", "Mainboard", current_location == "mainboard"),
+                        ("toolboard", "Toolboard", current_location == "toolboard" or (not current_location and True)),
                     ],
                     title="Probe - Connection"
                 )
@@ -2852,17 +2927,18 @@ class GschpooziWizard:
     def _homing_setup(self) -> None:
         """Configure homing."""
         probe_type = self.state.get("probe.probe_type", "none")
+        current_method = self.state.get("homing.homing_method", "")
 
         # Homing method based on probe
         if probe_type in ["beacon", "cartographer"]:
             methods = [
-                ("beacon_contact", "Beacon Contact", True),
-                ("homing_override", "Custom Homing Override", False),
+                ("beacon_contact", "Beacon Contact", current_method == "beacon_contact" or (not current_method and True)),
+                ("homing_override", "Custom Homing Override", current_method == "homing_override"),
             ]
         else:
             methods = [
-                ("safe_z_home", "Safe Z Home (standard)", True),
-                ("homing_override", "Homing Override (sensorless)", False),
+                ("safe_z_home", "Safe Z Home (standard)", current_method == "safe_z_home" or (not current_method and True)),
+                ("homing_override", "Homing Override (sensorless)", current_method == "homing_override"),
             ]
 
         method = self.ui.radiolist(
@@ -2872,9 +2948,10 @@ class GschpooziWizard:
         )
 
         # Z hop
+        current_z_hop = self.state.get("homing.z_hop", 10)
         z_hop = self.ui.inputbox(
             "Z hop height for homing (mm):",
-            default="10",
+            default=str(current_z_hop),
             title="Homing - Z Hop"
         )
 
@@ -2893,21 +2970,22 @@ class GschpooziWizard:
     def _bed_leveling_setup(self) -> None:
         """Configure bed leveling."""
         z_count = self.state.get("stepper_z.z_motor_count", 1)
+        current_leveling_type = self.state.get("bed_leveling.leveling_type", "")
 
         # Leveling type based on Z motor count
         if z_count == 4:
             leveling_options = [
-                ("qgl", "Quad Gantry Level", True),
-                ("none", "None", False),
+                ("qgl", "Quad Gantry Level", current_leveling_type == "qgl" or (not current_leveling_type and True)),
+                ("none", "None", current_leveling_type == "none"),
             ]
         elif z_count >= 2:
             leveling_options = [
-                ("z_tilt", "Z Tilt Adjust", True),
-                ("none", "None", False),
+                ("z_tilt", "Z Tilt Adjust", current_leveling_type == "z_tilt" or (not current_leveling_type and True)),
+                ("none", "None", current_leveling_type == "none"),
             ]
         else:
             leveling_options = [
-                ("none", "None (single Z)", True),
+                ("none", "None (single Z)", current_leveling_type == "none" or (not current_leveling_type and True)),
             ]
 
         leveling_type = self.ui.radiolist(
@@ -2917,20 +2995,22 @@ class GschpooziWizard:
         )
 
         # Bed mesh
+        current_mesh_enabled = self.state.get("bed_leveling.bed_mesh.enabled", False)
         enable_mesh = self.ui.yesno(
             "Enable bed mesh?",
             title="Bed Leveling - Mesh",
-            default_no=False
+            default_no=not current_mesh_enabled
         )
 
+        current_probe_count = self.state.get("bed_leveling.bed_mesh.probe_count", "5,5")
         if enable_mesh:
             probe_count = self.ui.inputbox(
                 "Mesh probe count (e.g., 5,5):",
-                default="5,5",
+                default=current_probe_count,
                 title="Bed Mesh - Probe Count"
             )
         else:
-            probe_count = "5,5"
+            probe_count = current_probe_count
 
         # Save
         self.state.set("bed_leveling.leveling_type", leveling_type or "none")
@@ -3162,44 +3242,98 @@ class GschpooziWizard:
             self.state.delete("temperature_sensors.chamber")
             self.state.save()
 
-        # Additional sensors
-        while self.ui.yesno(
-            "Add another temperature sensor?",
-            title="More Sensors",
-            default_no=True
-        ):
-            name = self.ui.inputbox(
-                "Sensor name:",
-                default="",
-                title="Sensor Name"
-            )
-            if not name:
-                break
+        # Additional sensors - load existing and filter out built-in ones
+        existing_sensors = self.state.get("temperature_sensors", [])
+        if not isinstance(existing_sensors, list):
+            existing_sensors = []
 
+        # Filter out built-in sensors (mcu_temp, host_temp, toolboard_temp, chamber)
+        built_in_names = {"mcu_temp", "host_temp", "toolboard_temp", "chamber"}
+        additional_sensors = [s for s in existing_sensors if s.get("name") not in built_in_names]
+
+        def _edit_additional_sensor(sensor=None):
+            """Edit or add an additional temperature sensor. If sensor is None, add new."""
+            if sensor:
+                name = self.ui.inputbox(
+                    "Sensor name:",
+                    default=sensor.get("name", ""),
+                    title="Edit Sensor"
+                )
+            else:
+                name = self.ui.inputbox(
+                    "Sensor name:",
+                    default="",
+                    title="Add Sensor"
+                )
+
+            if not name:
+                return None
+
+            current_type = sensor.get("sensor_type", "Generic 3950") if sensor else None
             sensor_type = self.ui.radiolist(
                 f"Sensor type for '{name}':",
                 [
-                    ("Generic 3950", "Generic 3950 (NTC)", True),
-                    ("ATC Semitec 104GT-2", "ATC Semitec 104GT-2", False),
-                    ("PT1000", "PT1000", False),
-                    ("DS18B20", "DS18B20 (1-wire)", False),
+                    ("Generic 3950", "Generic 3950 (NTC)", current_type == "Generic 3950" if current_type else True),
+                    ("ATC Semitec 104GT-2", "ATC Semitec 104GT-2", current_type == "ATC Semitec 104GT-2"),
+                    ("PT1000", "PT1000", current_type == "PT1000"),
+                    ("DS18B20", "DS18B20 (1-wire)", current_type == "DS18B20"),
                 ],
                 title="Sensor Type"
             )
 
+            current_pin = sensor.get("sensor_pin", "") if sensor else None
             sensor_pin = self.ui.inputbox(
                 f"Pin for '{name}':",
-                default="",
+                default=current_pin or "",
                 title="Sensor Pin"
             )
 
             if sensor_pin:
-                sensors.append({
+                return {
                     "name": name,
                     "type": "temperature_sensor",
                     "sensor_type": sensor_type,
                     "sensor_pin": sensor_pin
-                })
+                }
+            return None
+
+        # Management loop for additional sensors
+        while True:
+            menu_items = [("ADD", "Add new temperature sensor")]
+            for i, sensor in enumerate(additional_sensors):
+                menu_items.append((f"EDIT_{i}", f"Edit: {sensor.get('name', 'Unknown')}"))
+            for i, sensor in enumerate(additional_sensors):
+                menu_items.append((f"DELETE_{i}", f"Delete: {sensor.get('name', 'Unknown')}"))
+            menu_items.append(("DONE", "Done (save and exit)"))
+
+            choice = self.ui.menu(
+                f"Additional Temperature Sensors\n\n"
+                f"Currently configured: {len(additional_sensors)} sensor(s)\n"
+                f"{', '.join(s.get('name', 'Unknown') for s in additional_sensors) if additional_sensors else 'None'}",
+                menu_items,
+                title="Additional Sensors Management"
+            )
+
+            if choice is None or choice == "DONE":
+                break
+            elif choice == "ADD":
+                new_sensor = _edit_additional_sensor()
+                if new_sensor:
+                    additional_sensors.append(new_sensor)
+            elif choice.startswith("EDIT_"):
+                idx = int(choice.split("_")[1])
+                if 0 <= idx < len(additional_sensors):
+                    edited = _edit_additional_sensor(additional_sensors[idx])
+                    if edited:
+                        additional_sensors[idx] = edited
+            elif choice.startswith("DELETE_"):
+                idx = int(choice.split("_")[1])
+                if 0 <= idx < len(additional_sensors):
+                    if self.ui.yesno(f"Delete sensor '{additional_sensors[idx].get('name', 'Unknown')}'?", title="Confirm Delete"):
+                        additional_sensors.pop(idx)
+
+        # Rebuild full sensors list: built-in ones + additional ones
+        sensors.extend(additional_sensors)
 
         # Save
         self.state.set("temperature_sensors", sensors)
@@ -3214,7 +3348,10 @@ class GschpooziWizard:
 
     def _leds_setup(self) -> None:
         """Configure LED strips."""
-        leds = []
+        # Load existing LEDs from state
+        leds = self.state.get("leds", [])
+        if not isinstance(leds, list):
+            leds = []
 
         if not self.ui.yesno(
             "Do you have LED strips (Neopixel/WS2812)?",
@@ -3226,24 +3363,32 @@ class GschpooziWizard:
 
         has_toolboard = self.state.get("mcu.toolboard.connection_type")
 
-        while True:
-            led_name = self.ui.inputbox(
-                "LED strip name (e.g., status_led, chamber_led):\n\n"
-                "(Leave empty to finish)",
-                default="status_led" if not leds else "",
-                title="Add LED"
-            )
+        def _edit_led(led=None):
+            """Edit or add an LED. If led is None, add new."""
+            if led:
+                led_name = self.ui.inputbox(
+                    "LED strip name:",
+                    default=led.get("name", ""),
+                    title="Edit LED"
+                )
+            else:
+                led_name = self.ui.inputbox(
+                    "LED strip name (e.g., status_led, chamber_led):",
+                    default="status_led" if not leds else "",
+                    title="Add LED"
+                )
 
             if not led_name:
-                break
+                return None
 
             # Location
+            current_location = led.get("location", "toolboard" if has_toolboard else "mainboard") if led else None
             if has_toolboard:
                 location = self.ui.radiolist(
                     f"'{led_name}' connected to:",
                     [
-                        ("mainboard", "Mainboard", False),
-                        ("toolboard", "Toolboard", True),
+                        ("mainboard", "Mainboard", current_location == "mainboard" if current_location else False),
+                        ("toolboard", "Toolboard", current_location == "toolboard" if current_location else True),
                     ],
                     title=f"{led_name} - Location"
                 )
@@ -3251,41 +3396,77 @@ class GschpooziWizard:
                 location = "mainboard"
 
             # Pin
+            current_pin = led.get("pin", "") if led else None
+            default_pin = current_pin if current_pin else ("PB0" if location == "mainboard" else "PB8")
             pin = self.ui.inputbox(
                 f"Pin for '{led_name}':",
-                default="PB0" if location == "mainboard" else "PB8",
+                default=default_pin,
                 title=f"{led_name} - Pin"
             )
 
             # LED count
+            current_count = led.get("chain_count", 1) if led else None
             chain_count = self.ui.inputbox(
                 f"Number of LEDs in '{led_name}' chain:",
-                default="1",
+                default=str(current_count) if current_count else "1",
                 title=f"{led_name} - Count"
             )
 
             # Color order
+            current_color_order = led.get("color_order", "GRB") if led else None
             color_order = self.ui.radiolist(
                 f"Color order for '{led_name}':",
                 [
-                    ("GRB", "GRB (most common)", True),
-                    ("RGB", "RGB", False),
-                    ("GRBW", "GRBW (RGBW with green first)", False),
-                    ("RGBW", "RGBW", False),
+                    ("GRB", "GRB (most common)", current_color_order == "GRB" if current_color_order else True),
+                    ("RGB", "RGB", current_color_order == "RGB"),
+                    ("GRBW", "GRBW (RGBW with green first)", current_color_order == "GRBW"),
+                    ("RGBW", "RGBW", current_color_order == "RGBW"),
                 ],
                 title=f"{led_name} - Color Order"
             )
 
-            leds.append({
+            return {
                 "name": led_name,
                 "location": location,
                 "pin": pin,
                 "chain_count": int(chain_count or 1),
                 "color_order": color_order
-            })
+            }
 
-            if not self.ui.yesno("Add another LED strip?", title="More LEDs"):
+        # Management loop
+        while True:
+            menu_items = [("ADD", "Add new LED strip")]
+            for i, led in enumerate(leds):
+                menu_items.append((f"EDIT_{i}", f"Edit: {led.get('name', 'Unknown')}"))
+            for i, led in enumerate(leds):
+                menu_items.append((f"DELETE_{i}", f"Delete: {led.get('name', 'Unknown')}"))
+            menu_items.append(("DONE", "Done (save and exit)"))
+
+            choice = self.ui.menu(
+                f"LED Configuration\n\n"
+                f"Currently configured: {len(leds)} LED strip(s)\n"
+                f"{', '.join(l.get('name', 'Unknown') for l in leds) if leds else 'None'}",
+                menu_items,
+                title="LED Management"
+            )
+
+            if choice is None or choice == "DONE":
                 break
+            elif choice == "ADD":
+                new_led = _edit_led()
+                if new_led:
+                    leds.append(new_led)
+            elif choice.startswith("EDIT_"):
+                idx = int(choice.split("_")[1])
+                if 0 <= idx < len(leds):
+                    edited = _edit_led(leds[idx])
+                    if edited:
+                        leds[idx] = edited
+            elif choice.startswith("DELETE_"):
+                idx = int(choice.split("_")[1])
+                if 0 <= idx < len(leds):
+                    if self.ui.yesno(f"Delete LED '{leds[idx].get('name', 'Unknown')}'?", title="Confirm Delete"):
+                        leds.pop(idx)
 
         # Save
         self.state.set("leds", leds)
@@ -3300,7 +3481,10 @@ class GschpooziWizard:
 
     def _filament_sensors_setup(self) -> None:
         """Configure filament sensors."""
-        sensors = []
+        # Load existing sensors from state
+        sensors = self.state.get("filament_sensors", [])
+        if not isinstance(sensors, list):
+            sensors = []
 
         if not self.ui.yesno(
             "Do you have a filament runout sensor?",
@@ -3312,54 +3496,110 @@ class GschpooziWizard:
 
         has_toolboard = self.state.get("mcu.toolboard.connection_type")
 
-        # Sensor type
-        sensor_type = self.ui.radiolist(
-            "Filament sensor type:",
-            [
-                ("switch", "Simple switch (runout only)", True),
-                ("motion", "Motion sensor (detects movement)", False),
-                ("encoder", "Encoder (measures filament)", False),
-            ],
-            title="Sensor Type"
-        )
+        def _edit_sensor(sensor=None):
+            """Edit or add a filament sensor. If sensor is None, add new."""
+            if sensor:
+                name = self.ui.inputbox(
+                    "Sensor name:",
+                    default=sensor.get("name", "filament_sensor"),
+                    title="Edit Sensor"
+                )
+            else:
+                name = self.ui.inputbox(
+                    "Sensor name:",
+                    default="filament_sensor",
+                    title="Add Sensor"
+                )
 
-        # Location
-        if has_toolboard:
-            location = self.ui.radiolist(
-                "Sensor connected to:",
+            if not name:
+                return None
+
+            # Sensor type
+            current_type = sensor.get("type", "switch") if sensor else None
+            sensor_type = self.ui.radiolist(
+                "Filament sensor type:",
                 [
-                    ("mainboard", "Mainboard", False),
-                    ("toolboard", "Toolboard", True),
+                    ("switch", "Simple switch (runout only)", current_type == "switch" if current_type else True),
+                    ("motion", "Motion sensor (detects movement)", current_type == "motion"),
+                    ("encoder", "Encoder (measures filament)", current_type == "encoder"),
                 ],
-                title="Sensor Location"
+                title="Sensor Type"
             )
-        else:
-            location = "mainboard"
 
-        # Pin
-        pin = self.ui.inputbox(
-            "Sensor pin:",
-            default="PG11" if location == "mainboard" else "PB6",
-            title="Sensor Pin"
-        )
+            # Location
+            current_location = sensor.get("location", "toolboard" if has_toolboard else "mainboard") if sensor else None
+            if has_toolboard:
+                location = self.ui.radiolist(
+                    "Sensor connected to:",
+                    [
+                        ("mainboard", "Mainboard", current_location == "mainboard" if current_location else False),
+                        ("toolboard", "Toolboard", current_location == "toolboard" if current_location else True),
+                    ],
+                    title="Sensor Location"
+                )
+            else:
+                location = "mainboard"
 
-        sensors.append({
-            "name": "filament_sensor",
-            "type": sensor_type,
-            "location": location,
-            "pin": pin,
-            "pause_on_runout": True
-        })
+            # Pin
+            current_pin = sensor.get("pin", "") if sensor else None
+            default_pin = current_pin if current_pin else ("PG11" if location == "mainboard" else "PB6")
+            pin = self.ui.inputbox(
+                "Sensor pin:",
+                default=default_pin,
+                title="Sensor Pin"
+            )
+
+            return {
+                "name": name,
+                "type": sensor_type,
+                "location": location,
+                "pin": pin,
+                "pause_on_runout": sensor.get("pause_on_runout", True) if sensor else True
+            }
+
+        # Management loop
+        while True:
+            menu_items = [("ADD", "Add new filament sensor")]
+            for i, sensor in enumerate(sensors):
+                menu_items.append((f"EDIT_{i}", f"Edit: {sensor.get('name', 'Unknown')}"))
+            for i, sensor in enumerate(sensors):
+                menu_items.append((f"DELETE_{i}", f"Delete: {sensor.get('name', 'Unknown')}"))
+            menu_items.append(("DONE", "Done (save and exit)"))
+
+            choice = self.ui.menu(
+                f"Filament Sensor Configuration\n\n"
+                f"Currently configured: {len(sensors)} sensor(s)\n"
+                f"{', '.join(s.get('name', 'Unknown') for s in sensors) if sensors else 'None'}",
+                menu_items,
+                title="Filament Sensor Management"
+            )
+
+            if choice is None or choice == "DONE":
+                break
+            elif choice == "ADD":
+                new_sensor = _edit_sensor()
+                if new_sensor:
+                    sensors.append(new_sensor)
+            elif choice.startswith("EDIT_"):
+                idx = int(choice.split("_")[1])
+                if 0 <= idx < len(sensors):
+                    edited = _edit_sensor(sensors[idx])
+                    if edited:
+                        sensors[idx] = edited
+            elif choice.startswith("DELETE_"):
+                idx = int(choice.split("_")[1])
+                if 0 <= idx < len(sensors):
+                    if self.ui.yesno(f"Delete sensor '{sensors[idx].get('name', 'Unknown')}'?", title="Confirm Delete"):
+                        sensors.pop(idx)
 
         # Save
         self.state.set("filament_sensors", sensors)
         self.state.save()
 
+        sensor_names = [s["name"] for s in sensors]
         self.ui.msgbox(
             f"Filament sensor configured!\n\n"
-            f"Type: {sensor_type}\n"
-            f"Location: {location}\n"
-            f"Pin: {pin}",
+            f"Sensors: {', '.join(sensor_names) if sensor_names else 'None'}",
             title="Configuration Saved"
         )
 

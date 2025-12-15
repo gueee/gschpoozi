@@ -699,21 +699,24 @@ class GschpooziWizard:
                 title="CAN Bus Info"
             )
 
-            # Bitrate selection
+            # Bitrate selection - load saved value
+            current_bitrate = self.state.get("mcu.toolboard.canbus_bitrate", 1000000)
             bitrate = self.ui.radiolist(
                 "Select CAN bus bitrate:",
                 [
-                    ("1000000", "1Mbit/s (recommended)", True),
-                    ("500000", "500Kbit/s", False),
-                    ("250000", "250Kbit/s (rare)", False),
+                    ("1000000", "1Mbit/s (recommended)", current_bitrate == 1000000),
+                    ("500000", "500Kbit/s", current_bitrate == 500000),
+                    ("250000", "250Kbit/s (rare)", current_bitrate == 250000),
                 ],
                 title="CAN Bitrate"
             )
 
+            # UUID input - load saved value as default
+            current_uuid = self.state.get("mcu.toolboard.canbus_uuid", "")
             uuid = self.ui.inputbox(
                 "Enter toolboard CAN UUID:\n\n"
                 "(Run: ~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0)",
-                default=""
+                default=current_uuid
             )
 
             if uuid:
@@ -725,6 +728,9 @@ class GschpooziWizard:
                 self.ui.msgbox(f"Toolboard configured!\n\nUUID: {uuid}", title="Success")
         else:
             # USB toolboard - scan for devices
+            # Load saved serial path to preselect it
+            current_serial = self.state.get("mcu.toolboard.serial", "")
+            
             self.ui.infobox("Scanning for USB devices...", title="Detecting")
             import time
             time.sleep(1)
@@ -741,7 +747,9 @@ class GschpooziWizard:
                         short_name = self._format_serial_name(str(d))
                         tag = f"{i+1}. {short_name}"
                         serial_map[tag] = str(d)
-                        device_items.append((tag, "", False))
+                        # Preselect if this matches saved serial
+                        is_selected = (str(d) == current_serial)
+                        device_items.append((tag, "", is_selected))
 
                     device_items.append(("manual", "Enter path manually", False))
 
@@ -755,19 +763,19 @@ class GschpooziWizard:
                     if selected == "manual":
                         serial = self.ui.inputbox(
                             "Enter toolboard serial path:",
-                            default="/dev/serial/by-id/usb-Klipper_"
+                            default=current_serial or "/dev/serial/by-id/usb-Klipper_"
                         )
                     elif selected and selected in serial_map:
                         serial = serial_map[selected]
                 else:
                     serial = self.ui.inputbox(
                         "No USB devices found.\nEnter toolboard serial path:",
-                        default="/dev/serial/by-id/usb-Klipper_"
+                        default=current_serial or "/dev/serial/by-id/usb-Klipper_"
                     )
             else:
                 serial = self.ui.inputbox(
                     "Enter toolboard serial path:",
-                    default="/dev/serial/by-id/usb-Klipper_"
+                    default=current_serial or "/dev/serial/by-id/usb-Klipper_"
                 )
 
             if serial:

@@ -639,18 +639,54 @@ class GschpooziWizard:
             self.state.set("mcu.toolboard.board_type", board)
             self.state.set("mcu.toolboard.enabled", True)
 
-        # Connection type
+        # Connection type - preselect based on saved value
+        # Explicitly get and validate the saved connection type
+        current_conn_type = self.state.get("mcu.toolboard.connection_type", "")
+
+        # Validate: only accept "USB" or "CAN", default to USB if invalid/empty
+        if current_conn_type not in ("USB", "CAN"):
+            current_conn_type = "USB"  # Default to USB if not set or invalid
+
+        # Mutually exclusive preselection: only one can be True
+        default_is_usb = (current_conn_type == "USB")
+        default_is_can = (current_conn_type == "CAN")
+
+        # Safety check: ensure at least one is preselected (should always be True after validation above)
+        if not default_is_usb and not default_is_can:
+            # Fallback: default to USB if somehow both are False
+            default_is_usb = True
+
         conn_type = self.ui.radiolist(
             "How is your toolhead board connected?",
             [
-                ("USB", "USB (direct connection)", False),
-                ("CAN", "CAN bus", True),
+                ("USB", "USB (direct connection)", default_is_usb),
+                ("CAN", "CAN bus", default_is_can),
             ],
             title="Connection Type",
         )
 
         if conn_type is None:
             return
+
+        # Validate conn_type is one of the expected values
+        if conn_type not in ("USB", "CAN"):
+            self.ui.msgbox(f"Invalid connection type: {conn_type}", title="Error")
+            return
+
+        # Save connection type immediately and clear incompatible fields
+        # This ensures connection_type is persisted even if user cancels serial/UUID entry
+        if conn_type == "CAN":
+            self.state.set("mcu.toolboard.connection_type", "CAN")
+            # Clear USB-specific fields to prevent stale data
+            self.state.delete("mcu.toolboard.serial")
+        else:  # USB
+            self.state.set("mcu.toolboard.connection_type", "USB")
+            # Clear CAN-specific fields to prevent stale data
+            self.state.delete("mcu.toolboard.canbus_uuid")
+            self.state.delete("mcu.toolboard.canbus_bitrate")
+
+        # Save immediately to ensure persistence
+        self.state.save()
 
         if conn_type == "CAN":
             self.ui.msgbox(
@@ -681,7 +717,7 @@ class GschpooziWizard:
             )
 
             if uuid:
-                self.state.set("mcu.toolboard.connection_type", "CAN")
+                # connection_type already saved above
                 self.state.set("mcu.toolboard.canbus_uuid", uuid)
                 self.state.set("mcu.toolboard.canbus_bitrate", int(bitrate or 1000000))
                 self.state.save()
@@ -735,7 +771,7 @@ class GschpooziWizard:
                 )
 
             if serial:
-                self.state.set("mcu.toolboard.connection_type", "USB")
+                # connection_type already saved above
                 self.state.set("mcu.toolboard.serial", serial)
                 self.state.save()
 

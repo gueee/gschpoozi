@@ -204,6 +204,12 @@ categories:
             type: "int"
             required: true
             description: "Z height in mm"
+          # AWD (All Wheel Drive) for CoreXY
+          - name: "awd_enabled"
+            type: "bool"
+            default: false
+            condition: "kinematics == 'corexy'"
+            description: "Enable dual motors per axis (AWD CoreXY)"
 
       # 2.3 X Axis
       - id: "2.3"
@@ -286,9 +292,15 @@ categories:
             parameters:
               - name: "driver_type"
                 type: "choice"
-                options: ["TMC2209", "TMC5160", "TMC2130", "TMC2660"]
+                options: ["TMC2209", "TMC2240", "TMC5160", "TMC2130"]
                 default: "TMC2209"
                 required: true
+              - name: "driver_protocol"
+                type: "choice"
+                options: ["uart", "spi"]
+                default: "uart"
+                condition: "driver_type in ['TMC2240', 'TMC5160', 'TMC2130']"
+                description: "TMC5160 requires SPI, TMC2240 supports both"
               - name: "run_current"
                 type: "float"
                 range: [0.1, 2.5]
@@ -296,11 +308,92 @@ categories:
               - name: "interpolate"
                 type: "bool"
                 default: false
+              # SPI-specific parameters
+              - name: "sense_resistor"
+                type: "float"
+                default: 0.075
+                condition: "driver_protocol == 'spi'"
+                description: "0.075 for TMC5160, 0.110 for TMC2240"
+              - name: "driver_tbl"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_toff"
+                type: "int"
+                default: 3
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2g"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2vs"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
               - name: "driver_SGTHRS"
                 type: "int"
                 default: 70
                 range: [0, 255]
                 condition: "2.3.1.endstop_type == 'sensorless'"
+
+          # AWD X1 Motor (secondary X motor)
+          - id: "2.3.3"
+            name: "Stepper X1 (AWD)"
+            klipper_section: "[stepper_x1]"
+            condition: "2.2.awd_enabled == true"
+            parameters:
+              - name: "motor_port"
+                type: "select"
+                source: "board.motor_ports"
+                required: true
+              - name: "dir_pin_inverted"
+                type: "bool"
+                default: false
+                description: "Usually mirrors stepper_x direction"
+
+          - id: "2.3.4"
+            name: "TMC Driver X1 (AWD)"
+            klipper_section: "[tmc2209 stepper_x1]"
+            condition: "2.2.awd_enabled == true"
+            parameters:
+              - name: "driver_type"
+                type: "choice"
+                options: ["TMC2209", "TMC2240", "TMC5160", "TMC2130"]
+                default: "TMC2209"
+                required: true
+              - name: "driver_protocol"
+                type: "choice"
+                options: ["uart", "spi"]
+                default: "uart"
+                condition: "driver_type in ['TMC2240', 'TMC5160', 'TMC2130']"
+              - name: "run_current"
+                type: "float"
+                range: [0.1, 2.5]
+                required: true
+                description: "Should match stepper_x current"
+              - name: "interpolate"
+                type: "bool"
+                default: false
+              - name: "sense_resistor"
+                type: "float"
+                default: 0.075
+                condition: "driver_protocol == 'spi'"
+              - name: "driver_tbl"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_toff"
+                type: "int"
+                default: 3
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2g"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2vs"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
 
       # 2.4 Y Axis (explicit definition to ensure correct condition references)
       - id: "2.4"
@@ -383,9 +476,14 @@ categories:
             parameters:
               - name: "driver_type"
                 type: "choice"
-                options: ["TMC2209", "TMC5160", "TMC2130", "TMC2660"]
+                options: ["TMC2209", "TMC2240", "TMC5160", "TMC2130"]
                 default: "TMC2209"
                 required: true
+              - name: "driver_protocol"
+                type: "choice"
+                options: ["uart", "spi"]
+                default: "uart"
+                condition: "driver_type in ['TMC2240', 'TMC5160', 'TMC2130']"
               - name: "run_current"
                 type: "float"
                 range: [0.1, 2.5]
@@ -393,11 +491,90 @@ categories:
               - name: "interpolate"
                 type: "bool"
                 default: false
+              - name: "sense_resistor"
+                type: "float"
+                default: 0.075
+                condition: "driver_protocol == 'spi'"
+              - name: "driver_tbl"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_toff"
+                type: "int"
+                default: 3
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2g"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2vs"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
               - name: "driver_SGTHRS"
                 type: "int"
                 default: 70
                 range: [0, 255]
                 condition: "2.4.1.endstop_type == 'sensorless'"
+
+          # AWD Y1 Motor (secondary Y motor)
+          - id: "2.4.3"
+            name: "Stepper Y1 (AWD)"
+            klipper_section: "[stepper_y1]"
+            condition: "2.2.awd_enabled == true"
+            parameters:
+              - name: "motor_port"
+                type: "select"
+                source: "board.motor_ports"
+                required: true
+              - name: "dir_pin_inverted"
+                type: "bool"
+                default: false
+                description: "Usually mirrors stepper_y direction"
+
+          - id: "2.4.4"
+            name: "TMC Driver Y1 (AWD)"
+            klipper_section: "[tmc2209 stepper_y1]"
+            condition: "2.2.awd_enabled == true"
+            parameters:
+              - name: "driver_type"
+                type: "choice"
+                options: ["TMC2209", "TMC2240", "TMC5160", "TMC2130"]
+                default: "TMC2209"
+                required: true
+              - name: "driver_protocol"
+                type: "choice"
+                options: ["uart", "spi"]
+                default: "uart"
+                condition: "driver_type in ['TMC2240', 'TMC5160', 'TMC2130']"
+              - name: "run_current"
+                type: "float"
+                range: [0.1, 2.5]
+                required: true
+                description: "Should match stepper_y current"
+              - name: "interpolate"
+                type: "bool"
+                default: false
+              - name: "sense_resistor"
+                type: "float"
+                default: 0.075
+                condition: "driver_protocol == 'spi'"
+              - name: "driver_tbl"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_toff"
+                type: "int"
+                default: 3
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2g"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2vs"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
 
       # 2.5 Z Axis
       - id: "2.5"
@@ -904,16 +1081,38 @@ categories:
             type: "list"
             klipper_section: "[fan_generic {name}]"
             required: false
+            description: "RSCS, Nevermore, chamber fans, etc."
             parameters:
               - name: "name"
                 type: "text"
                 required: true
+                description: "e.g., RSCS, Nevermore, chamber_fan"
+              - name: "pin_type"
+                type: "choice"
+                options: ["direct", "multi_pin"]
+                default: "direct"
+                description: "Use multi_pin for fans with multiple pins"
               - name: "pin"
                 type: "select"
                 source: "board.fan_ports"
+                condition: "pin_type == 'direct'"
+              - name: "multi_pin_name"
+                type: "text"
+                condition: "pin_type == 'multi_pin'"
+                description: "Name of multi_pin group (must be defined in 2.16.7)"
               - name: "max_power"
                 type: "float"
                 default: 1.0
+                range: [0.1, 1.0]
+              - name: "shutdown_speed"
+                type: "float"
+                default: 0
+              - name: "kick_start_time"
+                type: "float"
+                default: 0.1
+              - name: "off_below"
+                type: "float"
+                default: 0.1
 
       # 2.9 Probe
       - id: "2.9"
@@ -1046,48 +1245,128 @@ categories:
                 
           - id: "2.9.5"
             name: "Beacon Settings"
+            klipper_section: "[beacon]"
             condition: "2.9.1.probe_type == 'beacon'"
             plugin_required: "beacon"
             parameters:
               - name: "serial"
                 type: "text"
                 auto_detect: true
+                required: true
                 description: "/dev/serial/by-id/usb-Beacon_..."
               - name: "x_offset"
                 type: "float"
                 default: 0
+                required: true
               - name: "y_offset"
                 type: "float"
                 default: 0
+                required: true
+              # Homing mode - critical for safe_z_home logic
+              - name: "homing_mode"
+                type: "choice"
+                options: ["contact", "proximity"]
+                default: "contact"
+                required: true
+                description: "Contact uses nozzle touch, proximity uses eddy sensing"
+              - name: "contact_max_hotend_temperature"
+                type: "int"
+                default: 180
+                condition: "homing_mode == 'contact'"
+                description: "Max temp for contact probing"
+              - name: "home_z_hop"
+                type: "float"
+                default: 5
+              - name: "home_z_hop_speed"
+                type: "float"
+                default: 30
+              - name: "home_xy_move_speed"
+                type: "float"
+                default: 300
+              - name: "home_autocalibrate"
+                type: "choice"
+                options: ["unhomed", "always", "never"]
+                default: "unhomed"
+              # Mesh settings
               - name: "mesh_main_direction"
                 type: "choice"
                 options: ["x", "y"]
                 default: "x"
               - name: "mesh_runs"
                 type: "int"
-                default: 2
-              - name: "contact_max_hotend_temperature"
-                type: "int"
-                default: 180
-                description: "Max temp for contact probing"
+                default: 1
+              - name: "eddy_mesh_method"
+                type: "choice"
+                options: ["rapid_scan", "scan"]
+                default: "rapid_scan"
+                description: "Mesh calibration method"
                 
           - id: "2.9.6"
             name: "Cartographer Settings"
+            klipper_section: "[scanner]"
             condition: "2.9.1.probe_type == 'cartographer'"
             plugin_required: "cartographer"
             parameters:
               - name: "serial"
                 type: "text"
                 auto_detect: true
+                required: true
               - name: "x_offset"
                 type: "float"
                 default: 0
+                required: true
               - name: "y_offset"
                 type: "float"
                 default: 0
+                required: true
+              # Homing mode
+              - name: "homing_mode"
+                type: "choice"
+                options: ["touch", "scan"]
+                default: "touch"
+                required: true
+                description: "Touch uses nozzle contact, scan uses eddy sensing"
+              - name: "scanner_touch_z_offset"
+                type: "float"
+                default: 0.05
+                condition: "homing_mode == 'touch'"
               - name: "backlash_comp"
                 type: "float"
                 default: 0.5
+              - name: "eddy_mesh_method"
+                type: "choice"
+                options: ["rapid_scan", "scan", "touch"]
+                default: "rapid_scan"
+                description: "Mesh calibration method"
+
+          - id: "2.9.7"
+            name: "BTT Eddy Settings"
+            klipper_section: "[probe_eddy_current]"
+            condition: "2.9.1.probe_type == 'btt_eddy'"
+            parameters:
+              - name: "sensor_type"
+                type: "text"
+                default: "ldc1612"
+              - name: "i2c_mcu"
+                type: "choice"
+                options: ["mcu", "toolboard"]
+                default: "toolboard"
+              - name: "i2c_bus"
+                type: "text"
+                description: "e.g., i2c1_PB6_PB7"
+              - name: "x_offset"
+                type: "float"
+                default: 0
+                required: true
+              - name: "y_offset"
+                type: "float"
+                default: 0
+                required: true
+              - name: "eddy_mesh_method"
+                type: "choice"
+                options: ["rapid_scan", "scan"]
+                default: "rapid_scan"
+                description: "Mesh calibration method"
 
       # 2.10 Homing
       - id: "2.10"
@@ -1692,6 +1971,22 @@ categories:
                 type: "bool"
                 default: false
                 description: "Enable after calibrating with SKEW_PROFILE"
+
+          - id: "2.16.7"
+            name: "Multi-Pin Groups"
+            klipper_section: "[multi_pin {name}]"
+            type: "list"
+            required: false
+            description: "Combine multiple pins for fans/heaters"
+            parameters:
+              - name: "name"
+                type: "text"
+                required: true
+                description: "e.g., 'Radiator', 'RSCS'"
+              - name: "pins"
+                type: "text"
+                required: true
+                description: "Comma-separated pins, e.g., PA2, PA3"
 
   - id: "3"
     name: "Tuning & Optimization"

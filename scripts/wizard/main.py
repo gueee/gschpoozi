@@ -8,6 +8,7 @@ Run with: python3 scripts/wizard/main.py
 
 import sys
 import os
+import json
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -15,6 +16,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from wizard.ui import WizardUI
 from wizard.state import get_state, WizardState
+
+# Find repo root (where templates/ lives)
+SCRIPT_DIR = Path(__file__).parent.resolve()
+REPO_ROOT = SCRIPT_DIR.parent.parent  # scripts/wizard -> scripts -> repo root
 
 
 class GschpooziWizard:
@@ -317,24 +322,55 @@ class GschpooziWizard:
             else:
                 self.ui.msgbox("Coming soon!", title=choice)
 
+    def _load_boards(self, board_type: str = "boards") -> list:
+        """Load board definitions from templates directory.
+        
+        Args:
+            board_type: "boards" for mainboards, "toolboards" for toolboards
+            
+        Returns:
+            List of (id, name) tuples
+        """
+        boards_dir = REPO_ROOT / "templates" / board_type
+        boards = []
+        
+        if boards_dir.exists():
+            for json_file in sorted(boards_dir.glob("*.json")):
+                try:
+                    with open(json_file) as f:
+                        data = json.load(f)
+                        board_id = data.get("id", json_file.stem)
+                        board_name = data.get("name", json_file.stem)
+                        boards.append((board_id, board_name))
+                except (json.JSONDecodeError, KeyError):
+                    # Skip invalid files
+                    continue
+        
+        # Always add manual option at the end
+        boards.append(("other", "Other / Manual"))
+        return boards
+
     def _configure_main_board(self) -> None:
         """Configure main board."""
-        # Board selection (placeholder - would load from templates)
-        boards = [
-            ("btt-octopus-v1.1", "BTT Octopus v1.1"),
-            ("btt-octopus-pro", "BTT Octopus Pro"),
-            ("btt-manta-m8p", "BTT Manta M8P"),
-            ("btt-skr-3", "BTT SKR 3"),
-            ("fysetc-spider", "Fysetc Spider"),
-            ("other", "Other / Manual"),
-        ]
+        # Load boards dynamically from templates/boards/
+        boards = self._load_boards("boards")
+        
+        if len(boards) <= 1:
+            self.ui.msgbox(
+                "No board definitions found in templates/boards/\n\n"
+                "Please ensure the gschpoozi repository is complete.",
+                title="Error"
+            )
+            return
 
         current = self.state.get("mcu.main.board_type", "")
 
         board = self.ui.radiolist(
-            "Select your main control board:",
+            f"Select your main control board ({len(boards)-1} boards available):",
             [(b, d, b == current) for b, d in boards],
             title="Main Board Selection",
+            height=20,
+            list_height=12,
         )
 
         if board is None:

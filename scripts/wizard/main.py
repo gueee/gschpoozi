@@ -36,21 +36,21 @@ class GschpooziWizard:
 
     def _format_serial_name(self, full_path: str) -> str:
         """Format a serial device path for display.
-        
+
         Extracts meaningful info from paths like:
         /dev/serial/by-id/usb-Klipper_stm32h723xx_240041000451323336333538-if00
         → "Klipper stm32h723xx (...3538)"
         """
         name = Path(full_path).name
-        
+
         # Remove common prefixes
         if name.startswith("usb-"):
             name = name[4:]
-        
+
         # Remove -if00 suffix
         if name.endswith("-if00"):
             name = name[:-5]
-        
+
         # Parse Klipper format: Klipper_mcu_serialnumber
         if name.startswith("Klipper_"):
             parts = name.split("_", 2)
@@ -62,7 +62,7 @@ class GschpooziWizard:
                 return f"Klipper {mcu} (...{short_serial})"
             elif len(parts) == 2:
                 return f"Klipper {parts[1]}"
-        
+
         # Parse Beacon format: Beacon_Beacon_RevH_SERIAL
         if "Beacon" in name:
             parts = name.split("_")
@@ -72,15 +72,15 @@ class GschpooziWizard:
                 short_serial = serial[-4:] if len(serial) > 4 else serial
                 return f"Beacon {rev} (...{short_serial})"
             return "Beacon"
-        
+
         # Parse Cartographer format
         if "Cartographer" in name or "cartographer" in name:
             return "Cartographer"
-        
+
         # Generic: truncate if too long
         if len(name) > 40:
             return name[:20] + "..." + name[-10:]
-        
+
         return name
 
     def run(self) -> int:
@@ -374,16 +374,16 @@ class GschpooziWizard:
 
     def _load_boards(self, board_type: str = "boards") -> list:
         """Load board definitions from templates directory.
-        
+
         Args:
             board_type: "boards" for mainboards, "toolboards" for toolboards
-            
+
         Returns:
             List of (id, name) tuples
         """
         boards_dir = REPO_ROOT / "templates" / board_type
         boards = []
-        
+
         if boards_dir.exists():
             for json_file in sorted(boards_dir.glob("*.json")):
                 try:
@@ -395,7 +395,7 @@ class GschpooziWizard:
                 except (json.JSONDecodeError, KeyError):
                     # Skip invalid files
                     continue
-        
+
         # Always add manual option at the end
         boards.append(("other", "Other / Manual"))
         return boards
@@ -404,7 +404,7 @@ class GschpooziWizard:
         """Configure main board."""
         # Load boards dynamically from templates/boards/
         boards = self._load_boards("boards")
-        
+
         if len(boards) <= 1:
             self.ui.msgbox(
                 "No board definitions found in templates/boards/\n\n"
@@ -449,7 +449,7 @@ class GschpooziWizard:
                     tag = f"{i+1}. {short_name}"
                     serial_map[tag] = str(d)
                     device_items.append((tag, "", False))
-                
+
                 device_items.append(("manual", "Enter path manually", False))
 
                 selected = self.ui.radiolist(
@@ -546,11 +546,51 @@ class GschpooziWizard:
 
                 self.ui.msgbox(f"Toolboard configured!\n\nUUID: {uuid}", title="Success")
         else:
-            # USB toolboard
-            serial = self.ui.inputbox(
-                "Enter toolboard serial path:",
-                default="/dev/serial/by-id/usb-Klipper_"
-            )
+            # USB toolboard - scan for devices
+            self.ui.infobox("Scanning for USB devices...", title="Detecting")
+            import time
+            time.sleep(1)
+
+            serial = None
+            serial_dir = Path("/dev/serial/by-id")
+            if serial_dir.exists():
+                devices = list(serial_dir.iterdir())
+                if devices:
+                    # Build mapping: short_name -> full_path
+                    serial_map = {}
+                    device_items = []
+                    for i, d in enumerate(devices):
+                        short_name = self._format_serial_name(str(d))
+                        tag = f"{i+1}. {short_name}"
+                        serial_map[tag] = str(d)
+                        device_items.append((tag, "", False))
+                    
+                    device_items.append(("manual", "Enter path manually", False))
+
+                    selected = self.ui.radiolist(
+                        "Select the serial device for your toolboard:\n\n"
+                        "(Usually contains 'EBB', 'SHT', or toolboard MCU name)",
+                        device_items,
+                        title="Toolboard - Serial",
+                    )
+
+                    if selected == "manual":
+                        serial = self.ui.inputbox(
+                            "Enter toolboard serial path:",
+                            default="/dev/serial/by-id/usb-Klipper_"
+                        )
+                    elif selected and selected in serial_map:
+                        serial = serial_map[selected]
+                else:
+                    serial = self.ui.inputbox(
+                        "No USB devices found.\nEnter toolboard serial path:",
+                        default="/dev/serial/by-id/usb-Klipper_"
+                    )
+            else:
+                serial = self.ui.inputbox(
+                    "Enter toolboard serial path:",
+                    default="/dev/serial/by-id/usb-Klipper_"
+                )
 
             if serial:
                 self.state.set("mcu.toolboard.connection_type", "USB")
@@ -1187,7 +1227,7 @@ class GschpooziWizard:
                     tag = f"{i+1}. {short_name}"
                     serial_map[tag] = d
                     device_items.append((tag, "", i == 0))
-                
+
                 device_items.append(("manual", "Enter manually", False))
 
                 selected = self.ui.radiolist(
@@ -1195,7 +1235,7 @@ class GschpooziWizard:
                     device_items,
                     title="Probe - Serial"
                 )
-                
+
                 # Map selection back to full path
                 if selected and selected in serial_map:
                     serial = serial_map[selected]

@@ -156,6 +156,121 @@ class GschpooziWizard:
 
         return result
 
+    def _pick_pin_from_known_ports(
+        self,
+        *,
+        location: str,
+        default_pin: str = "",
+        title: str = "Select Pin",
+        prompt: str = "Select a pin:",
+        preferred_groups: list = None,
+    ):
+        """
+        Pick a pin from known board/toolboard template ports (with manual fallback).
+
+        - location: "mainboard" or "toolboard"
+        - preferred_groups: ordered list of JSON groups to show first (e.g. ["endstop_ports","misc_ports"])
+
+        Returns:
+            Selected raw pin string (e.g. "PA8", "gpio22") or None if cancelled.
+        """
+        if location not in {"mainboard", "toolboard"}:
+            return self.ui.inputbox(prompt, default=default_pin or "", title=title)
+
+        board_type = "boards" if location == "mainboard" else "toolboards"
+        board_id = (
+            self.state.get("mcu.main.board_type", "")
+            if location == "mainboard"
+            else self.state.get("mcu.toolboard.board_type", "")
+        )
+        board_data = self._load_board_data(board_id, board_type)
+        if not isinstance(board_data, dict) or not board_data:
+            return self.ui.inputbox(prompt, default=default_pin or "", title=title)
+
+        # For "ports_plus_all_known", we intentionally include many groups.
+        # NOTE: some of these pins may normally be used for other functions (fan/heater/etc).
+        all_groups = [
+            "misc_ports",
+            "endstop_ports",
+            "probe_ports",
+            "fan_ports",
+            "heater_ports",
+            "thermistor_ports",
+            "motor_ports",
+        ]
+        groups = []
+        if preferred_groups:
+            for g in preferred_groups:
+                if g in all_groups and g not in groups:
+                    groups.append(g)
+        for g in all_groups:
+            if g not in groups:
+                groups.append(g)
+
+        options = []
+        tag_to_pin = {}
+        selected_tag = None
+
+        def _add_option(tag: str, desc: str, pin: str) -> None:
+            nonlocal selected_tag
+            if not pin or not isinstance(pin, str):
+                return
+            tag_to_pin[tag] = pin
+            is_selected = False
+            if default_pin and pin == default_pin and selected_tag is None:
+                is_selected = True
+                selected_tag = tag
+            options.append((tag, desc, is_selected))
+
+        for group in groups:
+            group_data = board_data.get(group, {})
+            if not isinstance(group_data, dict):
+                continue
+
+            for port_id, port_info in group_data.items():
+                # Flatten header-style pin maps: {"pins": {"1":"PE8", ...}}
+                if isinstance(port_info, dict) and isinstance(port_info.get("pins"), dict):
+                    for sub_id, sub_pin in port_info["pins"].items():
+                        tag = f"{group}:{port_id}:{sub_id}"
+                        _add_option(tag, f"{port_id}-{sub_id} ({sub_pin}) [{group}]", str(sub_pin))
+                    continue
+
+                if isinstance(port_info, dict):
+                    # Common forms
+                    if "pin" in port_info:
+                        tag = f"{group}:{port_id}:pin"
+                        _add_option(tag, f"{port_id} ({port_info['pin']}) [{group}]", str(port_info["pin"]))
+                    if "signal_pin" in port_info:
+                        tag = f"{group}:{port_id}:signal"
+                        _add_option(tag, f"{port_id} ({port_info['signal_pin']}) [{group}]", str(port_info["signal_pin"]))
+
+                    # Include other *_pin fields (useful for “all known” discovery)
+                    for k, v in port_info.items():
+                        if k in {"pin", "signal_pin", "pins"}:
+                            continue
+                        if k.endswith("_pin") and isinstance(v, str) and v:
+                            tag = f"{group}:{port_id}:{k}"
+                            _add_option(tag, f"{port_id} {k} ({v}) [{group}]", v)
+                else:
+                    # Rare: port_info is a direct string pin
+                    if isinstance(port_info, str) and port_info:
+                        tag = f"{group}:{port_id}:raw"
+                        _add_option(tag, f"{port_id} ({port_info}) [{group}]", port_info)
+
+        # Add manual fallback
+        options.append(("manual", "Manual entry", selected_tag is None))
+
+        choice = self.ui.radiolist(
+            prompt,
+            options,
+            title=title
+        )
+        if choice is None:
+            return None
+        if choice == "manual":
+            return self.ui.inputbox(prompt, default=default_pin or "", title=title)
+        return tag_to_pin.get(choice, default_pin or "")
+
     def _copy_stepper_settings(self, from_axis: str, to_axis: str) -> None:
         """Copy common stepper settings from one axis to another.
 
@@ -3624,11 +3739,15 @@ class GschpooziWizard:
             # Pin
             current_pin = led.get("pin", "") if led else None
             default_pin = current_pin if current_pin else ("PB0" if location == "mainboard" else "PB8")
-            pin = self.ui.inputbox(
-                f"Pin for '{led_name}':",
-                default=default_pin,
-                title=f"{led_name} - Pin"
+            pin = self._pick_pin_from_known_ports(
+                location=location,
+                default_pin=default_pin,
+                title=f"{led_name} - Pin",
+                prompt=f"Pin for '{led_name}':",
+                preferred_groups=["misc_ports", "endstop_ports", "probe_ports"],
             )
+            if pin is None:
+                return None
 
             # LED count
             current_count = led.get("chain_count", 1) if led else None
@@ -3769,11 +3888,15 @@ class GschpooziWizard:
             # Pin
             current_pin = sensor.get("pin", "") if sensor else None
             default_pin = current_pin if current_pin else ("PG11" if location == "mainboard" else "PB6")
-            pin = self.ui.inputbox(
-                "Sensor pin:",
-                default=default_pin,
-                title="Sensor Pin"
+            pin = self._pick_pin_from_known_ports(
+                location=location,
+                default_pin=default_pin,
+                title="Sensor Pin",
+                prompt="Sensor pin:",
+                preferred_groups=["endstop_ports", "misc_ports", "probe_ports"],
             )
+            if pin is None:
+                return None
 
             return {
                 "name": name,

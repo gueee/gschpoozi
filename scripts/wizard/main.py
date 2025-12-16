@@ -514,12 +514,10 @@ class GschpooziWizard:
                 temp_sensor_count += 1
             if self.state.get("temperature_sensors.chamber.enabled", False):
                 temp_sensor_count += 1
-            # Count custom sensors (excluding built-in ones)
-            custom_sensors = self.state.get("temperature_sensors", [])
-            if isinstance(custom_sensors, list):
-                built_in_names = {"mcu_temp", "host_temp", "toolboard_temp", "chamber"}
-                custom_count = sum(1 for s in custom_sensors if isinstance(s, dict) and s.get("name") not in built_in_names)
-                temp_sensor_count += custom_count
+            # Count additional user-defined sensors
+            additional_sensors = self.state.get("temperature_sensors.additional", [])
+            if isinstance(additional_sensors, list):
+                temp_sensor_count += len([s for s in additional_sensors if isinstance(s, dict)])
             temp_sensors_status = None
             if temp_sensor_count > 0:
                 temp_sensors_status = f"{temp_sensor_count} sensor{'s' if temp_sensor_count != 1 else ''}"
@@ -3158,6 +3156,49 @@ class GschpooziWizard:
         """Configure temperature sensors."""
         sensors = []
 
+        # --- Migration: older wizard versions stored temperature_sensors as a LIST ---
+        # That breaks nested keys like temperature_sensors.mcu_main.enabled and causes:
+        # "'list' object has no attribute 'setdefault'".
+        legacy_ts = self.state.get("temperature_sensors", None)
+        if isinstance(legacy_ts, list):
+            built_in_names = {"mcu_temp", "host_temp", "toolboard_temp", "chamber"}
+            legacy_by_name = {
+                s.get("name"): s for s in legacy_ts
+                if isinstance(s, dict) and s.get("name")
+            }
+
+            # Infer enable flags from legacy list entries
+            self.state.delete("temperature_sensors")
+            self.state.set("temperature_sensors.mcu_main.enabled", "mcu_temp" in legacy_by_name)
+            self.state.set("temperature_sensors.host.enabled", "host_temp" in legacy_by_name)
+            self.state.set("temperature_sensors.toolboard.enabled", "toolboard_temp" in legacy_by_name)
+
+            chamber = legacy_by_name.get("chamber")
+            if isinstance(chamber, dict):
+                self.state.set("temperature_sensors.chamber.enabled", True)
+                if chamber.get("sensor_type"):
+                    self.state.set("temperature_sensors.chamber.sensor_type", chamber.get("sensor_type"))
+                if chamber.get("sensor_location"):
+                    self.state.set("temperature_sensors.chamber.sensor_location", chamber.get("sensor_location"))
+                # Legacy stored a single sensor_pin; map it back to the appropriate field
+                if chamber.get("sensor_pin"):
+                    if chamber.get("sensor_location") == "rpi":
+                        self.state.set("temperature_sensors.chamber.sensor_pin_rpi", chamber.get("sensor_pin"))
+                    else:
+                        self.state.set("temperature_sensors.chamber.sensor_port_mainboard", chamber.get("sensor_pin"))
+                if chamber.get("pullup_resistor"):
+                    self.state.set("temperature_sensors.chamber.pullup_resistor", chamber.get("pullup_resistor"))
+            else:
+                self.state.delete("temperature_sensors.chamber")
+
+            # Preserve any non built-in sensors as "additional"
+            additional = [
+                s for s in legacy_ts
+                if isinstance(s, dict) and s.get("name") not in built_in_names
+            ]
+            self.state.set("temperature_sensors.additional", additional)
+            self.state.save()
+
         # Load saved state for MCU/host/toolboard sensors
         current_mcu_enabled = self.state.get("temperature_sensors.mcu_main.enabled", False)
         current_host_enabled = self.state.get("temperature_sensors.host.enabled", False)
@@ -3371,13 +3412,11 @@ class GschpooziWizard:
             self.state.save()
 
         # Additional sensors - load existing and filter out built-in ones
-        existing_sensors = self.state.get("temperature_sensors", [])
+        existing_sensors = self.state.get("temperature_sensors.additional", [])
         if not isinstance(existing_sensors, list):
             existing_sensors = []
 
-        # Filter out built-in sensors (mcu_temp, host_temp, toolboard_temp, chamber)
-        built_in_names = {"mcu_temp", "host_temp", "toolboard_temp", "chamber"}
-        additional_sensors = [s for s in existing_sensors if s.get("name") not in built_in_names]
+        additional_sensors = [s for s in existing_sensors if isinstance(s, dict)]
 
         def _edit_additional_sensor(sensor=None):
             """Edit or add an additional temperature sensor. If sensor is None, add new."""
@@ -3463,8 +3502,8 @@ class GschpooziWizard:
         # Rebuild full sensors list: built-in ones + additional ones
         sensors.extend(additional_sensors)
 
-        # Save
-        self.state.set("temperature_sensors", sensors)
+        # Save additional sensors without overwriting the temperature_sensors dict structure
+        self.state.set("temperature_sensors.additional", additional_sensors)
         self.state.save()
 
         sensor_names = [s["name"] for s in sensors]

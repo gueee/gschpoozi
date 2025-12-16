@@ -79,9 +79,18 @@ class WizardState:
         """
         keys = key.split(".")
         config = self._state.setdefault("config", {})
+        if not isinstance(config, dict):
+            # Extremely defensive: if config was corrupted, reset it
+            self._state["config"] = {}
+            config = self._state["config"]
         
         # Navigate to parent
         for k in keys[:-1]:
+            # If an intermediate key exists but isn't a dict (e.g., a list),
+            # overwrite it with a dict so nested assignments don't crash.
+            existing = config.get(k)
+            if existing is not None and not isinstance(existing, dict):
+                config[k] = {}
             config = config.setdefault(k, {})
         
         # Set value
@@ -91,16 +100,17 @@ class WizardState:
         """Delete a configuration value. Returns True if existed."""
         keys = key.split(".")
         config = self._state.get("config", {})
+        if not isinstance(config, dict):
+            return False
         
         # Navigate to parent
         for k in keys[:-1]:
-            if k in config:
-                config = config[k]
-            else:
+            if not isinstance(config, dict) or k not in config:
                 return False
+            config = config[k]
         
         # Delete if exists
-        if keys[-1] in config:
+        if isinstance(config, dict) and keys[-1] in config:
             del config[keys[-1]]
             return True
         return False
@@ -142,11 +152,54 @@ class WizardState:
     
     def export_for_generator(self) -> Dict[str, Any]:
         """Export state in format suitable for config generator."""
-        return {
+        config = self._state.get("config", {}) or {}
+        export = {
             "version": self._state["wizard"]["version"],
             "generated": datetime.now().isoformat(),
-            **self._state.get("config", {})
+            **config,
         }
+
+        # Normalize temperature_sensors for templates:
+        # - Wizard UI stores a dict under config.temperature_sensors (built-ins + chamber + additional)
+        # - Generator schema expects a LIST called temperature_sensors
+        ts = config.get("temperature_sensors")
+        if isinstance(ts, dict):
+            out: list = []
+
+            if ts.get("mcu_main", {}).get("enabled"):
+                out.append({"name": "mcu_temp", "type": "temperature_mcu", "mcu": "mcu"})
+            if ts.get("host", {}).get("enabled"):
+                out.append({"name": "host_temp", "type": "temperature_host"})
+            if ts.get("toolboard", {}).get("enabled"):
+                out.append({"name": "toolboard_temp", "type": "temperature_mcu", "mcu": "toolboard"})
+
+            chamber = ts.get("chamber", {}) if isinstance(ts.get("chamber"), dict) else {}
+            if chamber.get("enabled"):
+                sensor_location = chamber.get("sensor_location", "mainboard")
+                if sensor_location == "rpi":
+                    sensor_pin = chamber.get("sensor_pin_rpi")
+                else:
+                    sensor_pin = chamber.get("sensor_port_mainboard")
+
+                if sensor_pin:
+                    entry = {
+                        "name": "chamber",
+                        "type": "temperature_sensor",
+                        "sensor_type": chamber.get("sensor_type", "Generic 3950"),
+                        "sensor_pin": sensor_pin,
+                    }
+                    # Optional field; template may ignore it, but safe to include
+                    if chamber.get("pullup_resistor"):
+                        entry["pullup_resistor"] = chamber.get("pullup_resistor")
+                    out.append(entry)
+
+            additional = ts.get("additional", [])
+            if isinstance(additional, list):
+                out.extend([s for s in additional if isinstance(s, dict)])
+
+            export["temperature_sensors"] = out
+
+        return export
     
     def __repr__(self) -> str:
         return f"WizardState({self.state_file})"

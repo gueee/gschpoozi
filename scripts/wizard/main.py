@@ -9,6 +9,7 @@ Run with: python3 scripts/wizard/main.py
 import sys
 import os
 import json
+import re
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -425,6 +426,202 @@ class GschpooziWizard:
         if choice == "manual":
             return self.ui.inputbox(prompt, default=default_pin or "", title=title)
         return tag_to_pin.get(choice, default_pin or "")
+
+    # -------------------------------------------------------------------------
+    # Heater discovery / picker helpers
+    # -------------------------------------------------------------------------
+
+    def _collect_cfg_files_for_scan(self) -> list:
+        """Collect Klipper cfg files to scan (best-effort).
+
+        - Starts from ~/printer_data/config/printer.cfg (if it exists)
+        - Follows [include ...] directives recursively (best-effort, no crash on missing files)
+        - Also scans ~/printer_data/config/gschpoozi/*.cfg
+        """
+        base = Path.home() / "printer_data" / "config"
+        start = base / "printer.cfg"
+
+        include_re = re.compile(r"^\s*\[include\s+([^\]]+)\]\s*$")
+
+        visited = set()
+        out = []
+        queue = []
+
+        # Always include gschpoozi cfgs if present (they're predictable for our project)
+        try:
+            gdir = base / "gschpoozi"
+            if gdir.exists():
+                for p in sorted(gdir.glob("*.cfg")):
+                    rp = p.resolve()
+                    if rp not in visited:
+                        visited.add(rp)
+                        out.append(p)
+        except Exception:
+            pass
+
+        if start.exists():
+            queue.append(start)
+
+        # BFS include traversal with a hard cap
+        while queue and len(out) < 250:
+            p = queue.pop(0)
+            try:
+                rp = p.resolve()
+                if rp in visited:
+                    continue
+                visited.add(rp)
+                out.append(p)
+                txt = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+            except Exception:
+                continue
+
+            for line in txt:
+                s = line.strip()
+                if not s or s.startswith("#") or s.startswith(";"):
+                    continue
+                m = include_re.match(s)
+                if not m:
+                    continue
+                inc = m.group(1).strip()
+                if not inc:
+                    continue
+
+                # Includes can be relative, absolute, or globs. Resolve relative to the file directory.
+                base_dir = p.parent
+                inc_path = Path(inc)
+                candidates = []
+                if str(inc_path).startswith("~/"):
+                    candidates = [Path.home() / str(inc_path)[2:]]
+                elif inc_path.is_absolute():
+                    candidates = [inc_path]
+                else:
+                    # Relative; allow globbing
+                    globbed = list(base_dir.glob(inc))
+                    candidates = globbed if globbed else [base_dir / inc]
+
+                for c in candidates:
+                    try:
+                        if c.exists() and c.is_file():
+                            queue.append(c)
+                    except Exception:
+                        continue
+
+        return out
+
+    def _discover_heater_names_from_cfg(self, cfg_files: list) -> set:
+        """Discover heater object names from Klipper config files."""
+        section_re = re.compile(r"^\s*\[([^\]]+)\]\s*$")
+        include_re = re.compile(r"^\s*include\s+", re.IGNORECASE)
+
+        heaters = set()
+        for p in cfg_files or []:
+            try:
+                lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+            except Exception:
+                continue
+            for line in lines:
+                s = line.strip()
+                if not s or s.startswith("#") or s.startswith(";"):
+                    continue
+                m = section_re.match(s)
+                if not m:
+                    continue
+                section = m.group(1).strip()
+                if not section:
+                    continue
+                # Skip includes (not real sections)
+                if section.lower().startswith("include "):
+                    continue
+
+                # Heater objects that can be referenced by [heater_fan] heater:
+                # - extruder, extruder1, extruder2, ...
+                # - heater_bed
+                # - heater_generic <name>
+                if section == "extruder" or re.match(r"^extruder\d+$", section):
+                    heaters.add(section)
+                elif section == "heater_bed":
+                    heaters.add(section)
+                elif section.startswith("heater_generic "):
+                    heaters.add(section)
+
+        return heaters
+
+    def _get_known_heater_choices(self, current_value: str = "") -> list:
+        """Return list of (value,label) heater choices."""
+        generated = {"extruder", "heater_bed"}
+        detected = set()
+        try:
+            cfgs = self._collect_cfg_files_for_scan()
+            detected = self._discover_heater_names_from_cfg(cfgs)
+        except Exception:
+            detected = set()
+
+        all_values = set(generated) | set(detected)
+        if current_value and isinstance(current_value, str) and current_value.strip():
+            all_values.add(current_value.strip())
+
+        def _sort_key(v: str):
+            if v == "extruder":
+                return (0, v)
+            if v == "heater_bed":
+                return (1, v)
+            # Put heater_generic after basic heaters, then extruderN, then others
+            if v.startswith("extruder") and v != "extruder":
+                return (2, v)
+            if v.startswith("heater_generic "):
+                return (3, v)
+            return (4, v)
+
+        ordered = sorted(all_values, key=_sort_key)
+        out = []
+        for v in ordered:
+            label = v
+            if v in generated:
+                label = f"{v} (generated)"
+            elif v in detected:
+                label = f"{v} (detected)"
+            else:
+                label = f"{v} (custom)"
+            out.append((v, label))
+        return out
+
+    def _pick_heater_name(self, *, current_value: str, title: str) -> str | None:
+        """Pick a heater name from known heaters; manual entry fallback."""
+        choices = self._get_known_heater_choices(current_value=current_value or "")
+        tag_to_value = {}
+        items = []
+        selected_tag = None
+
+        for idx, (val, label) in enumerate(choices):
+            tag = f"h{idx}"
+            tag_to_value[tag] = val
+            sel = (val == (current_value or "")) and selected_tag is None
+            if sel:
+                selected_tag = tag
+            items.append((tag, label, sel))
+
+        # Manual entry option
+        items.append(("manual", "Manual entry", selected_tag is None))
+
+        picked = self.ui.radiolist(
+            "Select heater to monitor:",
+            items,
+            title=title,
+            height=22,
+            width=120,
+            list_height=min(16, max(6, len(items))),
+        )
+        if picked is None:
+            return None
+        if picked == "manual":
+            return self.ui.inputbox(
+                "Heater to monitor:\n\nExample: extruder, heater_bed, heater_generic chamber",
+                default=current_value or "extruder",
+                title=title,
+                height=10,
+                width=90,
+            )
+        return tag_to_value.get(picked, current_value or "extruder")
 
     def _copy_stepper_settings(self, from_axis: str, to_axis: str) -> None:
         """Copy common stepper settings from one axis to another.
@@ -2833,12 +3030,7 @@ class GschpooziWizard:
 
         # Hotend fan parameters
         current_heater = self.state.get("fans.hotend.heater", "extruder")
-        heater = self.ui.inputbox(
-            "Heater to monitor:\n\n"
-            "(Usually 'extruder')",
-            default=current_heater,
-            title="Fans - Hotend Heater"
-        )
+        heater = self._pick_heater_name(current_value=current_heater, title="Fans - Hotend Heater")
         if heater is None:
             return
 

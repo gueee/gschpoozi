@@ -64,7 +64,7 @@ stepper_x:
     dir_pin: {% if stepper_x.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_x.motor_port].dir }}
     enable_pin: !{{ board.pins[stepper_x.motor_port].enable }}
     rotation_distance: {{ stepper_x.belt_pitch * stepper_x.pulley_teeth }}
-    microsteps: {{ stepper_x.microsteps | default(32) }}
+    microsteps: {{ stepper_x.microsteps | default(16) }}
     full_steps_per_rotation: {{ stepper_x.full_steps_per_rotation | default(200) }}
     {% if stepper_x.endstop_type == 'sensorless' %}
     endstop_pin: {{ stepper_x.driver_type | lower }}_stepper_x:virtual_endstop
@@ -96,7 +96,7 @@ stepper_y:
     dir_pin: {% if stepper_y.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_y.motor_port].dir }}
     enable_pin: !{{ board.pins[stepper_y.motor_port].enable }}
     rotation_distance: {{ stepper_y.belt_pitch * stepper_y.pulley_teeth }}
-    microsteps: {{ stepper_y.microsteps | default(32) }}
+    microsteps: {{ stepper_y.microsteps | default(16) }}
     full_steps_per_rotation: {{ stepper_y.full_steps_per_rotation | default(200) }}
     {% if stepper_y.endstop_type == 'sensorless' %}
     endstop_pin: {{ stepper_y.driver_type | lower }}_stepper_y:virtual_endstop
@@ -228,7 +228,7 @@ tmc_stepper_y:
 
 tmc_stepper_z:
   template: |
-    [{{ stepper_z.driver_type | lower }} stepper_z]
+    [{{ stepper_z.driver_type | default('TMC2209') | lower }} stepper_z]
     uart_pin: {{ board.pins[stepper_z.motor_port].uart }}
     run_current: {{ stepper_z.run_current | default(0.8) }}
     interpolate: {{ stepper_z.interpolate | default(false) | lower }}
@@ -344,7 +344,7 @@ heater_bed:
     pullup_resistor: {{ heater_bed.pullup_resistor }}
     {% endif %}
     max_power: {{ heater_bed.max_power | default(1.0) }}
-    {% if heater_bed.pwm_cycle_time != 0.0166 %}
+    {% if heater_bed.pwm_cycle_time is defined and heater_bed.pwm_cycle_time and heater_bed.pwm_cycle_time != 0.0166 %}
     pwm_cycle_time: {{ heater_bed.pwm_cycle_time }}
     {% endif %}
     min_temp: {{ heater_bed.min_temp | default(0) }}

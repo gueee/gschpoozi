@@ -1376,9 +1376,26 @@ class GschpooziWizard:
         # Velocity limits - load saved values
         current_max_velocity = self.state.get("printer.max_velocity", 300)
         current_max_accel = self.state.get("printer.max_accel", 3000)
+        current_max_z_velocity = self.state.get("printer.max_z_velocity", 15)
+        current_max_z_accel = self.state.get("printer.max_z_accel", 350)
+        current_scv = self.state.get("printer.square_corner_velocity", "")
 
         max_velocity = self.ui.inputbox("Max velocity (mm/s):", default=str(current_max_velocity))
+        if max_velocity is None:
+            return
         max_accel = self.ui.inputbox("Max acceleration (mm/s²):", default=str(current_max_accel))
+        if max_accel is None:
+            return
+        max_z_velocity = self.ui.inputbox("Max Z velocity (mm/s):", default=str(current_max_z_velocity))
+        if max_z_velocity is None:
+            return
+        max_z_accel = self.ui.inputbox("Max Z acceleration (mm/s²):", default=str(current_max_z_accel))
+        if max_z_accel is None:
+            return
+        square_corner_velocity = self.ui.inputbox(
+            "Square corner velocity (mm/s):\n\n(Leave empty to omit from config)",
+            default=str(current_scv) if current_scv not in (None, "") else "",
+        )
 
         # Save
         self.state.set("printer.kinematics", kinematics)
@@ -1388,6 +1405,16 @@ class GschpooziWizard:
         self.state.set("printer.bed_size_z", int(bed_z))
         self.state.set("printer.max_velocity", int(max_velocity or 300))
         self.state.set("printer.max_accel", int(max_accel or 3000))
+        self.state.set("printer.max_z_velocity", int(max_z_velocity or 15))
+        self.state.set("printer.max_z_accel", int(max_z_accel or 350))
+        if square_corner_velocity not in (None, ""):
+            # Allow explicit 0
+            try:
+                self.state.set("printer.square_corner_velocity", float(square_corner_velocity))
+            except ValueError:
+                self.state.set("printer.square_corner_velocity", square_corner_velocity)
+        else:
+            self.state.delete("printer.square_corner_velocity")
         self.state.save()
 
         awd_text = "AWD: Enabled\n" if awd_enabled else ""
@@ -1397,7 +1424,10 @@ class GschpooziWizard:
             f"{awd_text}"
             f"Bed: {bed_x}x{bed_y}x{bed_z}mm\n"
             f"Max velocity: {max_velocity}mm/s\n"
-            f"Max accel: {max_accel}mm/s²",
+            f"Max accel: {max_accel}mm/s²\n"
+            f"Max Z velocity: {max_z_velocity}mm/s\n"
+            f"Max Z accel: {max_z_accel}mm/s²\n"
+            f"Square corner velocity: {square_corner_velocity if square_corner_velocity not in (None, '') else '(omitted)'}",
             title="Settings Saved"
         )
 
@@ -1669,7 +1699,9 @@ class GschpooziWizard:
         )
 
         # Microsteps
-        current_microsteps = self.state.get(f"{state_key}.microsteps", 32)
+        # Default to 16 for X/Y motion steppers unless explicitly set (common on many builds)
+        default_microsteps = 16 if axis in ("x", "y", "x1", "y1") else 32
+        current_microsteps = self.state.get(f"{state_key}.microsteps", default_microsteps)
         microsteps = self.ui.radiolist(
             f"Microsteps for {axis_upper}:",
             [
@@ -1760,10 +1792,31 @@ class GschpooziWizard:
 
             # Physical endstop port and config
             if endstop_type == "physical":
+                # If a toolboard exists, allow selecting endstop from mainboard or toolboard.
+                has_toolboard = bool(self.state.get("mcu.toolboard.connection_type"))
+                current_endstop_src = self.state.get(f"{state_key}.endstop_source", "")
+                if has_toolboard:
+                    endstop_source = self.ui.radiolist(
+                        f"Where is the {axis_upper} endstop connected?",
+                        [
+                            ("mainboard", "Mainboard", current_endstop_src == "mainboard"),
+                            ("toolboard", "Toolboard", current_endstop_src == "toolboard"),
+                        ],
+                        title=f"Stepper {axis_upper} - Endstop Location",
+                    )
+                    if endstop_source is None:
+                        return
+                else:
+                    endstop_source = "mainboard"
+
                 # Endstop port selection from board templates
-                endstop_ports = self._get_board_ports("endstop_ports", "boards")
+                board_type = "toolboards" if endstop_source == "toolboard" else "boards"
+                endstop_ports = self._get_board_ports("endstop_ports", board_type)
                 if endstop_ports:
-                    current_port = self.state.get(f"{state_key}.endstop_port", "")
+                    if endstop_source == "toolboard":
+                        current_port = self.state.get(f"{state_key}.endstop_port_toolboard", "")
+                    else:
+                        current_port = self.state.get(f"{state_key}.endstop_port", "")
                     endstop_port = self.ui.radiolist(
                         f"Select endstop port for {axis_upper} axis:",
                         [(p, l, p == current_port or d) for p, l, d in endstop_ports],
@@ -1867,7 +1920,16 @@ class GschpooziWizard:
         if not is_secondary:
             self.state.set(f"{state_key}.endstop_type", endstop_type or "physical")
             if endstop_type == "physical" and endstop_port:
-                self.state.set(f"{state_key}.endstop_port", endstop_port)
+                # Persist which side we used so the generator schema can render the right pin map.
+                if "endstop_source" in locals():
+                    self.state.set(f"{state_key}.endstop_source", endstop_source)
+                if "endstop_source" in locals() and endstop_source == "toolboard":
+                    self.state.set(f"{state_key}.endstop_port_toolboard", endstop_port)
+                    # Clear mainboard key to avoid ambiguity
+                    self.state.delete(f"{state_key}.endstop_port")
+                else:
+                    self.state.set(f"{state_key}.endstop_port", endstop_port)
+                    self.state.delete(f"{state_key}.endstop_port_toolboard")
             if endstop_type == "physical" and endstop_config:
                 self.state.set(f"{state_key}.endstop_config", endstop_config)
             bed_size = self.state.get(f"printer.bed_size_{axis}", 350)
@@ -2948,6 +3010,9 @@ class GschpooziWizard:
                         default=current_pins or "",
                         title=f"{fan_name} - Pins"
                     )
+                if not pins or not str(pins).strip():
+                    self.ui.msgbox("Multi-pin fan requires at least one pin.", title="Invalid Fan Pins")
+                    return None
                 fan_config["pin_type"] = "multi_pin"
                 fan_config["pins"] = pins
                 fan_config["multi_pin_name"] = fan_name
@@ -3951,6 +4016,9 @@ class GschpooziWizard:
             )
             if pin is None:
                 return None
+            if not isinstance(pin, str) or not pin.strip():
+                self.ui.msgbox("LED pin cannot be empty.", title="Invalid LED Pin")
+                return None
 
             # LED count
             current_count = led.get("chain_count", 1) if led else None
@@ -3972,6 +4040,9 @@ class GschpooziWizard:
                 ],
                 title=f"{led_name} - Color Order"
             )
+            if not color_order:
+                self.ui.msgbox("Color order must be selected.", title="Invalid LED Config")
+                return None
 
             return {
                 "name": led_name,
@@ -4294,6 +4365,16 @@ class GschpooziWizard:
             multi_pin_status = f"{len(multi_pins)} group(s)" if isinstance(multi_pins, list) and multi_pins else None
             fm_enabled = self.state.get("advanced.force_move.enable_force_move", False)
             fr_enabled = self.state.get("advanced.firmware_retraction.enabled", False)
+            inc_mainsail = self.state.get("includes.mainsail.enabled")
+            inc_timelapse = self.state.get("includes.timelapse.enabled")
+            inc_status = None
+            if inc_mainsail or inc_timelapse:
+                parts = []
+                if inc_mainsail:
+                    parts.append("mainsail")
+                if inc_timelapse:
+                    parts.append("timelapse")
+                inc_status = ", ".join(parts)
 
             choice = self.ui.menu(
                 "Advanced Configuration\n\n"
@@ -4303,6 +4384,7 @@ class GschpooziWizard:
                     ("MP", self._format_menu_item("Multi-pin groups", multi_pin_status) if multi_pin_status else "Multi-pin groups      ([multi_pin])"),
                     ("FM", self._format_menu_item("Force move", "Enabled" if fm_enabled else None) if fm_enabled else "Force move            ([force_move])"),
                     ("FR", self._format_menu_item("Firmware retraction", "Enabled" if fr_enabled else None) if fr_enabled else "Firmware retraction   ([firmware_retraction])"),
+                    ("INC", self._format_menu_item("printer.cfg includes", inc_status) if inc_status else "printer.cfg includes  (mainsail/timelapse)"),
                     ("B", "Back"),
                 ],
                 title="2.16 Advanced",
@@ -4318,6 +4400,47 @@ class GschpooziWizard:
                 self._advanced_force_move_setup()
             elif choice == "FR":
                 self._advanced_firmware_retraction_setup()
+            elif choice == "INC":
+                self._advanced_printer_cfg_includes_setup()
+
+    def _advanced_printer_cfg_includes_setup(self) -> None:
+        """Manage wizard-controlled non-gschpoozi includes in printer.cfg."""
+        # Best-effort detection from existing printer.cfg (on the printer).
+        detected_mainsail = False
+        detected_timelapse = False
+        try:
+            cfg_path = Path.home() / "printer_data" / "config" / "printer.cfg"
+            if cfg_path.exists():
+                txt = cfg_path.read_text(encoding="utf-8", errors="ignore")
+                detected_mainsail = "[include mainsail.cfg]" in txt
+                detected_timelapse = "[include timelapse.cfg]" in txt
+        except Exception:
+            pass
+
+        current_mainsail = self.state.get("includes.mainsail.enabled", detected_mainsail)
+        current_timelapse = self.state.get("includes.timelapse.enabled", detected_timelapse)
+
+        mainsail = self.ui.yesno(
+            "Include mainsail.cfg in printer.cfg?",
+            title="printer.cfg includes - Mainsail",
+            default_no=not bool(current_mainsail),
+        )
+        timelapse = self.ui.yesno(
+            "Include timelapse.cfg in printer.cfg?",
+            title="printer.cfg includes - Timelapse",
+            default_no=not bool(current_timelapse),
+        )
+
+        self.state.set("includes.mainsail.enabled", bool(mainsail))
+        self.state.set("includes.timelapse.enabled", bool(timelapse))
+        self.state.save()
+
+        self.ui.msgbox(
+            "printer.cfg includes saved!\n\n"
+            f"mainsail.cfg: {'Enabled' if mainsail else 'Disabled'}\n"
+            f"timelapse.cfg: {'Enabled' if timelapse else 'Disabled'}",
+            title="Configuration Saved",
+        )
 
     def _advanced_multi_pin_setup(self) -> None:
         """Manage multi-pin groups (advanced.multi_pins)."""

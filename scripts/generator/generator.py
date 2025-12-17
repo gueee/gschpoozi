@@ -411,6 +411,85 @@ class ConfigGenerator:
             Dict mapping file paths to their contents
         """
         context = self.get_context()
+
+        # Validation: required fields for a functional config
+        # (Fail fast with actionable messages, rather than emitting partial/broken sections.)
+        errors = []
+        cfg = context or {}
+
+        def _req(path: str) -> None:
+            parts = path.split(".")
+            cur = cfg
+            for p in parts:
+                if not isinstance(cur, dict) or p not in cur:
+                    errors.append(f"Missing required setting: {path}")
+                    return
+                cur = cur[p]
+            if cur is None or cur == "" or cur == []:
+                errors.append(f"Missing required setting: {path}")
+
+        # MCU serials
+        _req("mcu.main.serial")
+
+        # Core steppers
+        _req("stepper_x.motor_port")
+        _req("stepper_y.motor_port")
+        _req("stepper_z.motor_port")
+
+        # If physical endstops, require a port selection
+        for axis in ("x", "y"):
+            st = cfg.get(f"stepper_{axis}", {})
+            if isinstance(st, dict) and st.get("endstop_type") == "physical":
+                if not st.get("endstop_port") and not st.get("endstop_port_toolboard"):
+                    errors.append(f"Missing required setting: stepper_{axis}.endstop_port (or stepper_{axis}.endstop_port_toolboard)")
+                if not st.get("endstop_config"):
+                    errors.append(f"Missing required setting: stepper_{axis}.endstop_config")
+
+        # Bed heater requires both heater + sensor wiring
+        _req("heater_bed.heater_pin")
+        _req("heater_bed.sensor_port")
+        _req("heater_bed.sensor_type")
+
+        # Fans: part cooling and hotend fan pins must be set
+        part = (cfg.get("fans") or {}).get("part_cooling", {}) if isinstance(cfg.get("fans"), dict) else {}
+        if isinstance(part, dict):
+            loc = part.get("location") or "mainboard"
+            if loc == "toolboard":
+                _req("fans.part_cooling.pin_toolboard")
+            else:
+                _req("fans.part_cooling.pin_mainboard")
+
+        hotend = (cfg.get("fans") or {}).get("hotend", {}) if isinstance(cfg.get("fans"), dict) else {}
+        if isinstance(hotend, dict):
+            loc = hotend.get("location") or "mainboard"
+            if loc == "toolboard":
+                _req("fans.hotend.pin_toolboard")
+            else:
+                _req("fans.hotend.pin_mainboard")
+
+        # LEDs: each neopixel entry needs a pin + color order
+        leds = cfg.get("leds")
+        if isinstance(leds, list):
+            for i, led in enumerate(leds):
+                if not isinstance(led, dict):
+                    continue
+                if not led.get("pin"):
+                    errors.append(f"Missing required setting: leds[{i}].pin")
+                if not led.get("color_order"):
+                    errors.append(f"Missing required setting: leds[{i}].color_order")
+
+        # Additional fans: multi_pin must have pins
+        add_fans = (cfg.get("fans") or {}).get("additional_fans") if isinstance(cfg.get("fans"), dict) else None
+        if isinstance(add_fans, list):
+            for i, fan in enumerate(add_fans):
+                if not isinstance(fan, dict):
+                    continue
+                if fan.get("pin_type") == "multi_pin" and not fan.get("pins"):
+                    errors.append(f"Missing required setting: fans.additional_fans[{i}].pins")
+
+        if errors:
+            raise ValueError("Wizard state is incomplete:\n" + "\n".join(f"- {e}" for e in errors))
+
         rendered = self.renderer.render_all(context)
 
         # Validation: fail fast on render errors (these are always broken configs)
@@ -491,6 +570,13 @@ class ConfigGenerator:
         """Generate main printer.cfg with includes."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # Wizard-managed non-gschpoozi includes
+        pre_includes = []
+        if self.state.get("includes.mainsail.enabled", False):
+            pre_includes.append("mainsail.cfg")
+        if self.state.get("includes.timelapse.enabled", False):
+            pre_includes.append("timelapse.cfg")
+
         includes = [
             "gschpoozi/hardware.cfg",
             "gschpoozi/probe.cfg",
@@ -514,6 +600,8 @@ class ConfigGenerator:
             "",
         ]
 
+        for inc in pre_includes:
+            lines.append(f"[include {inc}]")
         for include in includes:
             lines.append(f"[include {include}]")
 
@@ -548,6 +636,10 @@ class ConfigGenerator:
                 if s.startswith("[include gschpoozi/") and s.endswith("]"):
                     continue
                 if s == "[include user-overrides.cfg]":
+                    continue
+                if s == "[include mainsail.cfg]":
+                    continue
+                if s == "[include timelapse.cfg]":
                     continue
                 kept_pre.append(ln)
 

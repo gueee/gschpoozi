@@ -43,6 +43,33 @@ class WizardState:
             }
         if "config" not in self._state:
             self._state["config"] = {}
+
+        # Lightweight migrations / normalizations for older state files.
+        # The wizard evolves over time; avoid leaving null/partial values around that
+        # later cause generator output to be invalid.
+        cfg = self._state.get("config", {})
+        if isinstance(cfg, dict):
+            # Normalize leds list items (avoid null pin/color_order)
+            leds = cfg.get("leds")
+            if isinstance(leds, list):
+                for led in leds:
+                    if not isinstance(led, dict):
+                        continue
+                    if led.get("pin") is None:
+                        led.pop("pin", None)
+                    if led.get("color_order") is None:
+                        led.pop("color_order", None)
+
+            # Normalize fan additional_fans multi-pin entries (avoid null pins)
+            fans = cfg.get("fans")
+            if isinstance(fans, dict):
+                additional = fans.get("additional_fans")
+                if isinstance(additional, list):
+                    for fan in additional:
+                        if not isinstance(fan, dict):
+                            continue
+                        if fan.get("pins") is None:
+                            fan.pop("pins", None)
     
     def save(self) -> None:
         """Save state to disk."""

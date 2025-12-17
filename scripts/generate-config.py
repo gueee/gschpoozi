@@ -83,7 +83,7 @@ def load_toolboard_template(toolboard_id: str) -> Optional[Dict]:
 
 def load_motor_mapping() -> Dict:
     """Load motor mapping from discovery wizard results.
-    
+
     Returns dict like: {"stepper_x": {"port": "MOTOR_0", "dir_invert": True}, ...}
     """
     # Check in printer_data/config first (standard location)
@@ -207,21 +207,21 @@ def get_endstop_pin(board: Dict, port_name: str) -> str:
 
 def apply_dir_invert(dir_pin: str, stepper_name: str, motor_mapping: Dict, hardware_state: Dict = None) -> str:
     """Apply direction inversion to dir_pin if configured in motor mapping or hardware state.
-    
+
     If dir_invert is True for this stepper, prepend '!' to invert the pin.
     If the pin already has '!', remove it (double inversion = no inversion).
-    
+
     Checks two sources for direction inversion:
     1. motor_mapping: from motor discovery wizard (.motor_mapping.json)
     2. hardware_state: from manual port assignment (.hardware-state.json, {stepper}_dir_invert)
     """
     needs_invert = motor_mapping.get(stepper_name, {}).get('dir_invert', False)
-    
+
     # Also check hardware_state for manual assignment direction inversion
     if hardware_state and not needs_invert:
         assignments = hardware_state.get('port_assignments', {})
         needs_invert = assignments.get(f"{stepper_name}_dir_invert", False)
-    
+
     if needs_invert:
         if dir_pin.startswith('!'):
             # Already inverted, remove the inversion (double invert = normal)
@@ -238,13 +238,13 @@ def generate_hardware_cfg(
     toolboard: Optional[Dict] = None
 ) -> str:
     """Generate hardware.cfg content."""
-    
+
     assignments = hardware_state.get('port_assignments', {})
     board_name = hardware_state.get('board_name', 'Unknown')
-    
+
     # Load motor mapping for direction inversion settings
     motor_mapping = load_motor_mapping()
-    
+
     # Get values from wizard state
     kinematics = wizard_state.get('kinematics', 'corexy')
     bed_x = wizard_state.get('bed_size_x', '300')
@@ -281,7 +281,7 @@ def generate_hardware_cfg(
 
     # Get driver type
     driver_x = wizard_state.get('driver_X', wizard_state.get('stepper_driver', 'TMC2209'))
-    
+
     lines = []
     lines.append("# " + "═" * 77)
     lines.append("# HARDWARE CONFIGURATION")
@@ -289,13 +289,13 @@ def generate_hardware_cfg(
     lines.append(f"# Board: {board_name}")
     lines.append("# " + "═" * 77)
     lines.append("")
-    
+
     # MCU Section
     lines.append("# " + "─" * 77)
     lines.append("# MCU")
     lines.append("# " + "─" * 77)
     lines.append("[mcu]")
-    
+
     # MCU serial - check wizard_state first, then hardware_state
     mcu_serial = wizard_state.get('mcu_serial') or hardware_state.get('mcu_serial')
     if mcu_serial:
@@ -305,13 +305,13 @@ def generate_hardware_cfg(
         lines.append("serial: /dev/serial/by-id/SET_YOUR_MCU_ID_HERE")
         lines.append("# ^^^ Run: ls /dev/serial/by-id/* to find your MCU")
     lines.append("")
-    
+
     # Toolboard MCU if present
     if toolboard:
         tb_name = hardware_state.get('toolboard_name', 'Toolboard')
         tb_connection = toolboard.get('connection', 'USB').upper()
         lines.append(f"[mcu toolboard]")
-        
+
         if tb_connection == 'CAN':
             canbus_uuid = wizard_state.get('toolboard_canbus_uuid') or hardware_state.get('toolboard_canbus_uuid')
             if canbus_uuid:
@@ -326,10 +326,10 @@ def generate_hardware_cfg(
             else:
                 lines.append("serial: /dev/serial/by-id/SET_YOUR_TOOLBOARD_ID_HERE")
                 lines.append("# ^^^ Run: ls /dev/serial/by-id/* to find your toolboard")
-        
+
         lines.append(f"# {tb_name} ({tb_connection})")
         lines.append("")
-    
+
     # Printer section
     lines.append("# " + "─" * 77)
     lines.append("# PRINTER")
@@ -343,12 +343,12 @@ def generate_hardware_cfg(
     lines.append("max_z_velocity: 30")
     lines.append("max_z_accel: 350")
     lines.append("")
-    
+
     # Stepper X
     lines.append("# " + "─" * 77)
     lines.append("# STEPPERS")
     lines.append("# " + "─" * 77)
-    
+
     x_port = assignments.get('stepper_x', 'MOTOR_0')
     x_pins = get_motor_pins(board, x_port)
     x_dir_pin = apply_dir_invert(x_pins['dir_pin'], 'stepper_x', motor_mapping, hardware_state)
@@ -360,12 +360,12 @@ def generate_hardware_cfg(
     lines.append(f"rotation_distance: {x_rotation_distance}")
     if x_full_steps != '200':
         lines.append(f"full_steps_per_rotation: {x_full_steps}  # 0.9° stepper")
-    
+
     # Endstop - check for toolboard, sensorless, or physical on mainboard
     tb_assignments = hardware_state.get('toolboard_assignments', {}) if toolboard else {}
     x_endstop_tb = tb_assignments.get('endstop_x', '')
     x_endstop = assignments.get('endstop_x', '')
-    
+
     if x_endstop_tb and x_endstop_tb not in ('', 'none'):
         # X endstop on toolboard
         endstop_pin = get_endstop_pin(toolboard, x_endstop_tb)
@@ -376,7 +376,7 @@ def generate_hardware_cfg(
         endstop_pin = get_endstop_pin(board, x_endstop)
         lines.append(f"endstop_pin: ^{endstop_pin}  # {x_endstop}")
     # If no endstop assigned, Klipper will error - user must configure in Hardware Setup
-    
+
     # Homing position - use configured values or defaults based on home direction
     x_home = wizard_state.get('home_x', 'max')  # 'min' or 'max'
     x_pos_min = wizard_state.get('position_min_x', '0')
@@ -392,7 +392,7 @@ def generate_hardware_cfg(
     lines.append("homing_speed: 80")
     lines.append("homing_retract_dist: 5")
     lines.append("")
-    
+
     # Stepper Y
     y_port = assignments.get('stepper_y', 'MOTOR_1')
     y_pins = get_motor_pins(board, y_port)
@@ -413,7 +413,7 @@ def generate_hardware_cfg(
         endstop_pin = get_endstop_pin(board, y_endstop)
         lines.append(f"endstop_pin: ^{endstop_pin}  # {y_endstop}")
     # If no endstop assigned, Klipper will error - user must configure in Hardware Setup
-    
+
     # Homing position - use configured values or defaults based on home direction
     y_home = wizard_state.get('home_y', 'max')  # 'min' or 'max'
     y_pos_min = wizard_state.get('position_min_y', '0')
@@ -429,7 +429,7 @@ def generate_hardware_cfg(
     lines.append("homing_speed: 80")
     lines.append("homing_retract_dist: 5")
     lines.append("")
-    
+
     # AWD: Add X1 and Y1 steppers
     if kinematics == 'corexy-awd':
         x1_port = assignments.get('stepper_x1', 'MOTOR_2')
@@ -457,7 +457,7 @@ def generate_hardware_cfg(
         if y_full_steps != '200':
             lines.append(f"full_steps_per_rotation: {y_full_steps}  # 0.9° stepper")
         lines.append("")
-    
+
     # Stepper Z (and Z1, Z2, Z3 if multi-Z)
     for z_idx in range(z_count):
         suffix = "" if z_idx == 0 else str(z_idx)
@@ -465,7 +465,7 @@ def generate_hardware_cfg(
         z_port = assignments.get(z_key, f'MOTOR_{2 + z_idx}')
         z_pins = get_motor_pins(board, z_port)
         z_dir_pin = apply_dir_invert(z_pins['dir_pin'], z_key, motor_mapping, hardware_state)
-        
+
         section_name = f"stepper_z{suffix}"
         lines.append(f"[{section_name}]")
         lines.append(f"step_pin: {z_pins['step_pin']}      # {z_port}")
@@ -475,7 +475,7 @@ def generate_hardware_cfg(
         lines.append(f"rotation_distance: {z_rotation_distance}")
         if z_full_steps != '200':
             lines.append(f"full_steps_per_rotation: {z_full_steps}  # 0.9° stepper")
-        
+
         if z_idx == 0:
             # Use correct virtual endstop based on probe type
             # All probes register as 'probe' chip, NOT their MCU name
@@ -507,7 +507,7 @@ def generate_hardware_cfg(
             lines.append("position_min: -5")
             lines.append(f"position_max: {bed_z}")
             lines.append("homing_speed: 15")
-        
+
         lines.append("")
 
     # TMC Driver Sections
@@ -622,15 +622,15 @@ def generate_hardware_cfg(
     lines.append("# " + "─" * 77)
     lines.append("# EXTRUDER")
     lines.append("# " + "─" * 77)
-    
+
     # Check if extruder is on toolboard (not 'none')
     tb_assignments = hardware_state.get('toolboard_assignments', {}) if toolboard else {}
     extruder_on_toolboard = toolboard and tb_assignments.get('extruder', '') not in ('', 'none')
     heater_on_toolboard = toolboard and tb_assignments.get('heater_extruder', '') not in ('', 'none')
     therm_on_toolboard = toolboard and tb_assignments.get('thermistor_extruder', '') not in ('', 'none')
-    
+
     lines.append("[extruder]")
-    
+
     if extruder_on_toolboard:
         # Extruder motor on toolboard
         e_port = tb_assignments.get('extruder', 'EXTRUDER')
@@ -654,7 +654,7 @@ def generate_hardware_cfg(
         lines.append(f"full_steps_per_rotation: {e_full_steps}  # 0.9° stepper")
     lines.append("nozzle_diameter: 0.400")
     lines.append("filament_diameter: 1.750")
-    
+
     if heater_on_toolboard:
         he_port = tb_assignments.get('heater_extruder', 'HE')
         he_pin = get_heater_pin(toolboard, he_port)
@@ -663,7 +663,7 @@ def generate_hardware_cfg(
         he_port = assignments.get('heater_extruder', 'HE0')
         he_pin = get_heater_pin(board, he_port)
         lines.append(f"heater_pin: {he_pin}  # {he_port}")
-    
+
     # Handle special sensor types (MAX31865 for PT100/PT1000)
     # MAX31865 requires SPI - user must configure CS pin manually
     if hotend_therm == 'PT1000_MAX31865':
@@ -682,7 +682,7 @@ def generate_hardware_cfg(
         lines.append("rtd_num_of_wires: 2")
     else:
         lines.append(f"sensor_type: {hotend_therm}")
-        
+
         if therm_on_toolboard:
             th_port = tb_assignments.get('thermistor_extruder', 'TH0')
             th_pin = get_thermistor_pin(toolboard, th_port)
@@ -691,13 +691,13 @@ def generate_hardware_cfg(
             th_port = assignments.get('thermistor_extruder', 'T0')
             th_pin = get_thermistor_pin(board, th_port)
             lines.append(f"sensor_pin: {th_pin}  # {th_port}")
-        
+
         # Add pullup_resistor if specified (important for PT1000 direct)
         if hotend_pullup:
             lines.append(f"pullup_resistor: {hotend_pullup}  # Board-specific pullup value")
-    
+
     lines.append("min_temp: 0")
-    
+
     # Set max_temp based on sensor type
     if hotend_therm == 'SliceEngineering450':
         lines.append("max_temp: 450  # High-temp thermistor")
@@ -725,17 +725,17 @@ def generate_hardware_cfg(
         lines.append("pressure_advance: 0.04  # Direct drive starting value")
     lines.append("pressure_advance_smooth_time: 0.040")
     lines.append("")
-    
+
     # Heated Bed
     lines.append("# " + "─" * 77)
     lines.append("# HEATED BED")
     lines.append("# " + "─" * 77)
-    
+
     hb_port = assignments.get('heater_bed', 'HB')
     hb_pin = get_heater_pin(board, hb_port)
     tb_port = assignments.get('thermistor_bed', 'TB')
     tb_pin = get_thermistor_pin(board, tb_port)
-    
+
     lines.append("[heater_bed]")
     lines.append(f"heater_pin: {hb_pin}  # {hb_port}")
     lines.append(f"sensor_type: {bed_therm}")
@@ -750,12 +750,12 @@ def generate_hardware_cfg(
     lines.append("min_temp: 0")
     lines.append("max_temp: 120")
     lines.append("")
-    
+
     # Fans
     lines.append("# " + "─" * 77)
     lines.append("# FANS")
     lines.append("# " + "─" * 77)
-    
+
     # Get fan settings from wizard state
     fan_pc = wizard_state.get('fan_part_cooling', '')
     fan_pc_multipin = wizard_state.get('fan_part_cooling_multipin', '')
@@ -777,7 +777,7 @@ def generate_hardware_cfg(
     fan_radiator = wizard_state.get('fan_radiator', '')
     fan_radiator_multipin = wizard_state.get('fan_radiator_multipin', '')
     fan_radiator_type = wizard_state.get('fan_radiator_type', 'heater')  # manual, heater, temperature (default heater for water cooling)
-    
+
     # Advanced settings for all fans (prefix: pc=part cooling, hf=hotend, cf=controller, ex=exhaust, ch=chamber, rs=rscs, rd=radiator)
     def get_fan_settings(prefix: str) -> dict:
         """Get advanced settings for a fan type."""
@@ -826,7 +826,7 @@ def generate_hardware_cfg(
     ch_settings = get_fan_settings('ch')
     rs_settings = get_fan_settings('rs')
     rd_settings = get_fan_settings('rd')
-    
+
     # Helper function to generate multi_pin section
     def generate_multipin(name: str, pin1: str, pin2: str, port1: str, port2: str) -> List[str]:
         mp_lines = []
@@ -834,16 +834,16 @@ def generate_hardware_cfg(
         mp_lines.append(f"pins: {pin1}, {pin2}  # {port1} + {port2}")
         mp_lines.append("")
         return mp_lines
-    
+
     # Check if fans are on toolboard (not 'none')
     pc_on_toolboard = toolboard and tb_assignments.get('fan_part_cooling', '') not in ('', 'none')
     hf_on_toolboard = toolboard and tb_assignments.get('fan_hotend', '') not in ('', 'none')
-    
+
     # Multi-pin part cooling - if second port is assigned
     pc2_port = assignments.get('fan_part_cooling_pin2', '')
     if pc2_port:
         pc2_pin = get_fan_pin(board, pc2_port)
-        
+
         if pc_on_toolboard:
             pc_port = tb_assignments.get('fan_part_cooling', 'FAN0')
             pc_pin = get_fan_pin(toolboard, pc_port)
@@ -852,7 +852,7 @@ def generate_hardware_cfg(
             pc_port = assignments.get('fan_part_cooling', 'FAN0')
             pc_pin = get_fan_pin(board, pc_port)
             lines.extend(generate_multipin('part_cooling', pc_pin, pc2_pin, pc_port, pc2_port))
-        
+
         # Part cooling fan using multi_pin
         lines.append("[fan]")
         lines.append("pin: multi_pin:part_cooling_pins")
@@ -872,7 +872,7 @@ def generate_hardware_cfg(
     # Add advanced settings (no defaults for part cooling - all optional)
     add_fan_settings(lines, pc_settings)
     lines.append("")
-    
+
     # Hotend fan (control type: heater/manual/temperature)
     if fan_hotend != 'none':
         hf_port = None
@@ -916,7 +916,7 @@ def generate_hardware_cfg(
                 add_fan_settings(lines, hf_settings, {'max_power': '1.0', 'kick_start': '0.5'})
                 lines.append("# Manual control: SET_FAN_SPEED FAN=hotend_fan SPEED=x")
             lines.append("")
-    
+
     # Controller fan on main board (control type: controller/manual/heater)
     cf_port = assignments.get('fan_controller')
     cf2_port = assignments.get('fan_controller_pin2', '')
@@ -952,7 +952,7 @@ def generate_hardware_cfg(
             add_fan_settings(lines, cf_settings, {'max_power': '1.0', 'kick_start': '0.5'})
             lines.append("# Manual control: SET_FAN_SPEED FAN=electronics_fan SPEED=x")
         lines.append("")
-    
+
     # Exhaust fan - generated if port is assigned (control type: manual/heater/temperature)
     ex_port = assignments.get('fan_exhaust')
     ex2_port = assignments.get('fan_exhaust_pin2', '')
@@ -1023,7 +1023,7 @@ def generate_hardware_cfg(
             lines.append("off_below: 0.10")
             lines.append("# Control with: SET_FAN_SPEED FAN=exhaust_fan SPEED=0.5")
         lines.append("")
-    
+
     # Chamber fan - generated if port is assigned (control type: manual/heater/temperature)
     ch_port = assignments.get('fan_chamber')
     ch2_port = assignments.get('fan_chamber_pin2', '')
@@ -1094,7 +1094,7 @@ def generate_hardware_cfg(
             lines.append("off_below: 0.10")
             lines.append("# Control with: SET_FAN_SPEED FAN=chamber_fan SPEED=0.5")
         lines.append("")
-    
+
     # RSCS/Filter fan (control type: manual/heater/temperature)
     rs_port = assignments.get('fan_rscs')
     rs2_port = assignments.get('fan_rscs_pin2', '')
@@ -1145,7 +1145,7 @@ def generate_hardware_cfg(
             lines.append("# Recirculating active carbon/HEPA filter")
             lines.append("# Control with: SET_FAN_SPEED FAN=rscs_fan SPEED=0.5")
         lines.append("")
-    
+
     # Radiator fan - generated if port is assigned (control type: manual/heater/temperature, default heater for water cooling)
     rd_port = assignments.get('fan_radiator')
     rd2_port = assignments.get('fan_radiator_pin2', '')
@@ -1210,22 +1210,22 @@ def generate_hardware_cfg(
             lines.append(f"heater_temp: {rd_heater_temp}.0")
             lines.append("# Water cooling radiator fan - runs when hotend is hot")
         lines.append("")
-    
+
     # Probe configuration
     probe_type = wizard_state.get('probe_type', '')
     probe_mode = wizard_state.get('probe_mode', 'proximity')  # Default to proximity
     # Get probe serial/CAN - check wizard state first, then hardware state as fallback
     probe_serial = wizard_state.get('probe_serial') or hardware_state.get('probe_serial')
     probe_canbus_uuid = wizard_state.get('probe_canbus_uuid') or hardware_state.get('probe_canbus_uuid')
-    
+
     # Get bed dimensions for homing position calculations
     bed_x = int(wizard_state.get('bed_size_x', '300') or '300')
     bed_y = int(wizard_state.get('bed_size_y', '300') or '300')
-    
+
     # Z homing position - user configurable, defaults to bed center
     z_home_x = int(wizard_state.get('z_home_x', '') or str(bed_x // 2))
     z_home_y = int(wizard_state.get('z_home_y', '') or str(bed_y // 2))
-    
+
     # Mesh margin - user configurable, defaults to 30mm
     mesh_margin = int(wizard_state.get('mesh_margin', '30') or '30')
 
@@ -1247,7 +1247,7 @@ def generate_hardware_cfg(
             lines.append("y_offset: 20  # Adjust for your toolhead")
             lines.append("mesh_main_direction: x")
             lines.append("mesh_runs: 2")
-            
+
             # Contact/Touch mode configuration for Beacon
             if probe_mode == 'touch':
                 lines.append("")
@@ -1264,7 +1264,7 @@ def generate_hardware_cfg(
                 lines.append("")
                 lines.append("# Proximity mode (default)")
                 lines.append("# Uses eddy current sensing for Z reference")
-                
+
         elif probe_type == 'cartographer':
             lines.append("[cartographer]")
             if probe_serial:
@@ -1276,10 +1276,10 @@ def generate_hardware_cfg(
                 lines.append("# ^^^ Run: ls /dev/serial/by-id/*cartographer* to find your device")
             lines.append("x_offset: 0")
             lines.append("y_offset: 20  # Adjust for your toolhead")
-            
+
             lines.append("mesh_main_direction: x")
             lines.append("mesh_runs: 2")
-            
+
             # Mode-specific comments
             if probe_mode == 'touch':
                 lines.append("")
@@ -1291,7 +1291,7 @@ def generate_hardware_cfg(
                 lines.append("")
                 lines.append("# Scan/Proximity mode (default)")
                 lines.append("# Uses eddy current sensing for contactless Z reference")
-                
+
         elif probe_type == 'btt-eddy':
             lines.append("[mcu eddy]")
             if probe_serial:
@@ -1312,7 +1312,7 @@ def generate_hardware_cfg(
             lines.append("i2c_bus: i2c0f")
             lines.append("x_offset: 0")
             lines.append("y_offset: 20  # Adjust for your toolhead")
-            
+
             # Touch mode configuration for BTT Eddy
             if probe_mode == 'touch':
                 lines.append("")
@@ -1344,7 +1344,7 @@ def generate_hardware_cfg(
                 lines.append("# Calibration commands:")
                 lines.append("# PROBE_EDDY_CURRENT_CALIBRATE CHIP=btt_eddy")
                 lines.append("# TEMPERATURE_PROBE_CALIBRATE PROBE=btt_eddy TARGET=70")
-                
+
         elif probe_type == 'bltouch':
             # BLTouch requires probe pin assignment
             probe_pin = assignments.get('probe_pin', '')
@@ -1372,16 +1372,16 @@ def generate_hardware_cfg(
                 lines.append("sample_retract_dist: 2")
                 lines.append("samples_result: median")
             # If no probe_pin assigned, skip section - user must configure in Hardware Setup
-        
+
         lines.append("")
-        
+
         # ─────────────────────────────────────────────────────────────────────
         # SAFE Z HOME - Required unless probe handles homing itself
         # ─────────────────────────────────────────────────────────────────────
         # Beacon touch mode handles Z homing via home_method: contact
         # and has its own home_xy_position, so safe_z_home would conflict
         skip_safe_z_home = (probe_type == 'beacon' and probe_mode == 'touch')
-        
+
         if not skip_safe_z_home:
             lines.append("# " + "─" * 77)
             lines.append("# SAFE Z HOME")
@@ -1392,7 +1392,7 @@ def generate_hardware_cfg(
             lines.append("z_hop_speed: 25")
             lines.append("speed: 150")
             lines.append("")
-        
+
         # ─────────────────────────────────────────────────────────────────────
         # BED MESH - Required for ALL probe types
         # ─────────────────────────────────────────────────────────────────────
@@ -1402,7 +1402,7 @@ def generate_hardware_cfg(
         lines.append("[bed_mesh]")
         lines.append("speed: 150")
         lines.append("horizontal_move_z: 5")
-        
+
         # Eddy current probes can use rapid scanning
         if probe_type in ('beacon', 'cartographer', 'btt-eddy'):
             lines.append("# Eddy probe: use rapid scan for faster mesh")
@@ -1421,18 +1421,18 @@ def generate_hardware_cfg(
             lines.append("algorithm: bicubic")
             lines.append("# Use ADAPTIVE=1 for adaptive meshing: BED_MESH_CALIBRATE ADAPTIVE=1")
         lines.append("")
-    
+
     # Leveling configuration based on Z motor count
     leveling_method = wizard_state.get('leveling_method', '')
     profile_id = wizard_state.get('profile_id')
     profile = load_profile(profile_id) if profile_id else None
-    
+
     if leveling_method == 'quad_gantry_level' or z_count == 4:
         lines.append("# " + "─" * 77)
         lines.append("# QUAD GANTRY LEVEL")
         lines.append("# " + "─" * 77)
         lines.append("[quad_gantry_level]")
-        
+
         # Use profile values if available, otherwise use defaults based on bed size
         if profile and 'quad_gantry_level' in profile:
             qgl = profile['quad_gantry_level']
@@ -1466,7 +1466,7 @@ def generate_hardware_cfg(
             lines.append("retry_tolerance: 0.0075")
             lines.append("max_adjust: 10")
         lines.append("")
-    
+
     elif leveling_method == 'z_tilt' or z_count == 3:
         lines.append("# " + "─" * 77)
         lines.append("# Z TILT ADJUST")
@@ -1487,10 +1487,10 @@ def generate_hardware_cfg(
         lines.append("retries: 5")
         lines.append("retry_tolerance: 0.0075")
         lines.append("")
-    
+
     elif leveling_method == 'bed_tilt' or z_count == 2:
         lines.append("# " + "─" * 77)
-        lines.append("# BED TILT (2 Z motors)")  
+        lines.append("# BED TILT (2 Z motors)")
         lines.append("# " + "─" * 77)
         lines.append("[z_tilt]")
         bx, by = int(bed_x), int(bed_y)
@@ -1513,7 +1513,7 @@ def generate_hardware_cfg(
     lighting_color_order = wizard_state.get('lighting_color_order') or 'GRB'
     has_leds = wizard_state.get('has_leds', '')
     has_caselight = wizard_state.get('has_caselight', '')
-    
+
     # Get lighting pins from hardware state (user-selected pins)
     lighting_pin = assignments.get('lighting_pin', '')
     tb_lighting_pin = tb_assignments.get('lighting_pin', '')
@@ -1540,7 +1540,7 @@ def generate_hardware_cfg(
 
         # Status LEDs (toolhead neopixels)
         if has_leds == 'yes' or lighting_type == 'neopixel':
-            # Priority: 1) User-selected toolboard pin, 2) User-selected mainboard pin, 
+            # Priority: 1) User-selected toolboard pin, 2) User-selected mainboard pin,
             #           3) Toolboard RGB from template, 4) REPLACE_PIN
             if tb_lighting_pin:
                 # User selected a toolboard pin
@@ -1633,6 +1633,14 @@ def generate_hardware_cfg(
     else:
         filament_sensor_pin = wizard_state.get('filament_sensor_pin', '')
 
+    # Pin modifiers (Klipper): ^ (pull-up), ~ (pull-down), ! (invert)
+    # Prefer hardware assignment modifiers if available; otherwise default to pull-up to match previous behavior.
+    filament_sensor_mods = (
+        assignments.get('filament_sensor_modifiers')
+        or wizard_state.get('filament_sensor_modifiers')
+        or '^'
+    )
+
     # Only include filament sensor section if pin is configured
     if has_filament_sensor == 'yes' and filament_sensor_pin:
         lines.append("# " + "─" * 77)
@@ -1641,12 +1649,12 @@ def generate_hardware_cfg(
 
         if filament_sensor_type == 'motion':
             lines.append("[filament_motion_sensor filament_sensor]")
-            lines.append(f"switch_pin: ^{filament_sensor_pin}  # {filament_port or 'direct pin'}")
+            lines.append(f"switch_pin: {filament_sensor_mods}{filament_sensor_pin}  # {filament_port or 'direct pin'}")
             lines.append("detection_length: 7.0  # Adjust based on your sensor")
             lines.append("extruder: extruder")
         else:
             lines.append("[filament_switch_sensor filament_sensor]")
-            lines.append(f"switch_pin: ^{filament_sensor_pin}  # {filament_port or 'direct pin'}")
+            lines.append(f"switch_pin: {filament_sensor_mods}{filament_sensor_pin}  # {filament_port or 'direct pin'}")
 
         lines.append("pause_on_runout: True")
         lines.append("runout_gcode:")
@@ -2079,34 +2087,34 @@ def generate_calibration_cfg(wizard_state: Dict, hardware_state: Dict) -> str:
 
 def generate_macros_config_cfg(wizard_state: Dict) -> str:
     """Generate macros-config.cfg with user-editable variables."""
-    
+
     # Get values from wizard state with defaults
     bed_x = int(wizard_state.get('bed_size_x', '300'))
     bed_y = int(wizard_state.get('bed_size_y', '300'))
     bed_z = int(wizard_state.get('bed_size_z', '350'))
     z_count = int(wizard_state.get('z_stepper_count', '1'))
     probe_type = wizard_state.get('probe_type', 'none')
-    
+
     # Determine leveling method
     leveling_method = "none"
     if z_count >= 4:
         leveling_method = "quad_gantry_level"
     elif z_count >= 2:
         leveling_method = "z_tilt"
-    
+
     # Get macro settings from wizard state
     heat_soak_time = int(wizard_state.get('macro_heat_soak_time', '0'))
     if wizard_state.get('macro_heat_soak') != 'yes':
         heat_soak_time = 0
-    
+
     chamber_temp = int(wizard_state.get('macro_chamber_temp_default', '0'))
     if wizard_state.get('macro_chamber_wait') != 'yes':
         chamber_temp = 0
-    
+
     bed_mesh_mode = wizard_state.get('macro_bed_mesh_mode', 'adaptive')
     purge_style = wizard_state.get('macro_purge_style', 'line')
     purge_amount = float(wizard_state.get('macro_purge_amount', '30'))
-    
+
     # Nozzle cleaning
     brush_enabled = wizard_state.get('macro_brush_enabled', 'no') == 'yes'
     brush_x = float(wizard_state.get('macro_brush_x', '50'))
@@ -2114,32 +2122,32 @@ def generate_macros_config_cfg(wizard_state: Dict) -> str:
     brush_z = float(wizard_state.get('macro_brush_z', '1'))
     brush_width = float(wizard_state.get('macro_brush_width', '30'))
     wipe_count = int(wizard_state.get('macro_wipe_count', '3'))
-    
+
     # Bucket for blob purge
     bucket_x = float(wizard_state.get('macro_bucket_x', str(bed_x // 2)))
     bucket_y = float(wizard_state.get('macro_bucket_y', str(bed_y + 5)))
     bucket_z = float(wizard_state.get('macro_bucket_z', '5'))
-    
+
     # LED status
     led_enabled = wizard_state.get('macro_led_enabled', 'no') == 'yes'
     led_name = wizard_state.get('macro_led_name', 'status_led')
-    
+
     # Park position
     park_position = wizard_state.get('macro_park_position', 'front')
     park_z_hop = float(wizard_state.get('macro_park_z_hop', '10'))
     park_z_max = float(wizard_state.get('macro_park_z_max', '50'))
-    
+
     # Cooldown
     cooldown_bed = wizard_state.get('macro_cooldown_bed', 'yes') == 'yes'
     cooldown_extruder = wizard_state.get('macro_cooldown_extruder', 'yes') == 'yes'
     cooldown_fans = wizard_state.get('macro_cooldown_fans', 'no') == 'yes'
     fan_off_delay = int(wizard_state.get('macro_fan_off_delay', '0'))
     motor_off_delay = int(wizard_state.get('macro_motor_off_delay', '300'))
-    
+
     # Retract
     end_retract_length = float(wizard_state.get('macro_end_retract_length', '10'))
     end_retract_speed = float(wizard_state.get('macro_end_retract_speed', '30'))
-    
+
     lines = []
     lines.append("# " + "═" * 77)
     lines.append("# MACRO CONFIGURATION")
@@ -2244,19 +2252,19 @@ def generate_macros_config_cfg(wizard_state: Dict) -> str:
     lines.append("gcode:")
     lines.append("    # This macro only holds variables, no gcode")
     lines.append("")
-    
+
     return "\n".join(lines)
 
 
 def generate_macros_cfg(wizard_state: Dict) -> str:
     """Generate macros.cfg with START_PRINT, END_PRINT, and building block macros."""
-    
+
     # Get configuration from wizard state
     bed_x = int(wizard_state.get('bed_size_x', '300'))
     bed_y = int(wizard_state.get('bed_size_y', '300'))
     probe_type = wizard_state.get('probe_type', 'none')
     z_count = int(wizard_state.get('z_stepper_count', '1'))
-    
+
     lines = []
     lines.append("# " + "═" * 77)
     lines.append("# MACROS")
@@ -2274,7 +2282,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("#   END_PRINT")
     lines.append("# " + "═" * 77)
     lines.append("")
-    
+
     # Required sections for Mainsail/Fluidd
     lines.append("# ─────────────────────────────────────────────────────────────────────────────")
     lines.append("# MAINSAIL / FLUIDD REQUIRED SECTIONS")
@@ -2295,7 +2303,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("[respond]")
     lines.append("# Required for M118 messages")
     lines.append("")
-    
+
     # START_PRINT macro
     lines.append("# ═══════════════════════════════════════════════════════════════════════════════")
     lines.append("# START_PRINT")
@@ -2414,7 +2422,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    G92 E0  ; Reset extruder")
     lines.append("    G90     ; Absolute positioning")
     lines.append("")
-    
+
     # END_PRINT macro
     lines.append("# ═══════════════════════════════════════════════════════════════════════════════")
     lines.append("# END_PRINT")
@@ -2464,13 +2472,13 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    ")
     lines.append("    M117 Print complete!")
     lines.append("")
-    
+
     # Building block macros
     lines.append("# ═══════════════════════════════════════════════════════════════════════════════")
     lines.append("# BUILDING BLOCK MACROS")
     lines.append("# ═══════════════════════════════════════════════════════════════════════════════")
     lines.append("")
-    
+
     # _HOME_IF_NEEDED
     lines.append("[gcode_macro _HOME_IF_NEEDED]")
     lines.append("description: Home axes only if not already homed")
@@ -2491,7 +2499,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("        {% endif %}")
     lines.append("    {% endif %}")
     lines.append("")
-    
+
     # _HEAT_SOAK
     lines.append("[gcode_macro _HEAT_SOAK]")
     lines.append("description: Wait for bed temperature to stabilize")
@@ -2509,7 +2517,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("        {% endfor %}")
     lines.append("    {% endif %}")
     lines.append("")
-    
+
     # _CHAMBER_WAIT
     lines.append("[gcode_macro _CHAMBER_WAIT]")
     lines.append("description: Wait for chamber to reach target temperature")
@@ -2529,7 +2537,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("        {% endif %}")
     lines.append("    {% endif %}")
     lines.append("")
-    
+
     # _LEVEL_BED
     lines.append("[gcode_macro _LEVEL_BED]")
     lines.append("description: Level bed using QGL or Z_TILT based on configuration")
@@ -2548,7 +2556,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    ")
     lines.append("    G28 Z")
     lines.append("")
-    
+
     # _BED_MESH
     lines.append("[gcode_macro _BED_MESH]")
     lines.append("description: Generate or load bed mesh")
@@ -2561,23 +2569,23 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append('    {% elif MODE == "saved" %}')
     lines.append("        BED_MESH_PROFILE LOAD=default")
     lines.append('    {% elif MODE == "adaptive" %}')
-    
+
     # Probe-specific mesh commands
     if probe_type in ('beacon', 'cartographer', 'btt-eddy'):
         lines.append("        BED_MESH_CALIBRATE METHOD=rapid_scan")
     else:
         lines.append("        BED_MESH_CALIBRATE ADAPTIVE=1")
-    
+
     lines.append("    {% else %}")
-    
+
     if probe_type in ('beacon', 'cartographer', 'btt-eddy'):
         lines.append("        BED_MESH_CALIBRATE METHOD=rapid_scan")
     else:
         lines.append("        BED_MESH_CALIBRATE")
-    
+
     lines.append("    {% endif %}")
     lines.append("")
-    
+
     # _CLEAN_NOZZLE
     lines.append("[gcode_macro _CLEAN_NOZZLE]")
     lines.append("description: Clean nozzle at brush station")
@@ -2598,7 +2606,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("        G0 Z{cfg.brush_z + 5} F3000")
     lines.append("    {% endif %}")
     lines.append("")
-    
+
     # _PURGE
     lines.append("[gcode_macro _PURGE]")
     lines.append("description: Purge filament before printing")
@@ -2617,7 +2625,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("        _PURGE_LINE AMOUNT={AMOUNT}")
     lines.append("    {% endif %}")
     lines.append("")
-    
+
     # _PURGE_LINE
     lines.append("[gcode_macro _PURGE_LINE]")
     lines.append("description: Simple line purge along bed edge")
@@ -2638,7 +2646,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    G0 X{START_X + 5} F6000")
     lines.append("    G92 E0")
     lines.append("")
-    
+
     # _PURGE_BLOB
     lines.append("[gcode_macro _PURGE_BLOB]")
     lines.append("description: Purge blob into bucket")
@@ -2656,7 +2664,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    G0 Z{cfg.bucket_z + 10} F3000")
     lines.append("    G92 E0")
     lines.append("")
-    
+
     # _PURGE_ADAPTIVE
     lines.append("[gcode_macro _PURGE_ADAPTIVE]")
     lines.append("description: Adaptive purge near print area")
@@ -2667,7 +2675,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    # Fall back to line purge (adaptive requires slicer print bounds)")
     lines.append("    _PURGE_LINE AMOUNT={AMOUNT}")
     lines.append("")
-    
+
     # _END_RETRACT
     lines.append("[gcode_macro _END_RETRACT]")
     lines.append("description: Retract filament at end of print")
@@ -2679,7 +2687,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    M82")
     lines.append("    G92 E0")
     lines.append("")
-    
+
     # _PARK
     lines.append("[gcode_macro _PARK]")
     lines.append("description: Park toolhead at specified position")
@@ -2724,7 +2732,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    G0 Z{park_z} F3000")
     lines.append("    G0 X{park_x} Y{park_y} F6000")
     lines.append("")
-    
+
     # _STATUS_LED
     lines.append("[gcode_macro _STATUS_LED]")
     lines.append("description: Update LED status color")
@@ -2748,7 +2756,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("        SET_LED LED={cfg.led_name} RED={c.r} GREEN={c.g} BLUE={c.b}")
     lines.append("    {% endif %}")
     lines.append("")
-    
+
     # Delayed gcode macros
     lines.append("[delayed_gcode _DELAYED_FAN_OFF]")
     lines.append("gcode:")
@@ -2758,7 +2766,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("gcode:")
     lines.append("    M84")
     lines.append("")
-    
+
     # CANCEL_PRINT
     lines.append("# ═══════════════════════════════════════════════════════════════════════════════")
     lines.append("# UTILITY MACROS")
@@ -2783,7 +2791,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    CANCEL_PRINT_BASE")
     lines.append("    M117 Print cancelled")
     lines.append("")
-    
+
     # PAUSE
     lines.append("[gcode_macro PAUSE]")
     lines.append("description: Pause the running print")
@@ -2800,7 +2808,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    PAUSE_BASE")
     lines.append("    M117 Print paused")
     lines.append("")
-    
+
     # RESUME
     lines.append("[gcode_macro RESUME]")
     lines.append("description: Resume the paused print")
@@ -2814,7 +2822,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    RESUME_BASE")
     lines.append("    M117 Printing...")
     lines.append("")
-    
+
     # M600 Filament Change
     lines.append("[gcode_macro M600]")
     lines.append("description: Filament change")
@@ -2832,7 +2840,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    G1 E-50 F1800")
     lines.append("    M117 Load new filament and RESUME")
     lines.append("")
-    
+
     # LOAD/UNLOAD filament
     lines.append("[gcode_macro LOAD_FILAMENT]")
     lines.append("description: Load filament into the extruder")
@@ -2846,7 +2854,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    M82")
     lines.append("    M104 S0")
     lines.append("")
-    
+
     lines.append("[gcode_macro UNLOAD_FILAMENT]")
     lines.append("description: Unload filament from the extruder")
     lines.append("gcode:")
@@ -2860,7 +2868,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append("    M82")
     lines.append("    M104 S0")
     lines.append("")
-    
+
     return "\n".join(lines)
 
 # ═══════════════════════════════════════════════════════════════════════════════

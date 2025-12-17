@@ -3898,11 +3898,44 @@ class GschpooziWizard:
             if pin is None:
                 return None
 
+            # Pin modifiers (Klipper): ^ (pull-up), ~ (pull-down), ! (invert)
+            # Default pull-up ON to preserve existing behavior (previously hard-coded '^').
+            current_pullup = sensor.get("pin_pullup", True) if sensor else True
+            current_pulldown = sensor.get("pin_pulldown", False) if sensor else False
+            current_invert = sensor.get("pin_invert", False) if sensor else False
+
+            pin_pullup = self.ui.yesno(
+                "Enable internal pull-up resistor for this sensor pin?\n\n"
+                "Most mechanical runout switches use pull-up (^).",
+                title="Sensor Pin - Pull-up",
+                default_no=not current_pullup,
+            )
+
+            # Only ask for pull-down if pull-up is NOT enabled
+            pin_pulldown = False
+            if not pin_pullup:
+                pin_pulldown = self.ui.yesno(
+                    "Enable internal pull-down resistor for this sensor pin?\n\n"
+                    "This is rarely needed (~).",
+                    title="Sensor Pin - Pull-down",
+                    default_no=not current_pulldown,
+                )
+
+            pin_invert = self.ui.yesno(
+                "Invert the sensor signal (active LOW)?\n\n"
+                "If the sensor triggers in reverse, enable inversion (!).",
+                title="Sensor Pin - Invert",
+                default_no=not current_invert,
+            )
+
             return {
                 "name": name,
                 "type": sensor_type,
                 "location": location,
                 "pin": pin,
+                "pin_pullup": bool(pin_pullup),
+                "pin_pulldown": bool(pin_pulldown),
+                "pin_invert": bool(pin_invert),
                 "pause_on_runout": sensor.get("pause_on_runout", True) if sensor else True
             }
 

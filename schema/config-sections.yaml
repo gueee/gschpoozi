@@ -771,12 +771,16 @@ filament_switch_sensor:
   type: "list"
   template: |
     {% for sensor in filament_sensors %}
+    {% set _pullup = sensor.pin_pullup | default(true) %}
+    {% set _pulldown = sensor.pin_pulldown | default(false) %}
+    {% set _invert = sensor.pin_invert | default(false) %}
+    {% set _mods = ('^' if _pullup else ('~' if _pulldown else '')) ~ ('!' if _invert else '') %}
     {% if sensor.type == 'switch' %}
     [filament_switch_sensor {{ sensor.name }}]
     {% if sensor.location == 'toolboard' %}
-    switch_pin: ^toolboard:{{ sensor.pin }}
+    switch_pin: {{ _mods }}toolboard:{{ sensor.pin }}
     {% else %}
-    switch_pin: ^{{ sensor.pin }}
+    switch_pin: {{ _mods }}{{ sensor.pin }}
     {% endif %}
     pause_on_runout: {{ sensor.pause_on_runout | default(true) | lower }}
     runout_gcode:
@@ -785,9 +789,9 @@ filament_switch_sensor:
     {% elif sensor.type == 'motion' %}
     [filament_motion_sensor {{ sensor.name }}]
     {% if sensor.location == 'toolboard' %}
-    switch_pin: ^toolboard:{{ sensor.pin }}
+    switch_pin: {{ _mods }}toolboard:{{ sensor.pin }}
     {% else %}
-    switch_pin: ^{{ sensor.pin }}
+    switch_pin: {{ _mods }}{{ sensor.pin }}
     {% endif %}
     detection_length: {{ sensor.detection_length | default(7.0) }}
     extruder: extruder

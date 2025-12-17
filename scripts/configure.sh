@@ -106,6 +106,8 @@ show_help() {
     echo "  --help, -h     Show this help message"
     echo "  --version, -v  Show version information"
     echo "  --check        Check dependencies only"
+    echo "  --dark         Force a dark whiptail theme (sets NEWT_COLORS)"
+    echo "  --theme THEME  UI theme: dark|default (default: respects terminal/newt defaults)"
     echo ""
     echo "The wizard will guide you through configuring your Klipper printer."
     echo ""
@@ -140,16 +142,51 @@ check_dependencies() {
 
 main() {
     # Parse arguments
-    case "${1:-}" in
-        --help|-h)
+    # - Wrapper-only flags are handled here and NOT passed to the Python wizard.
+    # - Unknown flags/args are passed through to the Python wizard.
+    local action=""
+    local theme="${GSCHPOOZI_THEME:-}"
+    local passthrough_args=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help|-h)
+                action="help"
+                shift
+                ;;
+            --version|-v)
+                action="version"
+                shift
+                ;;
+            --check)
+                action="check"
+                shift
+                ;;
+            --dark)
+                theme="dark"
+                shift
+                ;;
+            --theme)
+                theme="${2:-}"
+                shift 2
+                ;;
+            *)
+                passthrough_args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    case "${action}" in
+        help)
             show_help
             exit 0
             ;;
-        --version|-v)
+        version)
             show_version
             exit 0
             ;;
-        --check)
+        check)
             print_header
             check_dependencies
             exit $?
@@ -172,7 +209,17 @@ main() {
     
     # Launch Python wizard
     cd "${REPO_ROOT}"
-    exec python3 "${WIZARD_DIR}/main.py" "$@"
+
+    # Optional: force a dark theme for whiptail/newt UIs (users can also export NEWT_COLORS themselves)
+    if [[ -n "${theme}" && "${theme}" != "default" && "${theme}" != "dark" ]]; then
+        print_error "Invalid theme: '${theme}' (expected: dark|default)"
+        exit 2
+    fi
+    if [[ "${theme}" == "dark" && -z "${NEWT_COLORS:-}" ]]; then
+        export NEWT_COLORS='root=white,black;window=white,black;shadow=black,black;border=white,black;title=white,black;button=black,white;actbutton=white,blue;compactbutton=white,black;checkbox=white,black;actcheckbox=black,white;entry=white,black;label=white,black;listbox=white,black;actsellistbox=black,white;textbox=white,black;acttextbox=black,white;helpline=white,black;roottext=white,black'
+    fi
+
+    exec python3 "${WIZARD_DIR}/main.py" "${passthrough_args[@]}"
 }
 
 # Run main function

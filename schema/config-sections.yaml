@@ -391,7 +391,11 @@ heater_fan:
     {% if fan.pin_type == 'multi_pin' %}
     pin: multi_pin:{{ fan.multi_pin_name }}
     {% else %}
+    {% if fan.location | default('mainboard') == 'toolboard' %}
+    pin: toolboard:{{ toolboard.pins[fan.pin].signal }}
+    {% else %}
     pin: {{ board.pins[fan.pin].signal }}
+    {% endif %}
     {% endif %}
     heater: {{ fan.heater | default('extruder') }}
     heater_temp: {{ fan.heater_temp | default(50) }}
@@ -422,7 +426,11 @@ fan_generic:
     {% if fan.pin_type == 'multi_pin' %}
     pin: multi_pin:{{ fan.multi_pin_name }}
     {% else %}
+    {% if fan.location | default('mainboard') == 'toolboard' %}
+    pin: toolboard:{{ toolboard.pins[fan.pin].signal }}
+    {% else %}
     pin: {{ board.pins[fan.pin].signal }}
+    {% endif %}
     {% endif %}
     max_power: {{ fan.max_power | default(1.0) }}
     shutdown_speed: {{ fan.shutdown_speed | default(0) }}

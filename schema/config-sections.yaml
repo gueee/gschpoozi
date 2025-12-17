@@ -80,7 +80,8 @@ stepper_x:
     position_max: {{ stepper_x.position_max | default(printer.bed_size_x) }}
     homing_speed: {{ stepper_x.homing_speed | default(50) }}
     {% if stepper_x.endstop_type != 'sensorless' %}
-    homing_retract_dist: {{ stepper_x.homing_retract_dist if (stepper_x.homing_retract_dist is defined and stepper_x.homing_retract_dist != 0) else 5 }}
+    # Allow explicit 0 (required for some probe/virtual-endstop homing behaviors)
+    homing_retract_dist: {{ stepper_x.homing_retract_dist if (stepper_x.homing_retract_dist is defined) else 5 }}
     {% else %}
     homing_retract_dist: {{ stepper_x.homing_retract_dist | default(0) }}
     {% endif %}
@@ -111,7 +112,8 @@ stepper_y:
     position_max: {{ stepper_y.position_max | default(printer.bed_size_y) }}
     homing_speed: {{ stepper_y.homing_speed | default(50) }}
     {% if stepper_y.endstop_type != 'sensorless' %}
-    homing_retract_dist: {{ stepper_y.homing_retract_dist if (stepper_y.homing_retract_dist is defined and stepper_y.homing_retract_dist != 0) else 5 }}
+    # Allow explicit 0 (required for some probe/virtual-endstop homing behaviors)
+    homing_retract_dist: {{ stepper_y.homing_retract_dist if (stepper_y.homing_retract_dist is defined) else 5 }}
     {% else %}
     homing_retract_dist: {{ stepper_y.homing_retract_dist | default(0) }}
     {% endif %}
@@ -735,15 +737,15 @@ common:
       # Reference: https://www.klipper3d.org/Config_checks.html
       #            https://mpx.wiki/Troubleshooting/corexy-direction
       # ═════════════════════════════════════════════════════════════════════════════
-      
+
       [force_move]
       enable_force_move: True
       # Required for STEPPER_BUZZ and FORCE_MOVE commands
-      
+
       # ─────────────────────────────────────────────────────────────────────────────
       # TMC DRIVER STATUS
       # ─────────────────────────────────────────────────────────────────────────────
-      
+
       [gcode_macro QUERY_TMC_STATUS]
       description: Query TMC driver status for all configured steppers
       gcode:
@@ -769,7 +771,7 @@ common:
               {% endif %}
           {% endfor %}
           M118 === End TMC Status ===
-      
+
       [gcode_macro CHECK_MOTOR_CONNECTED]
       description: Check if a motor appears connected via TMC driver status
       gcode:
@@ -777,11 +779,11 @@ common:
           M118 Checking {stepper}...
           DUMP_TMC STEPPER={stepper}
           M118 Look for 'ola' or 'olb' flags - if set, motor may be disconnected
-      
+
       # ─────────────────────────────────────────────────────────────────────────────
       # INDIVIDUAL STEPPER IDENTIFICATION
       # ─────────────────────────────────────────────────────────────────────────────
-      
+
       [gcode_macro IDENTIFY_STEPPER]
       description: Buzz a single stepper to identify which physical motor it is
       gcode:
@@ -790,7 +792,7 @@ common:
           M118 Watch which motor moves (10 short buzzes)
           STEPPER_BUZZ STEPPER={stepper}
           M118 === Done identifying {stepper} ===
-      
+
       [gcode_macro IDENTIFY_ALL_STEPPERS]
       description: Buzz each stepper one by one with pauses for identification
       gcode:
@@ -799,73 +801,73 @@ common:
           M118
           M118 Starting in 3 seconds...
           G4 P3000
-      
+
           M118 >>> STEPPER_X - Watch now...
           STEPPER_BUZZ STEPPER=stepper_x
           G4 P2000
-      
+
           M118 >>> STEPPER_Y - Watch now...
           STEPPER_BUZZ STEPPER=stepper_y
           G4 P2000
-      
+
           {% if printer.configfile.config.stepper_x1 is defined %}
           M118 >>> STEPPER_X1 - Watch now...
           STEPPER_BUZZ STEPPER=stepper_x1
           G4 P2000
           {% endif %}
-      
+
           {% if printer.configfile.config.stepper_y1 is defined %}
           M118 >>> STEPPER_Y1 - Watch now...
           STEPPER_BUZZ STEPPER=stepper_y1
           G4 P2000
           {% endif %}
-      
+
           M118 >>> STEPPER_Z - Watch now...
           STEPPER_BUZZ STEPPER=stepper_z
           G4 P2000
-      
+
           {% if printer.configfile.config.stepper_z1 is defined %}
           M118 >>> STEPPER_Z1 - Watch now...
           STEPPER_BUZZ STEPPER=stepper_z1
           G4 P2000
           {% endif %}
-      
+
           {% if printer.configfile.config.stepper_z2 is defined %}
           M118 >>> STEPPER_Z2 - Watch now...
           STEPPER_BUZZ STEPPER=stepper_z2
           G4 P2000
           {% endif %}
-      
+
           {% if printer.configfile.config.stepper_z3 is defined %}
           M118 >>> STEPPER_Z3 - Watch now...
           STEPPER_BUZZ STEPPER=stepper_z3
           G4 P2000
           {% endif %}
-      
+
           M118 >>> EXTRUDER - Watch now...
           STEPPER_BUZZ STEPPER=extruder
-      
+
           M118 === IDENTIFICATION COMPLETE ===
           M118 Make note of which physical motor corresponds to each stepper name.
-      
+
       # ─────────────────────────────────────────────────────────────────────────────
       # COREXY AWD SAFE PAIR TESTING
       # Test one motor pair at a time to prevent motors from fighting
       # ─────────────────────────────────────────────────────────────────────────────
-      
+
       [gcode_macro AWD_TEST_PAIR_A]
       description: Test first motor pair (X+Y) with second pair (X1+Y1) disabled
       gcode:
           {% set distance = params.DISTANCE|default(20)|float %}
           {% set speed = params.SPEED|default(50)|float %}
-      
+
           M118 ════════════════════════════════════════════════════════════
           M118 AWD PAIR A TEST (stepper_x + stepper_y)
           M118 ════════════════════════════════════════════════════════════
           M118 This test moves ONLY stepper_x and stepper_y.
           M118 stepper_x1 and stepper_y1 are DISABLED.
           M118 The toolhead should move in a square pattern.
-      
+
           # Disable second pair
           {% if printer.configfile.config.stepper_x1 is defined %}
               SET_STEPPER_ENABLE STEPPER=stepper_x1 ENABLE=0
@@ -873,39 +875,39 @@ common:
           {% if printer.configfile.config.stepper_y1 is defined %}
               SET_STEPPER_ENABLE STEPPER=stepper_y1 ENABLE=0
           {% endif %}
-      
+
           # Enable first pair
           SET_STEPPER_ENABLE STEPPER=stepper_x ENABLE=1
           SET_STEPPER_ENABLE STEPPER=stepper_y ENABLE=1
-      
+
           M118 Moving +X...
           FORCE_MOVE STEPPER=stepper_x DISTANCE={distance} VELOCITY={speed}
           FORCE_MOVE STEPPER=stepper_y DISTANCE={distance} VELOCITY={speed}
           G4 P500
-      
+
           M118 Moving +Y...
           FORCE_MOVE STEPPER=stepper_x DISTANCE={distance} VELOCITY={speed}
           FORCE_MOVE STEPPER=stepper_y DISTANCE={-distance} VELOCITY={speed}
           G4 P500
-      
+
           M118 Moving -X...
           FORCE_MOVE STEPPER=stepper_x DISTANCE={-distance} VELOCITY={speed}
           FORCE_MOVE STEPPER=stepper_y DISTANCE={-distance} VELOCITY={speed}
           G4 P500
-      
+
           M118 Moving -Y (back to start)...
           FORCE_MOVE STEPPER=stepper_x DISTANCE={-distance} VELOCITY={speed}
           FORCE_MOVE STEPPER=stepper_y DISTANCE={distance} VELOCITY={speed}
-      
+
           M118 PAIR A TEST COMPLETE
           M118 Did the toolhead move in a correct square pattern?
-      
+
       [gcode_macro AWD_TEST_PAIR_B]
       description: Test second motor pair (X1+Y1) with first pair (X+Y) disabled
       gcode:
           {% set distance = params.DISTANCE|default(20)|float %}
           {% set speed = params.SPEED|default(50)|float %}
-      
+
           {% if printer.configfile.config.stepper_x1 is not defined or printer.configfile.config.stepper_y1 is not defined %}
               M118 ERROR: AWD_TEST_PAIR_B requires AWD configuration (stepper_x1 and stepper_y1)
               M118 This macro is only for All Wheel Drive printers.
@@ -916,38 +918,38 @@ common:
               M118 This test moves ONLY stepper_x1 and stepper_y1.
               M118 stepper_x and stepper_y are DISABLED.
               M118 Should move in the SAME pattern as Pair A.
-      
+
               # Disable first pair
               SET_STEPPER_ENABLE STEPPER=stepper_x ENABLE=0
               SET_STEPPER_ENABLE STEPPER=stepper_y ENABLE=0
-      
+
               # Enable second pair
               SET_STEPPER_ENABLE STEPPER=stepper_x1 ENABLE=1
               SET_STEPPER_ENABLE STEPPER=stepper_y1 ENABLE=1
-      
+
               M118 Moving +X...
               FORCE_MOVE STEPPER=stepper_x1 DISTANCE={distance} VELOCITY={speed}
               FORCE_MOVE STEPPER=stepper_y1 DISTANCE={distance} VELOCITY={speed}
               G4 P500
-      
+
               M118 Moving +Y...
               FORCE_MOVE STEPPER=stepper_x1 DISTANCE={distance} VELOCITY={speed}
               FORCE_MOVE STEPPER=stepper_y1 DISTANCE={-distance} VELOCITY={speed}
               G4 P500
-      
+
               M118 Moving -X...
               FORCE_MOVE STEPPER=stepper_x1 DISTANCE={-distance} VELOCITY={speed}
               FORCE_MOVE STEPPER=stepper_y1 DISTANCE={-distance} VELOCITY={speed}
               G4 P500
-      
+
               M118 Moving -Y (back to start)...
               FORCE_MOVE STEPPER=stepper_x1 DISTANCE={-distance} VELOCITY={speed}
               FORCE_MOVE STEPPER=stepper_y1 DISTANCE={distance} VELOCITY={speed}
-      
+
               M118 PAIR B TEST COMPLETE
               M118 Did it move the SAME as Pair A?
           {% endif %}
-      
+
       [gcode_macro AWD_ENABLE_ALL]
       description: Re-enable all AWD motors after testing
       gcode:
@@ -961,12 +963,12 @@ common:
               SET_STEPPER_ENABLE STEPPER=stepper_y1 ENABLE=1
           {% endif %}
           M118 All motors enabled.
-      
+
       [gcode_macro AWD_FULL_TEST]
       description: Run complete AWD motor pair verification sequence
       gcode:
           {% set distance = params.DISTANCE|default(20)|float %}
-      
+
           M118 ════════════════════════════════════════════════════════════════════
           M118 COREXY AWD FULL CALIBRATION SEQUENCE
           M118 ════════════════════════════════════════════════════════════════════
@@ -974,26 +976,26 @@ common:
           M118 If anything looks wrong, use EMERGENCY STOP (M112)!
           M118 Starting Pair A test in 5 seconds...
           G4 P5000
-      
+
           AWD_TEST_PAIR_A DISTANCE={distance}
-      
+
           M118 Pausing 5 seconds before Pair B test...
           G4 P5000
-      
+
           AWD_TEST_PAIR_B DISTANCE={distance}
-      
+
           AWD_ENABLE_ALL
-      
+
           M118 ════════════════════════════════════════════════════════════════════
           M118 AWD CALIBRATION COMPLETE
           M118 ════════════════════════════════════════════════════════════════════
           M118 If both pairs moved identically: AWD is correctly configured!
           M118 If not, see: https://mpx.wiki/Troubleshooting/corexy-direction
-      
+
       # ─────────────────────────────────────────────────────────────────────────────
       # CALIBRATION WIZARD
       # ─────────────────────────────────────────────────────────────────────────────
-      
+
       [gcode_macro STEPPER_CALIBRATION_WIZARD]
       description: Display stepper calibration instructions
       gcode:

@@ -441,7 +441,10 @@ class GschpooziWizard:
         base = Path.home() / "printer_data" / "config"
         start = base / "printer.cfg"
 
-        include_re = re.compile(r"^\s*\[include\s+([^\]]+)\]\s*$")
+        # Allow trailing comments after the closing bracket:
+        #   [include foo.cfg]  # comment
+        #   [include foo/*.cfg] ; comment
+        include_re = re.compile(r"^\s*\[include\s+([^\]]+)\]\s*(?:[;#].*)?$")
 
         visited = set()
         out = []
@@ -510,8 +513,9 @@ class GschpooziWizard:
 
     def _discover_heater_names_from_cfg(self, cfg_files: list) -> set:
         """Discover heater object names from Klipper config files."""
-        section_re = re.compile(r"^\s*\[([^\]]+)\]\s*$")
-        include_re = re.compile(r"^\s*include\s+", re.IGNORECASE)
+        # Allow trailing comments after section headers too:
+        #   [heater_generic chamber]  # comment
+        section_re = re.compile(r"^\s*\[([^\]]+)\]\s*(?:[;#].*)?$")
 
         heaters = set()
         for p in cfg_files or []:

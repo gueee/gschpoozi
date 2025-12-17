@@ -3192,29 +3192,23 @@ class GschpooziWizard:
                 if fan_ports:
                     pins_list = []
                     if current_pins:
-                        # Parse existing pins
-                        pins_list = [p.strip() for p in current_pins.split(",")]
+                        # Parse existing pins (comma-separated string)
+                        pins_list = [p.strip() for p in str(current_pins).split(",") if p.strip()]
 
-                    self.ui.msgbox(
-                        f"Select fan ports for '{fan_name}'.\n\n"
-                        "You'll select them one at a time.",
-                        title=f"{fan_name} - Multi-Pin Setup"
+                    selected = self.ui.checklist(
+                        f"Select ALL pins for '{fan_name}'.\n\n"
+                        "Use SPACE to toggle a pin, ENTER to confirm.",
+                        [(p, l, p in pins_list) for p, l, d in fan_ports],
+                        title=f"{fan_name} - Multi-Pin Pins",
+                        height=22,
+                        width=120,
+                        list_height=min(16, max(6, len(fan_ports))),
                     )
-                    while True:
-                        port = self.ui.radiolist(
-                            f"Select a fan port for '{fan_name}':\n"
-                            f"Currently selected: {', '.join(pins_list) if pins_list else 'none'}",
-                            [(p, l, p in pins_list) for p, l, d in fan_ports],
-                            title=f"{fan_name} - Select Port"
-                        )
-                        if port:
-                            if port in pins_list:
-                                pins_list.remove(port)
-                            else:
-                                pins_list.append(port)
-                        if not self.ui.yesno(f"Add/remove another port to '{fan_name}'?", title="More Ports"):
-                            break
-                    pins = ", ".join(pins_list)
+                    if selected is None:
+                        return None
+                    # Stable output: keep board order
+                    selected_set = set(selected)
+                    pins = ", ".join([p for p, _l, _d in fan_ports if p in selected_set])
                 else:
                     pins = self.ui.inputbox(
                         f"Enter pins for '{fan_name}' (comma-separated):\n\n"

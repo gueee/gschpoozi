@@ -3158,6 +3158,20 @@ class GschpooziWizard:
             if not fan_name:
                 return None
 
+            # Location (mainboard/toolboard)
+            # This affects both the pin picker UI and how pins are rendered in templates.
+            current_location = (fan.get("location") if isinstance(fan, dict) else None) or "mainboard"
+            location = self.ui.radiolist(
+                f"Where is '{fan_name}' connected?",
+                [
+                    ("mainboard", "Mainboard MCU", current_location == "mainboard"),
+                    ("toolboard", "Toolboard MCU", current_location == "toolboard"),
+                ],
+                title=f"{fan_name} - Location",
+            )
+            if location is None:
+                return None
+
             # Control mode:
             # - manual: [fan_generic] (no control method required)
             # - heater: [heater_fan <name>] controlled by a heater object
@@ -3184,35 +3198,80 @@ class GschpooziWizard:
 
             fan_config = {"name": fan_name}
             fan_config["control_mode"] = control_mode
+            fan_config["location"] = location
 
             if is_multi_pin:
                 # For multi-pin, need to select multiple ports
                 current_pins = fan.get("pins", "") if fan else None
-                fan_ports = self._get_board_ports("fan_ports", "boards")
-                if fan_ports:
-                    pins_list = []
-                    if current_pins:
-                        # Parse existing pins (comma-separated string)
-                        pins_list = [p.strip() for p in str(current_pins).split(",") if p.strip()]
+                board_type = "boards" if location == "mainboard" else "toolboards"
+                board_id = (
+                    self.state.get("mcu.main.board_type", "")
+                    if location == "mainboard"
+                    else self.state.get("mcu.toolboard.board_type", "")
+                )
+                board_data = self._load_board_data(board_id, board_type)
 
+                # Normalize currently selected pins (supports older states that stored port IDs)
+                current_set = set()
+                if current_pins:
+                    current_set = {p.strip() for p in str(current_pins).split(",") if p.strip()}
+
+                # Build a unified pick list of output-capable pins:
+                # - fan_ports (fan headers)
+                # - heater_ports (often repurposed as fan outputs)
+                # - misc_ports (GPIO / AUX pins)
+                groups = [
+                    ("fan_ports", "Fan"),
+                    ("heater_ports", "Heater"),
+                    ("misc_ports", "Misc"),
+                ]
+                items = []
+                tag_to_pin = {}
+                ordered_tags = []
+
+                if isinstance(board_data, dict) and board_data:
+                    for group_key, group_label in groups:
+                        ports = board_data.get(group_key, {})
+                        if not isinstance(ports, dict) or not ports:
+                            continue
+                        for port_id, port_info in ports.items():
+                            if not isinstance(port_info, dict):
+                                continue
+                            pin = port_info.get("pin") or port_info.get("signal_pin")
+                            if not pin:
+                                continue
+                            label = port_info.get("label", port_id)
+                            tag = f"{group_key}:{port_id}"
+                            desc = f"[{group_label}] {port_id} - {label} ({pin})"
+                            tag_to_pin[tag] = str(pin).strip()
+                            ordered_tags.append(tag)
+                            # Preselect if current set contains either the actual pin (preferred) or the port_id (older state)
+                            selected_default = (tag_to_pin[tag] in current_set) or (str(port_id).strip() in current_set) or (tag in current_set)
+                            items.append((tag, desc, selected_default))
+
+                if items:
                     selected = self.ui.checklist(
                         f"Select ALL pins for '{fan_name}'.\n\n"
                         "Use SPACE to toggle a pin, ENTER to confirm.",
-                        [(p, l, p in pins_list) for p, l, d in fan_ports],
+                        items,
                         title=f"{fan_name} - Multi-Pin Pins",
-                        height=22,
-                        width=120,
-                        list_height=min(16, max(6, len(fan_ports))),
+                        height=24,
+                        width=140,
+                        list_height=min(18, max(8, len(items))),
                     )
                     if selected is None:
                         return None
-                    # Stable output: keep board order
+                    # Stable output: keep original order
                     selected_set = set(selected)
-                    pins = ", ".join([p for p, _l, _d in fan_ports if p in selected_set])
+                    raw_pins = [tag_to_pin[t] for t in ordered_tags if t in selected_set]
+                    if location == "toolboard":
+                        raw_pins = [f"toolboard:{p}" if not str(p).startswith("toolboard:") else str(p) for p in raw_pins]
+                    pins = ", ".join(raw_pins)
                 else:
+                    # Fallback if board template doesn't provide ports
                     pins = self.ui.inputbox(
                         f"Enter pins for '{fan_name}' (comma-separated):\n\n"
-                        "Example: PA15, PB11",
+                        "Example: PA15, PB11 (or toolboard:PA15, toolboard:PB11)",
                         default=current_pins or "",
                         title=f"{fan_name} - Pins"
                     )
@@ -3226,7 +3285,7 @@ class GschpooziWizard:
                 # Single pin fan - select from available ports
                 current_port = fan.get("port", "") if fan else None
                 current_pin = fan.get("pin", "") if fan else None
-                fan_ports = self._get_board_ports("fan_ports", "boards")
+                fan_ports = self._get_board_ports("fan_ports", "toolboards" if location == "toolboard" else "boards")
                 if fan_ports:
                     port = self.ui.radiolist(
                         f"Select fan port for '{fan_name}':",

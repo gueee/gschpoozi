@@ -662,10 +662,13 @@ class ConfigGenerator:
                     return generated_block
 
             existing = existing_path.read_text(encoding="utf-8", errors="ignore").splitlines()
-            marker = "#*# <---------------------- SAVE_CONFIG ---------------------->"
+            # Be tolerant: some installs vary whitespace/dashes; match any SAVE_CONFIG marker line.
+            # Typical Klipper marker:
+            #   #*# <---------------------- SAVE_CONFIG ---------------------->
             save_idx = None
             for i, ln in enumerate(existing):
-                if ln.strip() == marker:
+                s = ln.strip()
+                if "SAVE_CONFIG" in s and s.startswith("#*#"):
                     save_idx = i
                     break
 

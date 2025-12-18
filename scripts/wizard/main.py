@@ -35,6 +35,23 @@ class GschpooziWizard:
         )
         self.state = get_state()
 
+    def _run_tty_command(self, cmd: list[str]) -> int:
+        """
+        Run an interactive command on /dev/tty.
+
+        We use this for KIAUH-like installers that require a real TTY for prompts,
+        sudo password entry, and screen control.
+        """
+        import subprocess
+        try:
+            with open("/dev/tty", "r+") as tty:
+                result = subprocess.run(cmd, stdin=tty, stdout=tty, stderr=tty, text=True)
+                return int(result.returncode)
+        except OSError:
+            # Fallback: best-effort without explicit tty binding
+            result = subprocess.run(cmd)
+            return int(result.returncode)
+
     def _format_serial_name(self, full_path: str) -> str:
         """Format a serial device path for display.
 
@@ -762,13 +779,14 @@ class GschpooziWizard:
         """Klipper installation and verification menu."""
         while True:
             choice = self.ui.menu(
-                "Klipper Setup - Installation & Verification\n\n"
-                "These options help verify your Klipper installation.",
+                "Klipper Setup\n\n"
+                "KIAUH-like component management + quick health checks.\n"
+                "Warning: install/remove actions may require sudo and can modify system services.",
                 [
                     ("1.1", "Check Klipper         (Verify installation)"),
                     ("1.2", "Check Moonraker       (Verify API)"),
-                    ("1.3", "Web Interface         (Mainsail/Fluidd)"),
-                    ("1.4", "Optional Services     (Crowsnest, KlipperScreen)"),
+                    ("1.3", "Manage Components     (Install/Update/Remove/Reinstall)"),
+                    ("1.4", "CAN Interface Setup   (can0 / can-utils / systemd)"),
                     ("B", "Back to Main Menu"),
                 ],
                 title="1. Klipper Setup",
@@ -781,9 +799,164 @@ class GschpooziWizard:
             elif choice == "1.2":
                 self._check_moonraker()
             elif choice == "1.3":
-                self._web_interface_menu()
+                self._manage_klipper_components()
             elif choice == "1.4":
-                self._optional_services_menu()
+                self._can_interface_setup()
+
+    def _manage_klipper_components(self) -> None:
+        """
+        KIAUH-like component manager.
+
+        Uses scripts/lib/klipper-install.sh via scripts/tools/klipper_component_manager.sh.
+        """
+        repo_root = REPO_ROOT
+        tool = repo_root / "scripts" / "tools" / "klipper_component_manager.sh"
+        if not tool.exists():
+            self.ui.msgbox(f"Missing tool: {tool}", title="Error")
+            return
+
+        while True:
+            choice = self.ui.menu(
+                "Manage Klipper Components\n\n"
+                "This can install, update, fully remove, or reinstall Klipper ecosystem components.\n"
+                "Your ~/printer_data/config is preserved by the remove routines, but services and\n"
+                "software directories (~/klipper, ~/moonraker, nginx sites, etc.) can be changed.\n\n"
+                "Pick an action:",
+                [
+                    ("install", "Install a component"),
+                    ("update", "Update a component"),
+                    ("remove", "FULL uninstall a component"),
+                    ("reinstall", "FULL uninstall + reinstall a component"),
+                    ("update-all", "Update all installed components"),
+                    ("KS", "KlipperScreen (managed separately)"),
+                    ("B", "Back"),
+                ],
+                title="Component Manager",
+                height=22,
+                width=90,
+                menu_height=10,
+            )
+            if choice is None or choice == "B":
+                return
+
+            if choice == "KS":
+                # Reuse the existing KlipperScreen manager (has install/update/remove + config).
+                self._klipperscreen_setup()
+                continue
+
+            if choice == "update-all":
+                self.ui.msgbox(
+                    "About to run: Update ALL installed components.\n\n"
+                    "This uses the installer library (KIAUH-style) and may restart services.\n"
+                    "You may be prompted for sudo.",
+                    title="Confirm",
+                    height=12,
+                    width=80,
+                )
+                self._run_tty_command(["bash", str(tool), "update-all"])
+                continue
+
+            component = self.ui.radiolist(
+                "Select component:",
+                [
+                    ("klipper", "Klipper", True),
+                    ("moonraker", "Moonraker", False),
+                    ("mainsail", "Mainsail", False),
+                    ("fluidd", "Fluidd", False),
+                    ("crowsnest", "Crowsnest", False),
+                    ("sonar", "Sonar", False),
+                    ("timelapse", "Timelapse", False),
+                ],
+                title="Component",
+                height=22,
+                width=80,
+                list_height=10,
+            )
+            if component is None:
+                continue
+
+            # Safety confirmation for destructive actions
+            if choice in ("remove", "reinstall"):
+                if not self.ui.yesno(
+                    "WARNING: This is a FULL uninstall action.\n\n"
+                    "It will stop/disable services and delete component directories/venvs.\n"
+                    "Your ~/printer_data/config is intended to be preserved, but this can still break\n"
+                    "a working setup if you uninstall the wrong thing.\n\n"
+                    "Proceed?",
+                    title="Danger Zone",
+                    default_no=True,
+                    height=16,
+                    width=80,
+                ):
+                    continue
+
+            self._run_tty_command(["bash", str(tool), choice, component])
+
+    def _can_interface_setup(self) -> None:
+        """
+        Minimal CAN interface setup:
+        - install can-utils
+        - bring up can0 (or chosen iface) at a given bitrate
+        - optional persistent systemd oneshot service
+        """
+        repo_root = REPO_ROOT
+        tool = repo_root / "scripts" / "tools" / "setup_can_interface.sh"
+        if not tool.exists():
+            self.ui.msgbox(f"Missing tool: {tool}", title="Error")
+            return
+
+        self.ui.msgbox(
+            "CAN Setup\n\n"
+            "This helper configures an existing SocketCAN interface (e.g. can0).\n"
+            "It can install can-utils and optionally create a systemd service to bring the interface\n"
+            "up on boot.\n\n"
+            "It does NOT enable your CAN hardware/driver (e.g. mcp2515 overlays, slcan).\n"
+            "If can0 doesn't exist yet, fix hardware/driver first, then rerun this.",
+            title="CAN Setup",
+            height=18,
+            width=90,
+        )
+
+        iface = self.ui.inputbox("CAN interface name:", default="can0", title="CAN Setup")
+        if iface is None or iface.strip() == "":
+            return
+
+        bitrate = self.ui.inputbox(
+            "CAN bitrate (e.g. 1000000):",
+            default="1000000",
+            title="CAN Setup",
+        )
+        if bitrate is None or bitrate.strip() == "":
+            return
+
+        persist = self.ui.yesno(
+            "Make it persistent on boot?\n\n"
+            "This will create a systemd service can-<iface>.service.",
+            title="CAN Setup",
+            default_no=False,
+        )
+
+        install_pkgs = self.ui.yesno(
+            "Install can-utils?\n\n"
+            "(Recommended; provides candump/cansend and other tools.)",
+            title="CAN Setup",
+            default_no=False,
+        )
+
+        args = [
+            "bash",
+            str(tool),
+            "--iface",
+            iface.strip(),
+            "--bitrate",
+            bitrate.strip(),
+            "--persist",
+            "yes" if persist else "no",
+            "--install-pkgs",
+            "yes" if install_pkgs else "no",
+        ]
+
+        self._run_tty_command(args)
 
     def _check_klipper(self) -> None:
         """Check Klipper installation status."""
@@ -846,26 +1019,7 @@ class GschpooziWizard:
             title="Moonraker Check"
         )
 
-    def _web_interface_menu(self) -> None:
-        """Web interface selection."""
-        self.ui.msgbox(
-            "Web Interface Setup\n\n"
-            "This section will help you install/verify Mainsail or Fluidd.\n\n"
-            "(Coming soon - use KIAUH for now)",
-            title="1.3 Web Interface"
-        )
-
-    def _optional_services_menu(self) -> None:
-        """Optional services menu."""
-        self.ui.msgbox(
-            "Optional Services\n\n"
-            "• Crowsnest - Camera streaming\n"
-            "• KlipperScreen - Touch screen interface\n"
-            "• Timelapse - Print timelapses\n"
-            "• Sonar - Network keepalive\n\n"
-            "(Coming soon - use KIAUH for now)",
-            title="1.4 Optional Services"
-        )
+    # NOTE: Web interface / optional services are now handled in the component manager.
 
     # -------------------------------------------------------------------------
     # Category 2: Hardware Setup

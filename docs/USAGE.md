@@ -137,6 +137,21 @@ Complete sections 1-3, then use option 4 to generate your config files.
 
 ---
 
+## Klipper Setup (Install/Update/Remove + CAN)
+
+The **Klipper Setup** section is intended to provide a KIAUH-like workflow:
+
+- Install / update / **full uninstall** / reinstall common Klipper components (Klipper, Moonraker, Mainsail/Fluidd, etc.)
+- Basic “is it running?” health checks for Klipper and Moonraker
+- CAN helper to bring up `can0` and optionally make it persistent (systemd service)
+
+**Safety notes:**
+- Install/remove actions may prompt for `sudo` and will modify system services.
+- Full uninstall deletes component directories/venvs (while trying to preserve `~/printer_data/config`). Use with care.
+- CAN helper does **not** enable hardware drivers (e.g., SPI overlays for mcp2515, slcan setups). It only configures an existing SocketCAN interface.
+
+---
+
 ## Board Configuration
 
 ### Main Board Selection

@@ -3,6 +3,7 @@
   "name": "LDO Nitehawk-SB v1.0",
   "manufacturer": "LDO",
   "source": "Extracted from Klippain (GPL-3.0)",
+  "connections": ["USB", "CAN"],
   "motor_ports": {},
   "heater_ports": {
     "HEAT": {

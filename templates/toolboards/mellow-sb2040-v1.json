@@ -3,6 +3,7 @@
   "name": "Mellow SB2040 v1",
   "manufacturer": "Mellow",
   "source": "Extracted from Klippain (GPL-3.0)",
+  "connections": ["USB", "CAN"],
   "motor_ports": {},
   "heater_ports": {
     "HEAT": {

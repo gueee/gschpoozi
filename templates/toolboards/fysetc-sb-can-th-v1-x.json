@@ -3,6 +3,7 @@
   "name": "Fysetc SB Can TH v1.x",
   "manufacturer": "Fysetc",
   "source": "Extracted from Klippain (GPL-3.0)",
+  "connections": ["USB", "CAN"],
   "motor_ports": {
     "EXTRUDER": {
       "label": "Extruder Driver",

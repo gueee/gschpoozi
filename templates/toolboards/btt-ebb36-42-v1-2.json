@@ -3,6 +3,7 @@
   "name": "BTT EBB36-42 v1.2",
   "manufacturer": "BigTreeTech",
   "source": "Extracted from Klippain (GPL-3.0)",
+  "connections": ["USB", "CAN"],
   "motor_ports": {
     "EXTRUDER": {
       "label": "Extruder Driver",

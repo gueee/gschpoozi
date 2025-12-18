@@ -3,6 +3,7 @@
   "name": "BTT SB2209 RP2040 v1.0",
   "manufacturer": "BigTreeTech",
   "source": "Extracted from Klippain (GPL-3.0)",
+  "connections": ["USB", "CAN"],
   "motor_ports": {
     "MOTOR_E0": {
       "label": "Extruder E0",

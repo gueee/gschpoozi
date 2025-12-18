@@ -309,7 +309,10 @@ def generate_hardware_cfg(
     # Toolboard MCU if present
     if toolboard:
         tb_name = hardware_state.get('toolboard_name', 'Toolboard')
-        tb_connection = toolboard.get('connection', 'USB').upper()
+        # Get toolboard connection from wizard/hardware state first, fallback to board definition
+        tb_connection = (wizard_state.get('toolboard_connection') or 
+                        hardware_state.get('toolboard_connection') or 
+                        toolboard.get('connection', 'USB')).upper()
         lines.append(f"[mcu toolboard]")
 
         if tb_connection == 'CAN':

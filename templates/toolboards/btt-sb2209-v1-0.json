@@ -1,8 +1,8 @@
 {
   "id": "btt-sb2209-v1-0",
-  "name": "BTT SB2209 v1.0 (CAN)",
+  "name": "BTT SB2209 v1.0",
   "manufacturer": "BigTreeTech",
-  "connection": "CAN",
+  "connections": ["USB", "CAN"],
   "source": "Extracted from Klippain (GPL-3.0) + BTT documentation",
   "motor_ports": {
     "EXTRUDER": {

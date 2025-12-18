@@ -896,6 +896,41 @@ z_offset: 1.234            # Or let SAVE_CONFIG handle this
 1. Verify control_pin wiring
 2. Check servo signal
 
+### Update Manager Issues
+
+**Symptom**: Update Manager refresh hangs or never shows gschpoozi updates
+
+**Manual update workaround**:
+```bash
+cd ~/gschpoozi && git pull
+```
+
+Or to force-reset to latest (discards any local changes):
+```bash
+cd ~/gschpoozi && git fetch origin && git reset --hard origin/main
+```
+
+**If `git fetch` hangs** (common on some networks):
+
+The wizard includes a fix: **Klipper Setup → Update Manager Fix → Enable workaround**
+
+Or manually:
+```bash
+cd ~/gschpoozi && git config http.version HTTP/1.1
+```
+
+This forces HTTP/1.1 which resolves fetch hangs on some network configurations.
+
+### Hotend Temperature Reading Wrong (~350°C)
+
+**Symptom**: `ADC out of range` error, temperature reads ~350°C
+
+**Cause**: Wrong `pullup_resistor` value for your board
+
+**Fix**: Re-run wizard → **Extruder** → select correct pullup:
+- **2.2kΩ** for most toolboards (EBB, SHT36, Nitehawk, etc.)
+- **4.7kΩ** for most mainboards
+
 ---
 
 ## Re-running the Wizard

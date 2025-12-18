@@ -93,6 +93,13 @@ The wizard automatically adds gschpoozi to your Moonraker Update Manager. After 
 
 Updates only affect the gschpoozi repository itself. Your generated configs and `printer.cfg` are **never overwritten**.
 
+**If Update Manager hangs or doesn't show updates**, use manual update:
+```bash
+cd ~/gschpoozi && git pull
+```
+
+See [Troubleshooting](docs/USAGE.md#update-manager-issues) for more options.
+
 ## Re-running the Wizard
 
 Need to change something? Just run the wizard again:

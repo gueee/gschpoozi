@@ -683,9 +683,10 @@ common:
       {% else %}
       variable_leveling_method: "none"
       {% endif %}
-      variable_leveling_enabled: {{ (bed_leveling.leveling_type | default('none') | lower) != 'none' }}
-      variable_z_calibration_enabled: {{ (bed_leveling.z_calibration_enabled | default(true) | string | lower) }}
-      variable_always_home_z: {{ (bed_leveling.always_home_z | default(false) | string | lower) }}
+      # Klipper parses gcode_macro variables with Python literal_eval, so booleans must be True/False (not true/false).
+      variable_leveling_enabled: {{ 'True' if ((bed_leveling.leveling_type | default('none') | lower) != 'none') else 'False' }}
+      variable_z_calibration_enabled: {{ 'True' if (bed_leveling.z_calibration_enabled | default(true)) else 'False' }}
+      variable_always_home_z: {{ 'True' if (bed_leveling.always_home_z | default(false)) else 'False' }}
       # Heat Soak
       variable_heat_soak_time: {{ macros.heat_soak_time | default(0) }}
       # Chamber Heating
@@ -693,7 +694,7 @@ common:
       # Bed Mesh
       variable_bed_mesh_mode: "{{ macros.bed_mesh_mode | default('adaptive') }}"
       # Nozzle Cleaning (Brush)
-      variable_brush_enabled: {{ macros.brush_enabled | default(false) | lower }}
+      variable_brush_enabled: {{ 'True' if (macros.brush_enabled | default(false)) else 'False' }}
       variable_brush_x: {{ macros.brush_x | default(50.0) }}
       variable_brush_y: {{ macros.brush_y | default(317.0) }}
       variable_brush_z: {{ macros.brush_z | default(1.0) }}
@@ -709,7 +710,7 @@ common:
       variable_bucket_y: {{ macros.bucket_y | default(printer.bed_size_y - 5) }}
       variable_bucket_z: {{ macros.bucket_z | default(5.0) }}
       # LED Status
-      variable_led_enabled: {{ macros.led_enabled | default(false) | lower }}
+      variable_led_enabled: {{ 'True' if (macros.led_enabled | default(false)) else 'False' }}
       variable_led_name: "{{ macros.led_name | default('status_led') }}"
       # Park Position (END_PRINT)
       variable_park_position: "{{ macros.park_position | default('front') }}"
@@ -718,9 +719,9 @@ common:
       # Use (bed_size_z - 5) as a sane cap (also consistent with z_max - 5 safety margin in the macro).
       variable_park_z_max: {{ (macros.park_z_max | default(printer.bed_size_z - 5)) | float }}
       # Cooldown (END_PRINT)
-      variable_turn_off_bed: {{ macros.turn_off_bed | default(true) | lower }}
-      variable_turn_off_extruder: {{ macros.turn_off_extruder | default(true) | lower }}
-      variable_turn_off_fans: {{ macros.turn_off_fans | default(false) | lower }}
+      variable_turn_off_bed: {{ 'True' if (macros.turn_off_bed | default(true)) else 'False' }}
+      variable_turn_off_extruder: {{ 'True' if (macros.turn_off_extruder | default(true)) else 'False' }}
+      variable_turn_off_fans: {{ 'True' if (macros.turn_off_fans | default(false)) else 'False' }}
       variable_fan_off_delay: {{ macros.fan_off_delay | default(0) }}
       variable_motor_off_delay: {{ macros.motor_off_delay | default(300) }}
       # Retract (END_PRINT)

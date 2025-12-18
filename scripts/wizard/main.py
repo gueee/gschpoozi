@@ -899,6 +899,7 @@ class GschpooziWizard:
                     ("1.3", "Manage Components     (Install/Update/Remove/Reinstall)"),
                     ("1.4", "CAN Interface Setup   (can0 / can-utils / systemd)"),
                     ("1.5", "Katapult / Flashing   (DFU + CAN firmware flash)"),
+                    ("1.6", "Update Manager Fix    (Git fetch workaround)"),
                     ("B", "Back to Main Menu"),
                 ],
                 title="1. Klipper Setup",
@@ -916,6 +917,125 @@ class GschpooziWizard:
                 self._can_interface_setup()
             elif choice == "1.5":
                 self._katapult_setup()
+            elif choice == "1.6":
+                self._update_manager_git_fetch_workaround()
+
+    def _update_manager_git_fetch_workaround(self) -> None:
+        """
+        Help users when Moonraker Update Manager / git fetch hangs on GitHub.
+
+        Root cause varies by network stack (IPv6, HTTP/2 quirks, DNS, etc.). A pragmatic,
+        low-impact mitigation is forcing HTTP/1.1 for this repo:
+          git config http.version HTTP/1.1
+
+        We store this config LOCALLY in the repo so it doesn't affect other git repos.
+        """
+        import subprocess
+
+        repo = REPO_ROOT
+
+        def get_http_version() -> str:
+            try:
+                r = subprocess.run(
+                    ["git", "config", "--get", "http.version"],
+                    cwd=str(repo),
+                    capture_output=True,
+                    text=True,
+                )
+                val = (r.stdout or "").strip()
+                return val or "(default)"
+            except Exception:
+                return "(unknown)"
+
+        def test_fetch() -> tuple[bool, str]:
+            try:
+                env = os.environ.copy()
+                env["GIT_TERMINAL_PROMPT"] = "0"
+                r = subprocess.run(
+                    ["git", "fetch", "origin", "--prune", "--tags", "--force"],
+                    cwd=str(repo),
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                ok = (r.returncode == 0)
+                # Keep output short for whiptail
+                out = (r.stderr or r.stdout or "").strip()
+                if len(out) > 1200:
+                    out = out[:1200] + "\n...(truncated)..."
+                return ok, out
+            except subprocess.TimeoutExpired:
+                return False, "Timed out after 60s (fetch likely hanging)."
+            except Exception as e:
+                return False, f"{type(e).__name__}: {e}"
+
+        while True:
+            current = get_http_version()
+            choice = self.ui.menu(
+                "Moonraker Update Manager / Git Fetch Workaround\n\n"
+                "If Update Manager refreshes forever or never shows updates, the underlying\n"
+                "'git fetch' may be hanging.\n\n"
+                f"Current repo setting: http.version = {current}\n\n"
+                "Actions (repo-local):",
+                [
+                    ("enable", "Enable workaround (set http.version=HTTP/1.1)"),
+                    ("disable", "Disable workaround (unset http.version)"),
+                    ("test", "Test git fetch (60s timeout)"),
+                    ("B", "Back"),
+                ],
+                title="Update Manager Fix",
+                height=18,
+                width=90,
+                menu_height=10,
+            )
+            if choice is None or choice == "B":
+                return
+
+            if choice == "enable":
+                try:
+                    subprocess.run(
+                        ["git", "config", "http.version", "HTTP/1.1"],
+                        cwd=str(repo),
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self._log_wizard("update_manager_fix set http.version=HTTP/1.1")
+                    self.ui.msgbox(
+                        "Enabled: git config http.version HTTP/1.1\n\n"
+                        "Now try Update Manager → Refresh/Update again.",
+                        title="Saved",
+                    )
+                except Exception as e:
+                    self.ui.msgbox(f"Failed to set git config:\n{type(e).__name__}: {e}", title="Error")
+                continue
+
+            if choice == "disable":
+                try:
+                    # Unset only for this repo; ignore if already missing.
+                    subprocess.run(
+                        ["git", "config", "--unset", "http.version"],
+                        cwd=str(repo),
+                        capture_output=True,
+                        text=True,
+                    )
+                    self._log_wizard("update_manager_fix unset http.version")
+                    self.ui.msgbox(
+                        "Disabled: git config --unset http.version\n\n"
+                        "Repo is back to git defaults.",
+                        title="Saved",
+                    )
+                except Exception as e:
+                    self.ui.msgbox(f"Failed to unset git config:\n{type(e).__name__}: {e}", title="Error")
+                continue
+
+            if choice == "test":
+                ok, out = test_fetch()
+                if ok:
+                    self.ui.msgbox("git fetch: OK\n\n" + (out or "(no output)"), title="Fetch Test")
+                else:
+                    self.ui.msgbox("git fetch: FAILED / HUNG\n\n" + out, title="Fetch Test")
 
     def _manage_klipper_components(self) -> None:
         """

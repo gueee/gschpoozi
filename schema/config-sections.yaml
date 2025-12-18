@@ -653,8 +653,57 @@ common:
     template: |
       [exclude_object]
 
+  # TMC Autotune (optional extension)
+  # This requires the external klipper_tmc_autotune module.
+  # We intentionally generate a commented example by default to avoid breaking
+  # Klipper on systems that don't have the plugin installed.
+  tmc_autotune:
+    condition: "tuning.tmc_autotune.enabled"
+    template: |
+      # ─────────────────────────────────────────────────────────────────────────────
+      # TMC AUTOTUNE (optional)
+      # Requires: klipper_tmc_autotune
+      # Repo: https://github.com/andrewmcgr/klipper_tmc_autotune
+      #
+      # If you have the plugin installed and want this section active, set:
+      #   tuning.tmc_autotune.emit_config = true
+      # in the wizard.
+      # ─────────────────────────────────────────────────────────────────────────────
+      {% if tuning.tmc_autotune.emit_config | default(false) %}
+      [autotune_tmc]
+      {% if tuning.tmc_autotune.motor_x %}motor_x: {{ tuning.tmc_autotune.motor_x }}{% endif %}
+      {% if tuning.tmc_autotune.motor_y %}motor_y: {{ tuning.tmc_autotune.motor_y }}{% endif %}
+      {% if tuning.tmc_autotune.motor_z %}motor_z: {{ tuning.tmc_autotune.motor_z }}{% endif %}
+      {% if tuning.tmc_autotune.motor_extruder %}motor_extruder: {{ tuning.tmc_autotune.motor_extruder }}{% endif %}
+      {% if tuning.tmc_autotune.voltage %}voltage: {{ tuning.tmc_autotune.voltage }}{% endif %}
+      {% if tuning.tmc_autotune.tuning_goal %}tuning_goal: {{ tuning.tmc_autotune.tuning_goal }}{% endif %}
+      {% else %}
+      # [autotune_tmc]
+      # motor_x: <select in wizard>
+      # motor_y: <select in wizard>
+      # motor_z: <select in wizard>
+      # motor_extruder: <select in wizard>
+      # voltage: 24
+      # tuning_goal: auto
+      {% endif %}
+
+  input_shaper:
+    condition: "tuning.input_shaper.enabled"
+    template: |
+      [input_shaper]
+      shaper_type_x: {{ tuning.input_shaper.shaper_type_x | default('mzv') }}
+      shaper_freq_x: {{ tuning.input_shaper.shaper_freq_x | default(0) }}
+      damping_ratio_x: {{ tuning.input_shaper.damping_ratio_x | default(0.1) }}
+      {% if tuning.input_shaper.enable_y | default(false) %}
+      shaper_type_y: {{ tuning.input_shaper.shaper_type_y | default('mzv') }}
+      shaper_freq_y: {{ tuning.input_shaper.shaper_freq_y | default(0) }}
+      damping_ratio_y: {{ tuning.input_shaper.damping_ratio_y | default(0.1) }}
+      {% endif %}
+
   gcode_arcs:
-    # Always include gcode_arcs for G2/G3 support
+    # Arc (G2/G3) support
+    # Default: enabled (the wizard sets tuning.arc_support.enabled; generator also defaults it on)
+    condition: "tuning.arc_support.enabled"
     template: |
       [gcode_arcs]
       resolution: {{ tuning.arc_support.resolution | default(0.1) }}

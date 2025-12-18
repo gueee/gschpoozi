@@ -86,6 +86,8 @@ class ConfigGenerator:
             'common.idle_timeout': 'gschpoozi/tuning.cfg',
             'common.pause_resume': 'gschpoozi/tuning.cfg',
             'common.exclude_object': 'gschpoozi/tuning.cfg',
+            'common.tmc_autotune': 'gschpoozi/tuning.cfg',
+            'common.input_shaper': 'gschpoozi/tuning.cfg',
             'common.gcode_arcs': 'gschpoozi/tuning.cfg',
             'common.respond': 'gschpoozi/tuning.cfg',
             'common.save_variables': 'gschpoozi/tuning.cfg',
@@ -113,6 +115,24 @@ class ConfigGenerator:
         """Get context for template rendering from wizard state."""
         context = self.state.export_for_generator()
 
+        def _has_klipper_tmc_autotune() -> bool:
+            """
+            Detect whether the optional klipper_tmc_autotune plugin is installed.
+
+            Typical installs place the module under Klipper extras, e.g.:
+              ~/klipper/klippy/extras/autotune_tmc.py
+            """
+            try:
+                klipper_dir = Path.home() / "klipper" / "klippy" / "extras"
+                candidates = [
+                    klipper_dir / "autotune_tmc.py",
+                    klipper_dir / "autotune_tmc.pyc",
+                    klipper_dir / "tmc_autotune.py",  # be tolerant to naming differences
+                ]
+                return any(p.exists() for p in candidates)
+            except Exception:
+                return False
+
         # Ensure optional top-level keys exist to avoid Jinja undefined errors
         # (Templates use these widely with defaults.)
         if not isinstance(context.get("macros"), dict):
@@ -120,9 +140,16 @@ class ConfigGenerator:
         if not isinstance(context.get("tuning"), dict):
             context["tuning"] = {}
         # Ensure nested tuning dicts exist for dot-access patterns used in templates
-        for k in ("virtual_sdcard", "idle_timeout", "pause_resume", "arc_support", "respond", "save_variables", "exclude_object"):
+        for k in ("virtual_sdcard", "idle_timeout", "pause_resume", "arc_support", "respond", "save_variables", "exclude_object", "tmc_autotune", "input_shaper"):
             if not isinstance(context["tuning"].get(k), dict):
                 context["tuning"][k] = {}
+        # Defaults for always-safe tuning sections
+        # (We changed [gcode_arcs] to be conditional; keep it enabled by default for compatibility.)
+        context["tuning"]["arc_support"].setdefault("enabled", True)
+        # Only emit an ACTIVE [autotune_tmc] config when the plugin is detected.
+        # Do not override an explicit user choice (True/False) already stored in state.
+        if bool(context["tuning"]["tmc_autotune"].get("enabled")) and "emit_config" not in context["tuning"]["tmc_autotune"]:
+            context["tuning"]["tmc_autotune"]["emit_config"] = _has_klipper_tmc_autotune()
         if not isinstance(context.get("advanced"), dict):
             context["advanced"] = {}
         # Ensure nested advanced dicts exist for dot-access patterns used in templates

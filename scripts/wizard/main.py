@@ -5788,6 +5788,490 @@ class GschpooziWizard:
     # Category 3: Tuning
     # -------------------------------------------------------------------------
 
+    def _configure_arc_support(self) -> None:
+        """
+        Configure G2/G3 arc support ([gcode_arcs]).
+
+        This is generally safe and improves compatibility with slicers that emit arcs.
+        """
+        enabled = self.ui.yesno(
+            "Enable Arc Support (G2/G3)?\n\n"
+            "This adds the [gcode_arcs] section.\n"
+            "Most users should leave this ON.\n\n"
+            "Note: Some slicers require this for arc moves (G2/G3).",
+            title="Arc Support",
+            default_no=not bool(self.state.get("tuning.arc_support.enabled", True)),
+            height=16,
+            width=80,
+        )
+        if enabled is None:
+            return
+
+        if not enabled:
+            self.state.set("tuning.arc_support.enabled", False)
+            self.state.save()
+            self.ui.msgbox("Arc support disabled.", title="Saved")
+            return
+
+        # Resolution is the max deviation for arc segmentation (mm).
+        # Klipper defaults are commonly 0.1.
+        resolution = self.ui.inputbox(
+            "Arc resolution (mm):\n\n"
+            "Lower = smoother arcs but more segments (more gcode processing).\n"
+            "Typical: 0.1\n",
+            default=str(self.state.get("tuning.arc_support.resolution", 0.1)),
+            title="Arc Support - Resolution",
+            height=16,
+            width=80,
+        )
+        if resolution is None:
+            return
+
+        try:
+            res_val = float(str(resolution).strip())
+            if res_val <= 0:
+                raise ValueError("resolution must be > 0")
+        except Exception:
+            self.ui.msgbox("Invalid resolution. Please enter a number > 0 (e.g. 0.1).", title="Error")
+            return
+
+        self.state.set("tuning.arc_support.enabled", True)
+        self.state.set("tuning.arc_support.resolution", res_val)
+        self.state.save()
+
+        self.ui.msgbox(
+            f"Arc support saved!\n\nresolution = {res_val}",
+            title="Configuration Saved",
+        )
+
+    def _configure_exclude_object(self) -> None:
+        """Configure Exclude Object ([exclude_object]) support."""
+        enabled = self.ui.yesno(
+            "Enable Exclude Object?\n\n"
+            "This adds the [exclude_object] section.\n"
+            "It allows cancelling individual objects mid-print (if your slicer sends object tags).\n\n"
+            "Recommended: ON",
+            title="Exclude Object",
+            default_no=not bool(self.state.get("tuning.exclude_object.enabled", True)),
+            height=16,
+            width=80,
+        )
+        if enabled is None:
+            return
+
+        self.state.set("tuning.exclude_object.enabled", bool(enabled))
+        self.state.save()
+
+        self.ui.msgbox(
+            "Exclude Object enabled." if enabled else "Exclude Object disabled.",
+            title="Saved",
+        )
+
+    def _configure_tmc_autotune(self) -> None:
+        """
+        Configure klipper_tmc_autotune (optional third-party plugin).
+
+        Safety: by default we only generate a commented example block unless the user
+        explicitly chooses to emit the live [autotune_tmc] section.
+        """
+        def _has_klipper_tmc_autotune() -> bool:
+            """Best-effort detection of klipper_tmc_autotune in Klipper extras."""
+            try:
+                from pathlib import Path as _Path
+                extras = _Path.home() / "klipper" / "klippy" / "extras"
+                return any(
+                    p.exists()
+                    for p in (
+                        extras / "autotune_tmc.py",
+                        extras / "autotune_tmc.pyc",
+                        extras / "tmc_autotune.py",
+                    )
+                )
+            except Exception:
+                return False
+
+        plugin_installed = _has_klipper_tmc_autotune()
+
+        enabled = self.ui.yesno(
+            "Enable TMC Autotune config generation?\n\n"
+            "This is for the optional klipper_tmc_autotune plugin.\n"
+            "If you don't have the plugin installed, generating an active config section\n"
+            "would break Klipper.\n\n"
+            "Recommended:\n"
+            "- Enable this wizard section (to store settings)\n"
+            "- Keep 'Emit active config' OFF until the plugin is installed",
+            title="TMC Autotune",
+            default_no=not bool(self.state.get("tuning.tmc_autotune.enabled", False)),
+            height=18,
+            width=88,
+        )
+        if enabled is None:
+            return
+
+        if not enabled:
+            self.state.set("tuning.tmc_autotune.enabled", False)
+            self.state.save()
+            self.ui.msgbox("TMC Autotune disabled.", title="Saved")
+            return
+
+        emit_current = self.state.get("tuning.tmc_autotune.emit_config", None)
+        emit_default_yes = plugin_installed if emit_current is None else bool(emit_current)
+        emit = self.ui.yesno(
+            "Emit ACTIVE [autotune_tmc] section into the generated config?\n\n"
+            "Only enable this if you have installed klipper_tmc_autotune.\n"
+            "Otherwise Klipper will fail to start with an unknown section error.\n\n"
+            "If unsure, choose NO (safe; emits a commented example).",
+            title="TMC Autotune - Emit Config",
+            default_no=not bool(emit_default_yes),
+            height=16,
+            width=88,
+        )
+        if emit is None:
+            return
+
+        # These fields are plugin-specific; we store them as strings so users can match plugin docs.
+        motor_x = self.ui.inputbox(
+            "Motor preset for X (plugin-specific string):\n\n"
+            "Leave blank to omit.",
+            default=str(self.state.get("tuning.tmc_autotune.motor_x", "")),
+            title="TMC Autotune - motor_x",
+            height=14,
+            width=88,
+        )
+        if motor_x is None:
+            return
+        motor_y = self.ui.inputbox(
+            "Motor preset for Y (plugin-specific string):\n\n"
+            "Leave blank to omit.",
+            default=str(self.state.get("tuning.tmc_autotune.motor_y", "")),
+            title="TMC Autotune - motor_y",
+            height=14,
+            width=88,
+        )
+        if motor_y is None:
+            return
+        motor_z = self.ui.inputbox(
+            "Motor preset for Z (plugin-specific string):\n\n"
+            "Leave blank to omit.",
+            default=str(self.state.get("tuning.tmc_autotune.motor_z", "")),
+            title="TMC Autotune - motor_z",
+            height=14,
+            width=88,
+        )
+        if motor_z is None:
+            return
+        motor_e = self.ui.inputbox(
+            "Motor preset for Extruder (plugin-specific string):\n\n"
+            "Leave blank to omit.",
+            default=str(self.state.get("tuning.tmc_autotune.motor_extruder", "")),
+            title="TMC Autotune - motor_extruder",
+            height=14,
+            width=88,
+        )
+        if motor_e is None:
+            return
+
+        voltage_choice = self.ui.radiolist(
+            "System voltage:",
+            [
+                ("24", "24V (most printers)", True),
+                ("48", "48V", False),
+            ],
+            title="TMC Autotune - Voltage",
+            height=16,
+            width=70,
+            list_height=6,
+        )
+        if voltage_choice is None:
+            return
+
+        goal = self.ui.menu(
+            "Tuning goal (plugin-specific):",
+            [
+                ("auto", "Auto (plugin decides)"),
+                ("silent", "Prioritize silence"),
+                ("performance", "Prioritize performance"),
+                ("autoswitch", "Auto-switch modes (plugin-defined)"),
+            ],
+            title="TMC Autotune - Goal",
+            height=18,
+            width=80,
+            menu_height=8,
+        )
+        if goal is None:
+            return
+
+        self.state.set("tuning.tmc_autotune.enabled", True)
+        self.state.set("tuning.tmc_autotune.emit_config", bool(emit))
+        self.state.set("tuning.tmc_autotune.motor_x", (motor_x or "").strip())
+        self.state.set("tuning.tmc_autotune.motor_y", (motor_y or "").strip())
+        self.state.set("tuning.tmc_autotune.motor_z", (motor_z or "").strip())
+        self.state.set("tuning.tmc_autotune.motor_extruder", (motor_e or "").strip())
+        try:
+            self.state.set("tuning.tmc_autotune.voltage", int(voltage_choice))
+        except Exception:
+            self.state.set("tuning.tmc_autotune.voltage", 24)
+        self.state.set("tuning.tmc_autotune.tuning_goal", goal)
+        self.state.save()
+
+        self.ui.msgbox("TMC Autotune settings saved!", title="Saved")
+
+    def _configure_input_shaper(self) -> None:
+        """Configure [input_shaper] (resonance compensation)."""
+        enabled = self.ui.yesno(
+            "Enable Input Shaper?\n\n"
+            "This adds the [input_shaper] section.\n"
+            "You can set frequencies to 0 and calibrate later with SHAPER_CALIBRATE.\n\n"
+            "Recommended: enable once you have (or plan to do) resonance tuning.",
+            title="Input Shaper",
+            default_no=not bool(self.state.get("tuning.input_shaper.enabled", False)),
+            height=16,
+            width=88,
+        )
+        if enabled is None:
+            return
+
+        if not enabled:
+            self.state.set("tuning.input_shaper.enabled", False)
+            self.state.save()
+            self.ui.msgbox("Input shaper disabled.", title="Saved")
+            return
+
+        # Shaper types
+        shaper_types = [
+            ("mzv", "MZV (recommended default)"),
+            ("ei", "EI"),
+            ("2hump_ei", "2HUMP_EI"),
+            ("3hump_ei", "3HUMP_EI"),
+            ("zv", "ZV"),
+            ("zvd", "ZVD"),
+        ]
+
+        shaper_x = self.ui.menu(
+            "Select shaper type for X:",
+            shaper_types,
+            title="Input Shaper - X type",
+            height=18,
+            width=80,
+            menu_height=8,
+        )
+        if shaper_x is None:
+            return
+
+        freq_x = self.ui.inputbox(
+            "Shaper frequency X (Hz):\n\n"
+            "Set 0 to calibrate later with SHAPER_CALIBRATE.\n"
+            "Typical values are ~20-80 Hz.",
+            default=str(self.state.get("tuning.input_shaper.shaper_freq_x", 0)),
+            title="Input Shaper - X frequency",
+            height=16,
+            width=88,
+        )
+        if freq_x is None:
+            return
+
+        damp_x = self.ui.inputbox(
+            "Damping ratio X:\n\n"
+            "Typical default: 0.1",
+            default=str(self.state.get("tuning.input_shaper.damping_ratio_x", 0.1)),
+            title="Input Shaper - X damping",
+            height=14,
+            width=70,
+        )
+        if damp_x is None:
+            return
+
+        enable_y = self.ui.yesno(
+            "Configure Y axis shaper as well?",
+            title="Input Shaper - Y axis",
+            default_no=False,
+            height=10,
+            width=60,
+        )
+        if enable_y is None:
+            return
+
+        shaper_y = None
+        freq_y = None
+        damp_y = None
+        if enable_y:
+            shaper_y = self.ui.menu(
+                "Select shaper type for Y:",
+                shaper_types,
+                title="Input Shaper - Y type",
+                height=18,
+                width=80,
+                menu_height=8,
+            )
+            if shaper_y is None:
+                return
+
+            freq_y = self.ui.inputbox(
+                "Shaper frequency Y (Hz):\n\n"
+                "Set 0 to calibrate later with SHAPER_CALIBRATE.\n"
+                "Typical values are ~20-80 Hz.",
+                default=str(self.state.get("tuning.input_shaper.shaper_freq_y", 0)),
+                title="Input Shaper - Y frequency",
+                height=16,
+                width=88,
+            )
+            if freq_y is None:
+                return
+
+            damp_y = self.ui.inputbox(
+                "Damping ratio Y:\n\n"
+                "Typical default: 0.1",
+                default=str(self.state.get("tuning.input_shaper.damping_ratio_y", 0.1)),
+                title="Input Shaper - Y damping",
+                height=14,
+                width=70,
+            )
+            if damp_y is None:
+                return
+
+        try:
+            fx = float(str(freq_x).strip())
+            dx = float(str(damp_x).strip())
+            if fx < 0 or dx <= 0:
+                raise ValueError()
+            if enable_y:
+                fy = float(str(freq_y).strip()) if freq_y is not None else 0.0
+                dy = float(str(damp_y).strip()) if damp_y is not None else 0.1
+                if fy < 0 or dy <= 0:
+                    raise ValueError()
+        except Exception:
+            self.ui.msgbox("Invalid number entered. Please try again.", title="Error")
+            return
+
+        self.state.set("tuning.input_shaper.enabled", True)
+        self.state.set("tuning.input_shaper.shaper_type_x", shaper_x)
+        self.state.set("tuning.input_shaper.shaper_freq_x", fx)
+        self.state.set("tuning.input_shaper.damping_ratio_x", dx)
+        self.state.set("tuning.input_shaper.enable_y", bool(enable_y))
+        if enable_y:
+            self.state.set("tuning.input_shaper.shaper_type_y", shaper_y)
+            self.state.set("tuning.input_shaper.shaper_freq_y", fy)
+            self.state.set("tuning.input_shaper.damping_ratio_y", dy)
+        self.state.save()
+
+        self.ui.msgbox("Input shaper saved!", title="Saved")
+
+    def _configure_macros(self) -> None:
+        """
+        Configure macro behavior (START_PRINT / END_PRINT).
+
+        The generator already emits macros with defaults; this menu lets users store
+        common overrides in wizard state so macros-config.cfg reflects them.
+        """
+        # Very small, high-signal set of options (safe defaults).
+        while True:
+            bed_mesh_mode = str(self.state.get("macros.bed_mesh_mode", "adaptive") or "adaptive")
+            purge_style = str(self.state.get("macros.purge_style", "adaptive") or "adaptive")
+            heat_soak = self.state.get("macros.heat_soak_time", 0) or 0
+            wipe_count = self.state.get("macros.wipe_count", 3) or 3
+
+            choice = self.ui.menu(
+                "Macros (START_PRINT / END_PRINT)\n\n"
+                "Configure macro defaults that will be written into macros-config.cfg.\n\n"
+                f"Current:\n"
+                f"  bed_mesh_mode: {bed_mesh_mode}\n"
+                f"  purge_style:   {purge_style}\n"
+                f"  heat_soak:     {heat_soak} min\n"
+                f"  wipe_count:    {wipe_count}\n\n"
+                "Select an item to edit:",
+                [
+                    ("mesh", "Bed mesh mode (adaptive/saved/none)"),
+                    ("purge", "Purge style (adaptive/line/blob)"),
+                    ("soak", "Heat soak time (minutes)"),
+                    ("wipe", "Brush wipe count"),
+                    ("B", "Back"),
+                ],
+                title="Macros",
+                height=22,
+                width=90,
+                menu_height=10,
+            )
+            if choice is None or choice == "B":
+                return
+
+            if choice == "mesh":
+                m = self.ui.menu(
+                    "Bed mesh mode:",
+                    [
+                        ("adaptive", "Adaptive (recommended)"),
+                        ("saved", "Saved (load default profile)"),
+                        ("none", "None (skip meshing)"),
+                    ],
+                    title="Macros - Bed mesh mode",
+                    height=16,
+                    width=70,
+                    menu_height=6,
+                )
+                if m is None:
+                    continue
+                self.state.set("macros.bed_mesh_mode", m)
+                self.state.save()
+                continue
+
+            if choice == "purge":
+                p = self.ui.menu(
+                    "Purge style:",
+                    [
+                        ("adaptive", "Adaptive (macro chooses)"),
+                        ("line", "Purge line"),
+                        ("blob", "Blob/bucket purge"),
+                    ],
+                    title="Macros - Purge style",
+                    height=16,
+                    width=70,
+                    menu_height=6,
+                )
+                if p is None:
+                    continue
+                self.state.set("macros.purge_style", p)
+                self.state.save()
+                continue
+
+            if choice == "soak":
+                v = self.ui.inputbox(
+                    "Heat soak time (minutes):\n\n0 disables heat soak.",
+                    default=str(self.state.get("macros.heat_soak_time", 0)),
+                    title="Macros - Heat soak",
+                    height=14,
+                    width=70,
+                )
+                if v is None:
+                    continue
+                try:
+                    mins = int(float(str(v).strip()))
+                    if mins < 0:
+                        raise ValueError()
+                    self.state.set("macros.heat_soak_time", mins)
+                    self.state.save()
+                except Exception:
+                    self.ui.msgbox("Invalid number. Please enter 0 or a positive integer.", title="Error")
+                continue
+
+            if choice == "wipe":
+                v = self.ui.inputbox(
+                    "Brush wipe count:\n\nTypical: 3",
+                    default=str(self.state.get("macros.wipe_count", 3)),
+                    title="Macros - Wipe count",
+                    height=14,
+                    width=70,
+                )
+                if v is None:
+                    continue
+                try:
+                    wc = int(float(str(v).strip()))
+                    if wc < 0:
+                        raise ValueError()
+                    self.state.set("macros.wipe_count", wc)
+                    self.state.save()
+                except Exception:
+                    self.ui.msgbox("Invalid number. Please enter 0 or a positive integer.", title="Error")
+                continue
+
     def tuning_menu(self) -> None:
         """Tuning and optimization menu."""
         while True:
@@ -5807,11 +6291,18 @@ class GschpooziWizard:
 
             if choice is None or choice == "B":
                 break
+            elif choice == "3.1":
+                self._configure_tmc_autotune()
+            elif choice == "3.2":
+                self._configure_input_shaper()
+            elif choice == "3.6":
+                self._configure_macros()
+            elif choice == "3.10":
+                self._configure_arc_support()
+            elif choice == "3.9":
+                self._configure_exclude_object()
             else:
-                self.ui.msgbox(
-                    f"Section {choice} coming soon!",
-                    title=f"Section {choice}"
-                )
+                self.ui.msgbox(f"Section {choice} coming soon!", title=f"Section {choice}")
 
     # -------------------------------------------------------------------------
     # Generate Config

@@ -1939,6 +1939,9 @@ class GschpooziWizard:
                 )
                 if endstop_type is None:
                     return
+                # Persist immediately so cancelling later doesn't lose it.
+                self.state.set(f"{state_key}.endstop_type", endstop_type)
+                self.state.save()
 
                 # Physical endstop port and config
                 endstop_port = None
@@ -2029,6 +2032,13 @@ class GschpooziWizard:
                     # Persist config immediately so it is reflected when re-entering the menu.
                     self.state.set(f"{state_key}.endstop_config", endstop_config)
                     self.state.save()
+                else:
+                    # Sensorless: clear any stale physical endstop wiring info.
+                    self.state.delete(f"{state_key}.endstop_source")
+                    self.state.delete(f"{state_key}.endstop_port")
+                    self.state.delete(f"{state_key}.endstop_port_toolboard")
+                    self.state.delete(f"{state_key}.endstop_config")
+                    self.state.save()
 
                 bed_size = self.state.get(f"printer.bed_size_{axis}", 350)
                 current_position_max = self.state.get(f"{state_key}.position_max", bed_size)
@@ -2039,6 +2049,13 @@ class GschpooziWizard:
                 )
                 if position_max is None:
                     return
+                # Persist immediately.
+                try:
+                    self.state.set(f"{state_key}.position_max", int(float(position_max)))
+                    self.state.save()
+                except Exception:
+                    # Keep prior value if parse fails; final validation will catch issues.
+                    pass
 
                 current_position_endstop = self.state.get(f"{state_key}.position_endstop", position_max)
                 position_endstop = self.ui.inputbox(
@@ -2048,6 +2065,12 @@ class GschpooziWizard:
                 )
                 if position_endstop is None:
                     return
+                # Persist immediately.
+                try:
+                    self.state.set(f"{state_key}.position_endstop", int(float(position_endstop)))
+                    self.state.save()
+                except Exception:
+                    pass
 
                 # Position min (must be <= position_endstop)
                 # Default: if endstop is negative (common for nozzle wipe zones), match it; otherwise 0.
@@ -2069,6 +2092,12 @@ class GschpooziWizard:
                 )
                 if position_min is None:
                     return
+                # Persist immediately.
+                try:
+                    self.state.set(f"{state_key}.position_min", int(float(position_min)))
+                    self.state.save()
+                except Exception:
+                    pass
 
                 # Homing settings
                 current_homing_speed = self.state.get(f"{state_key}.homing_speed", 50)
@@ -2079,6 +2108,12 @@ class GschpooziWizard:
                 )
                 if homing_speed is None:
                     return
+                # Persist immediately.
+                try:
+                    self.state.set(f"{state_key}.homing_speed", int(float(homing_speed)))
+                    self.state.save()
+                except Exception:
+                    pass
 
                 current_retract = self.state.get(f"{state_key}.homing_retract_dist", 5.0 if endstop_type == "physical" else 0.0)
                 default_retract = "0" if endstop_type == "sensorless" else str(int(current_retract))
@@ -2089,6 +2124,12 @@ class GschpooziWizard:
                 )
                 if homing_retract_dist is None:
                     return
+                # Persist immediately (0 is valid).
+                try:
+                    self.state.set(f"{state_key}.homing_retract_dist", float(homing_retract_dist))
+                    self.state.save()
+                except Exception:
+                    pass
 
                 second_homing_speed = None
                 current_has_second = self.state.get(f"{state_key}.second_homing_speed") is not None
@@ -2103,21 +2144,65 @@ class GschpooziWizard:
                         default=str(current_second),
                         title=f"Stepper {axis_upper} - Second Homing Speed"
                     )
+                    if second_homing_speed is None:
+                        return
+                    try:
+                        self.state.set(f"{state_key}.second_homing_speed", int(float(second_homing_speed)))
+                        self.state.save()
+                    except Exception:
+                        pass
+                else:
+                    # If user disables it, clear stale value.
+                    if current_has_second:
+                        self.state.delete(f"{state_key}.second_homing_speed")
+                        self.state.save()
 
+                # Persist final pass for consistency (but avoid clobbering toolboard vs mainboard endstop keys).
                 self.state.set(f"{state_key}.endstop_type", endstop_type or "physical")
-                if endstop_port:
-                    self.state.set(f"{state_key}.endstop_port", endstop_port)
-                if endstop_config:
-                    self.state.set(f"{state_key}.endstop_config", endstop_config)
-                self.state.set(f"{state_key}.position_max", int(position_max or bed_size))
-                self.state.set(f"{state_key}.position_endstop", int(position_endstop or position_max or bed_size))
-                self.state.set(f"{state_key}.position_min", int(float(position_min)))
-                if homing_speed:
-                    self.state.set(f"{state_key}.homing_speed", int(homing_speed or 50))
-                if homing_retract_dist:
-                    self.state.set(f"{state_key}.homing_retract_dist", float(homing_retract_dist or (0 if endstop_type == "sensorless" else 5)))
+                if endstop_type == "physical":
+                    resolved_source = locals().get("endstop_source") or self.state.get(f"{state_key}.endstop_source") or "mainboard"
+                    if endstop_port:
+                        if resolved_source == "toolboard":
+                            self.state.set(f"{state_key}.endstop_port_toolboard", endstop_port)
+                            self.state.delete(f"{state_key}.endstop_port")
+                        else:
+                            self.state.set(f"{state_key}.endstop_port", endstop_port)
+                            self.state.delete(f"{state_key}.endstop_port_toolboard")
+                    if endstop_config:
+                        self.state.set(f"{state_key}.endstop_config", endstop_config)
+                else:
+                    self.state.delete(f"{state_key}.endstop_source")
+                    self.state.delete(f"{state_key}.endstop_port")
+                    self.state.delete(f"{state_key}.endstop_port_toolboard")
+                    self.state.delete(f"{state_key}.endstop_config")
+
+                bed_size = self.state.get(f"printer.bed_size_{axis}", 350)
+                try:
+                    self.state.set(f"{state_key}.position_max", int(float(position_max or bed_size)))
+                except Exception:
+                    self.state.set(f"{state_key}.position_max", int(bed_size))
+                try:
+                    self.state.set(f"{state_key}.position_endstop", int(float(position_endstop or position_max or bed_size)))
+                except Exception:
+                    self.state.set(f"{state_key}.position_endstop", int(float(self.state.get(f"{state_key}.position_endstop", 0) or 0)))
+                try:
+                    self.state.set(f"{state_key}.position_min", int(float(position_min)))
+                except Exception:
+                    pass
+                try:
+                    self.state.set(f"{state_key}.homing_speed", int(float(homing_speed or 50)))
+                except Exception:
+                    pass
+                try:
+                    # 0 is valid
+                    self.state.set(f"{state_key}.homing_retract_dist", float(homing_retract_dist))
+                except Exception:
+                    pass
                 if second_homing_speed:
-                    self.state.set(f"{state_key}.second_homing_speed", int(second_homing_speed))
+                    try:
+                        self.state.set(f"{state_key}.second_homing_speed", int(float(second_homing_speed)))
+                    except Exception:
+                        pass
 
             # Save axis-specific settings
             self.state.set(f"{state_key}.motor_port", motor_port)
@@ -2298,6 +2383,9 @@ class GschpooziWizard:
             )
             if endstop_type is None:
                 return
+            # Persist immediately.
+            self.state.set(f"{state_key}.endstop_type", endstop_type)
+            self.state.save()
 
             # Physical endstop port and config
             if endstop_type == "physical":
@@ -2387,6 +2475,13 @@ class GschpooziWizard:
                 # Persist config immediately so it is reflected when re-entering the menu.
                 self.state.set(f"{state_key}.endstop_config", endstop_config)
                 self.state.save()
+            else:
+                # Sensorless: clear any stale physical endstop wiring info.
+                self.state.delete(f"{state_key}.endstop_source")
+                self.state.delete(f"{state_key}.endstop_port")
+                self.state.delete(f"{state_key}.endstop_port_toolboard")
+                self.state.delete(f"{state_key}.endstop_config")
+                self.state.save()
 
             bed_size = self.state.get(f"printer.bed_size_{axis}", 350)
             current_max = self.state.get(f"{state_key}.position_max", bed_size)
@@ -2397,6 +2492,12 @@ class GschpooziWizard:
             )
             if position_max is None:
                 return
+            # Persist immediately.
+            try:
+                self.state.set(f"{state_key}.position_max", int(float(position_max)))
+                self.state.save()
+            except Exception:
+                pass
 
             current_endstop_pos = self.state.get(f"{state_key}.position_endstop", position_max)
             position_endstop = self.ui.inputbox(
@@ -2406,6 +2507,12 @@ class GschpooziWizard:
             )
             if position_endstop is None:
                 return
+            # Persist immediately.
+            try:
+                self.state.set(f"{state_key}.position_endstop", int(float(position_endstop)))
+                self.state.save()
+            except Exception:
+                pass
 
             # Position min (must be <= position_endstop)
             try:
@@ -2426,6 +2533,12 @@ class GschpooziWizard:
             )
             if position_min is None:
                 return
+            # Persist immediately.
+            try:
+                self.state.set(f"{state_key}.position_min", int(float(position_min)))
+                self.state.save()
+            except Exception:
+                pass
 
             # Homing settings
             current_homing_speed = self.state.get(f"{state_key}.homing_speed", 50)
@@ -2437,6 +2550,12 @@ class GschpooziWizard:
             )
             if homing_speed is None:
                 return
+            # Persist immediately.
+            try:
+                self.state.set(f"{state_key}.homing_speed", int(float(homing_speed)))
+                self.state.save()
+            except Exception:
+                pass
 
             current_retract = self.state.get(f"{state_key}.homing_retract_dist", 5.0)
             default_retract = "0" if endstop_type == "sensorless" else "5"
@@ -2448,6 +2567,12 @@ class GschpooziWizard:
             )
             if homing_retract_dist is None:
                 return
+            # Persist immediately (0 is valid).
+            try:
+                self.state.set(f"{state_key}.homing_retract_dist", float(homing_retract_dist))
+                self.state.save()
+            except Exception:
+                pass
 
             # Optional second homing speed - check if already configured
             current_has_second = self.state.get(f"{state_key}.second_homing_speed") is not None
@@ -2463,6 +2588,18 @@ class GschpooziWizard:
                     default=str(current_second),
                     title=f"Stepper {axis_upper} - Second Homing Speed"
                 )
+                if second_homing_speed is None:
+                    return
+                try:
+                    self.state.set(f"{state_key}.second_homing_speed", int(float(second_homing_speed)))
+                    self.state.save()
+                except Exception:
+                    pass
+            else:
+                # If user disables it, clear stale value.
+                if current_has_second:
+                    self.state.delete(f"{state_key}.second_homing_speed")
+                    self.state.save()
 
         # Save all settings
         self.state.set(f"{state_key}.motor_port", motor_port)

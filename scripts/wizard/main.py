@@ -3293,29 +3293,35 @@ class GschpooziWizard:
         if sensor_type is None:
             return
 
-        # Pullup resistor (only for NTC thermistors)
-        pullup_resistor = None
-        if sensor_type not in ["PT1000"]:
-            current_pullup = self.state.get("extruder.pullup_resistor", 4700)
-            pullup_resistor = self.ui.radiolist(
-                "Thermistor pullup resistor value:\n\n"
-                "(Check your board - most use 4.7kΩ, some toolboards use 2.2kΩ)",
-                [
-                    ("4700", "4.7kΩ (standard mainboards)", current_pullup == 4700),
-                    ("2200", "2.2kΩ (some toolboards like Nitehawk)", current_pullup == 2200),
-                    ("10000", "10kΩ (rare)", current_pullup == 10000),
-                    ("custom", "Enter custom value", False),
-                ],
-                title="Hotend - Pullup Resistor"
+        # Pullup resistor - needed for ALL thermistor types including PT1000
+        # (PT1000 especially needs correct value for accurate readings)
+        # Default to 2200 for toolboards, 4700 for mainboards
+        default_pullup = 2200 if sensor_location == "toolboard" else 4700
+        current_pullup = self.state.get("extruder.pullup_resistor", default_pullup)
+        pullup_resistor = self.ui.radiolist(
+            "Thermistor pullup resistor value:\n\n"
+            "(Check your board - most mainboards use 4.7kΩ, most toolboards use 2.2kΩ)\n"
+            "Wrong value = wrong temperature readings!",
+            [
+                ("2200", "2.2kΩ (most toolboards: EBB, SHT36, Nitehawk)", current_pullup == 2200),
+                ("4700", "4.7kΩ (most mainboards)", current_pullup == 4700),
+                ("1000", "1kΩ (some PT1000 boards)", current_pullup == 1000),
+                ("10000", "10kΩ (rare)", current_pullup == 10000),
+                ("custom", "Enter custom value", False),
+            ],
+            title="Hotend - Pullup Resistor"
+        )
+        if pullup_resistor is None:
+            return
+        if pullup_resistor == "custom":
+            pullup_resistor = self.ui.inputbox(
+                "Enter pullup resistor value (Ω):",
+                default=str(current_pullup),
+                title="Hotend - Custom Pullup"
             )
-            if pullup_resistor == "custom":
-                pullup_resistor = self.ui.inputbox(
-                    "Enter pullup resistor value (Ω):",
-                    default=str(current_pullup),
-                    title="Hotend - Custom Pullup"
-                )
-            if pullup_resistor:
-                pullup_resistor = int(pullup_resistor)
+            if pullup_resistor is None:
+                return
+        pullup_resistor = int(pullup_resistor)
 
         # Temperature settings
         min_temp = self.ui.inputbox(
@@ -3425,8 +3431,7 @@ class GschpooziWizard:
 
         self.state.set("extruder.sensor_type", sensor_type)
         self.state.set("extruder.sensor_pullup", sensor_pullup)
-        if pullup_resistor:
-            self.state.set("extruder.pullup_resistor", pullup_resistor)
+        self.state.set("extruder.pullup_resistor", pullup_resistor)
         self.state.set("extruder.min_temp", int(min_temp or 0))
         self.state.set("extruder.max_temp", int(max_temp or 300))
         self.state.set("extruder.drive_type", drive_type or "direct")

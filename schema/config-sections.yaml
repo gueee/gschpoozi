@@ -346,9 +346,7 @@ extruder:
     sensor_pin: {{ "^" if extruder.sensor_pullup | default(false) else "" }}{{ board.pins[extruder.sensor_port_mainboard].signal }}
     {% endif %}
     sensor_type: {{ extruder.sensor_type }}
-    {% if extruder.pullup_resistor %}
-    pullup_resistor: {{ extruder.pullup_resistor }}
-    {% endif %}
+    pullup_resistor: {{ extruder.pullup_resistor | default(4700) }}
     min_temp: {{ extruder.min_temp | default(0) }}
     max_temp: {{ extruder.max_temp | default(300) }}
     min_extrude_temp: {{ extruder.min_extrude_temp | default(170) }}

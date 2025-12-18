@@ -144,11 +144,14 @@ The **Klipper Setup** section is intended to provide a KIAUH-like workflow:
 - Install / update / **full uninstall** / reinstall common Klipper components (Klipper, Moonraker, Mainsail/Fluidd, etc.)
 - Basic “is it running?” health checks for Klipper and Moonraker
 - CAN helper to bring up `can0` and optionally make it persistent (systemd service)
+- Guided Katapult / flashing helper (USB DFU + CAN firmware flash)
 
 **Safety notes:**
 - Install/remove actions may prompt for `sudo` and will modify system services.
 - Full uninstall deletes component directories/venvs (while trying to preserve `~/printer_data/config`). Use with care.
 - CAN helper does **not** enable hardware drivers (e.g., SPI overlays for mcp2515, slcan setups). It only configures an existing SocketCAN interface.
+- For CAN users, interface persistence is required; the wizard will install a `can-<iface>.service` to bring CAN up on boot.
+- Katapult/firmware flashing can brick boards if used incorrectly—double-check device selection and parameters.
 
 ---
 

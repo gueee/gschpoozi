@@ -787,6 +787,7 @@ class GschpooziWizard:
                     ("1.2", "Check Moonraker       (Verify API)"),
                     ("1.3", "Manage Components     (Install/Update/Remove/Reinstall)"),
                     ("1.4", "CAN Interface Setup   (can0 / can-utils / systemd)"),
+                    ("1.5", "Katapult / Flashing   (DFU + CAN firmware flash)"),
                     ("B", "Back to Main Menu"),
                 ],
                 title="1. Klipper Setup",
@@ -802,6 +803,8 @@ class GschpooziWizard:
                 self._manage_klipper_components()
             elif choice == "1.4":
                 self._can_interface_setup()
+            elif choice == "1.5":
+                self._katapult_setup()
 
     def _manage_klipper_components(self) -> None:
         """
@@ -929,11 +932,13 @@ class GschpooziWizard:
         if bitrate is None or bitrate.strip() == "":
             return
 
-        persist = self.ui.yesno(
-            "Make it persistent on boot?\n\n"
-            "This will create a systemd service can-<iface>.service.",
+        # CAN requires the interface to be up reliably on boot; make persistence non-optional.
+        self.ui.msgbox(
+            "CAN interface will be made persistent on boot.\n\n"
+            "This will create/enable a systemd service: can-<iface>.service",
             title="CAN Setup",
-            default_no=False,
+            height=12,
+            width=80,
         )
 
         install_pkgs = self.ui.yesno(
@@ -951,12 +956,34 @@ class GschpooziWizard:
             "--bitrate",
             bitrate.strip(),
             "--persist",
-            "yes" if persist else "no",
+            "yes",
             "--install-pkgs",
             "yes" if install_pkgs else "no",
         ]
 
         self._run_tty_command(args)
+
+    def _katapult_setup(self) -> None:
+        """Guided Katapult/firmware flashing helper (DFU + CAN)."""
+        tool = REPO_ROOT / "scripts" / "tools" / "katapult_setup.sh"
+        if not tool.exists():
+            self.ui.msgbox(f"Missing tool: {tool}", title="Error")
+            return
+
+        self.ui.msgbox(
+            "Katapult / Flashing (Guided)\n\n"
+            "This helper can:\n"
+            "- Assist flashing Katapult via USB DFU (dangerous)\n"
+            "- Flash Klipper firmware over CAN using Klipper's flash_can.py\n\n"
+            "WARNING:\n"
+            "Firmware flashing can brick boards if you select the wrong device or parameters.\n"
+            "Proceed carefully and read prompts.",
+            title="Katapult / Flashing",
+            height=18,
+            width=90,
+        )
+
+        self._run_tty_command(["bash", str(tool)])
 
     def _check_klipper(self) -> None:
         """Check Klipper installation status."""

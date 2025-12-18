@@ -1,0 +1,21 @@
+# Force LF line endings for ALL text files (Linux target)
+* text=auto eol=lf
+
+# Explicitly mark text file types
+*.sh text eol=lf
+*.py text eol=lf
+*.cfg text eol=lf
+*.conf text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.template text eol=lf
+*.mdc text eol=lf
+
+# Binary files - no conversion
+*.png binary
+*.jpg binary
+*.gif binary
+

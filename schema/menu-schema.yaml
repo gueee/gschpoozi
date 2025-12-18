@@ -1,0 +1,2359 @@
+# menu-schema.yaml
+# Complete menu structure for gschpoozi wizard
+# Version: 2.0 (Refactor)
+
+version: "2.0"
+
+# Main menu categories
+categories:
+  - id: "1"
+    name: "Klipper Setup"
+    description: "Installation and verification"
+    generates_config: false
+    sections:
+      - id: "1.1"
+        name: "Klipper"
+        type: "verification"
+
+      - id: "1.2"
+        name: "Moonraker"
+        type: "verification"
+
+      - id: "1.3"
+        name: "Web Interface"
+        type: "choice"
+        options:
+          - id: "1.3.1"
+            name: "Mainsail"
+          - id: "1.3.2"
+            name: "Fluidd"
+
+      - id: "1.4"
+        name: "Optional Services"
+        type: "multi-select"
+        options:
+          - id: "1.4.1"
+            name: "Crowsnest"
+          - id: "1.4.2"
+            name: "KlipperScreen"
+          - id: "1.4.3"
+            name: "Timelapse"
+          - id: "1.4.4"
+            name: "Sonar"
+
+  - id: "2"
+    name: "Hardware Setup"
+    description: "Configure printer hardware"
+    generates_config: true
+    sections:
+      # 2.1 MCU Configuration
+      - id: "2.1"
+        name: "MCU Configuration"
+        sections:
+          - id: "2.1.1"
+            name: "Main Board"
+            required: true
+            klipper_section: "[mcu]"
+            parameters:
+              - name: "board_type"
+                type: "select"
+                source: "templates/boards/"
+                required: true
+              - name: "connection_type"
+                type: "choice"
+                options: ["USB"]
+                default: "USB"
+                required: true
+              - name: "serial"
+                type: "text"
+                auto_detect: true
+                required: true
+              - name: "restart_method"
+                type: "choice"
+                options: ["command", "arduino", "cheetah"]
+                default: "command"
+
+          - id: "2.1.2"
+            name: "Toolhead Board"
+            required: false
+            klipper_section: "[mcu toolboard]"
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+              - name: "board_type"
+                type: "select"
+                source: "templates/toolboards/"
+                condition: "enabled == true"
+              - name: "connection_type"
+                type: "choice"
+                options: ["USB", "CAN"]
+                condition: "enabled == true"
+              - name: "serial"
+                type: "text"
+                auto_detect: true
+                condition: "connection_type == 'USB'"
+              - name: "canbus_uuid"
+                type: "text"
+                auto_detect: true
+                condition: "connection_type == 'CAN'"
+              - name: "canbus_bitrate"
+                type: "choice"
+                options: [1000000, 500000, 250000]
+                default: 1000000
+                condition: "connection_type == 'CAN'"
+
+          - id: "2.1.2a"
+            name: "CAN Bus Setup"
+            type: "sub-wizard"
+            condition: "2.1.2.connection_type == 'CAN'"
+            parameters:
+              - name: "adapter_type"
+                type: "choice"
+                options: ["USB-CAN Adapter", "USB-CAN Bridge"]
+              - name: "adapter_model"
+                type: "select"
+                source: "templates/can-adapters/"
+                condition: "adapter_type == 'USB-CAN Adapter'"
+              - name: "bridge_board"
+                type: "select"
+                source: "2.1.1.board_type"
+                condition: "adapter_type == 'USB-CAN Bridge'"
+              - name: "bitrate"
+                type: "choice"
+                options: [1000000, 500000, 250000]
+                default: 1000000
+
+          - id: "2.1.3"
+            name: "Host MCU"
+            required: false
+            klipper_section: "[mcu rpi]"
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+                description: "Enable for ADXL345, GPIO, etc."
+
+          - id: "2.1.4"
+            name: "Additional MCUs"
+            required: false
+            type: "list"
+            klipper_section: "[mcu {name}]"
+            parameters:
+              - name: "name"
+                type: "text"
+                required: true
+              - name: "connection_type"
+                type: "choice"
+                options: ["USB", "Serial", "CAN"]
+              - name: "serial"
+                type: "text"
+                condition: "connection_type in ['USB', 'Serial']"
+              - name: "canbus_uuid"
+                type: "text"
+                condition: "connection_type == 'CAN'"
+
+      # 2.2 Printer Settings
+      - id: "2.2"
+        name: "Printer Settings"
+        required: true
+        klipper_section: "[printer]"
+        parameters:
+          - name: "kinematics"
+            type: "choice"
+            options: ["corexy", "cartesian", "corexz", "delta"]
+            required: true
+          - name: "max_velocity"
+            type: "int"
+            default: 300
+            range: [50, 1000]
+            required: true
+          - name: "max_accel"
+            type: "int"
+            default: 3000
+            range: [500, 50000]
+            required: true
+          - name: "max_z_velocity"
+            type: "int"
+            default: 15
+            range: [5, 50]
+            required: true
+          - name: "max_z_accel"
+            type: "int"
+            default: 350
+            range: [50, 1000]
+            required: true
+          - name: "square_corner_velocity"
+            type: "float"
+            default: 5.0
+            range: [1.0, 20.0]
+          - name: "minimum_cruise_ratio"
+            type: "float"
+            default: 0.5
+            range: [0.0, 1.0]
+          # Bed size (used throughout)
+          - name: "bed_size_x"
+            type: "int"
+            required: true
+            description: "Bed X dimension in mm"
+          - name: "bed_size_y"
+            type: "int"
+            required: true
+            description: "Bed Y dimension in mm"
+          - name: "bed_size_z"
+            type: "int"
+            required: true
+            description: "Z height in mm"
+          # AWD (All Wheel Drive) for CoreXY
+          - name: "awd_enabled"
+            type: "bool"
+            default: false
+            condition: "kinematics == 'corexy'"
+            description: "Enable dual motors per axis (AWD CoreXY)"
+
+      # 2.3 X Axis
+      - id: "2.3"
+        name: "X Axis"
+        sections:
+          - id: "2.3.1"
+            name: "Stepper X"
+            klipper_section: "[stepper_x]"
+            required: true
+            parameters:
+              - name: "motor_port"
+                type: "select"
+                source: "board.motor_ports"
+                required: true
+              - name: "belt_pitch"
+                type: "choice"
+                options: [2, 3, 1.5]
+                labels: ["2mm GT2", "3mm HTD3M", "1.5mm (rare)"]
+                default: 2
+                required: true
+              - name: "pulley_teeth"
+                type: "choice"
+                options: [16, 20, 24, 32, 40]
+                default: 20
+                required: true
+              - name: "microsteps"
+                type: "choice"
+                options: [16, 32, 64]
+                default: 32
+                required: true
+              - name: "full_steps_per_rotation"
+                type: "choice"
+                options: [200, 400]
+                labels: ["200 (1.8°)", "400 (0.9°)"]
+                default: 200
+                required: true
+              - name: "dir_pin_inverted"
+                type: "bool"
+                default: false
+              - name: "endstop_type"
+                type: "choice"
+                options: ["physical", "sensorless"]
+                default: "physical"
+                required: true
+              - name: "endstop_port"
+                type: "select"
+                source: "board.endstop_ports"
+                condition: "endstop_type == 'physical'"
+              - name: "endstop_config"
+                type: "choice"
+                options: ["nc_gnd", "no_gnd", "nc_vcc", "no_vcc"]
+                labels: ["NC to GND (^pin) - recommended", "NO to GND (^!pin)", "NC to VCC (!pin)", "NO to VCC (pin)"]
+                default: "nc_gnd"
+                condition: "endstop_type == 'physical'"
+              - name: "position_endstop"
+                type: "int"
+                required: true
+              - name: "position_min"
+                type: "int"
+                default: 0
+              - name: "position_max"
+                type: "int"
+                default: "bed_size_x"
+                required: true
+              - name: "homing_speed"
+                type: "int"
+                default: 50
+                range: [10, 100]
+              - name: "homing_retract_dist"
+                type: "float"
+                default: 5
+              - name: "second_homing_speed"
+                type: "int"
+                default: 10
+
+          - id: "2.3.2"
+            name: "TMC Driver X"
+            klipper_section: "[tmc2209 stepper_x]"
+            required: true
+            parameters:
+              - name: "driver_type"
+                type: "choice"
+                options: ["TMC2209", "TMC2240", "TMC5160", "TMC2130"]
+                default: "TMC2209"
+                required: true
+              - name: "driver_protocol"
+                type: "choice"
+                options: ["uart", "spi"]
+                default: "uart"
+                condition: "driver_type in ['TMC2240', 'TMC5160', 'TMC2130']"
+                description: "TMC5160 requires SPI, TMC2240 supports both"
+              - name: "run_current"
+                type: "float"
+                range: [0.1, 2.5]
+                required: true
+              - name: "interpolate"
+                type: "bool"
+                default: false
+              # SPI-specific parameters
+              - name: "sense_resistor"
+                type: "float"
+                default: 0.075
+                condition: "driver_protocol == 'spi'"
+                description: "0.075 for TMC5160, 0.110 for TMC2240"
+              - name: "driver_tbl"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_toff"
+                type: "int"
+                default: 3
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2g"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2vs"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_SGTHRS"
+                type: "int"
+                default: 70
+                range: [0, 255]
+                condition: "2.3.1.endstop_type == 'sensorless'"
+
+          # AWD X1 Motor (secondary X motor)
+          - id: "2.3.3"
+            name: "Stepper X1 (AWD)"
+            klipper_section: "[stepper_x1]"
+            condition: "2.2.awd_enabled == true"
+            parameters:
+              - name: "motor_port"
+                type: "select"
+                source: "board.motor_ports"
+                required: true
+              - name: "dir_pin_inverted"
+                type: "bool"
+                default: false
+                description: "Usually mirrors stepper_x direction"
+
+          - id: "2.3.4"
+            name: "TMC Driver X1 (AWD)"
+            klipper_section: "[tmc2209 stepper_x1]"
+            condition: "2.2.awd_enabled == true"
+            parameters:
+              - name: "driver_type"
+                type: "choice"
+                options: ["TMC2209", "TMC2240", "TMC5160", "TMC2130"]
+                default: "TMC2209"
+                required: true
+              - name: "driver_protocol"
+                type: "choice"
+                options: ["uart", "spi"]
+                default: "uart"
+                condition: "driver_type in ['TMC2240', 'TMC5160', 'TMC2130']"
+              - name: "run_current"
+                type: "float"
+                range: [0.1, 2.5]
+                required: true
+                description: "Should match stepper_x current"
+              - name: "interpolate"
+                type: "bool"
+                default: false
+              - name: "sense_resistor"
+                type: "float"
+                default: 0.075
+                condition: "driver_protocol == 'spi'"
+              - name: "driver_tbl"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_toff"
+                type: "int"
+                default: 3
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2g"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2vs"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+
+      # 2.4 Y Axis (explicit definition to ensure correct condition references)
+      - id: "2.4"
+        name: "Y Axis"
+        sections:
+          - id: "2.4.1"
+            name: "Stepper Y"
+            klipper_section: "[stepper_y]"
+            required: true
+            parameters:
+              - name: "motor_port"
+                type: "select"
+                source: "board.motor_ports"
+                required: true
+              - name: "belt_pitch"
+                type: "choice"
+                options: [2, 3, 1.5]
+                labels: ["2mm GT2", "3mm HTD3M", "1.5mm (rare)"]
+                default: 2
+                required: true
+              - name: "pulley_teeth"
+                type: "choice"
+                options: [16, 20, 24, 32, 40]
+                default: 20
+                required: true
+              - name: "microsteps"
+                type: "choice"
+                options: [16, 32, 64]
+                default: 32
+                required: true
+              - name: "full_steps_per_rotation"
+                type: "choice"
+                options: [200, 400]
+                labels: ["200 (1.8°)", "400 (0.9°)"]
+                default: 200
+                required: true
+              - name: "dir_pin_inverted"
+                type: "bool"
+                default: false
+              - name: "endstop_type"
+                type: "choice"
+                options: ["physical", "sensorless"]
+                default: "physical"
+                required: true
+              - name: "endstop_port"
+                type: "select"
+                source: "board.endstop_ports"
+                condition: "endstop_type == 'physical'"
+              - name: "endstop_config"
+                type: "choice"
+                options: ["nc_gnd", "no_gnd", "nc_vcc", "no_vcc"]
+                labels: ["NC to GND (^pin) - recommended", "NO to GND (^!pin)", "NC to VCC (!pin)", "NO to VCC (pin)"]
+                default: "nc_gnd"
+                condition: "endstop_type == 'physical'"
+              - name: "position_endstop"
+                type: "int"
+                required: true
+              - name: "position_min"
+                type: "int"
+                default: 0
+              - name: "position_max"
+                type: "int"
+                default: "bed_size_y"
+                required: true
+              - name: "homing_speed"
+                type: "int"
+                default: 50
+                range: [10, 100]
+              - name: "homing_retract_dist"
+                type: "float"
+                default: 5
+              - name: "second_homing_speed"
+                type: "int"
+                default: 10
+
+          - id: "2.4.2"
+            name: "TMC Driver Y"
+            klipper_section: "[tmc2209 stepper_y]"
+            required: true
+            parameters:
+              - name: "driver_type"
+                type: "choice"
+                options: ["TMC2209", "TMC2240", "TMC5160", "TMC2130"]
+                default: "TMC2209"
+                required: true
+              - name: "driver_protocol"
+                type: "choice"
+                options: ["uart", "spi"]
+                default: "uart"
+                condition: "driver_type in ['TMC2240', 'TMC5160', 'TMC2130']"
+              - name: "run_current"
+                type: "float"
+                range: [0.1, 2.5]
+                required: true
+              - name: "interpolate"
+                type: "bool"
+                default: false
+              - name: "sense_resistor"
+                type: "float"
+                default: 0.075
+                condition: "driver_protocol == 'spi'"
+              - name: "driver_tbl"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_toff"
+                type: "int"
+                default: 3
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2g"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2vs"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_SGTHRS"
+                type: "int"
+                default: 70
+                range: [0, 255]
+                condition: "2.4.1.endstop_type == 'sensorless'"
+
+          # AWD Y1 Motor (secondary Y motor)
+          - id: "2.4.3"
+            name: "Stepper Y1 (AWD)"
+            klipper_section: "[stepper_y1]"
+            condition: "2.2.awd_enabled == true"
+            parameters:
+              - name: "motor_port"
+                type: "select"
+                source: "board.motor_ports"
+                required: true
+              - name: "dir_pin_inverted"
+                type: "bool"
+                default: false
+                description: "Usually mirrors stepper_y direction"
+
+          - id: "2.4.4"
+            name: "TMC Driver Y1 (AWD)"
+            klipper_section: "[tmc2209 stepper_y1]"
+            condition: "2.2.awd_enabled == true"
+            parameters:
+              - name: "driver_type"
+                type: "choice"
+                options: ["TMC2209", "TMC2240", "TMC5160", "TMC2130"]
+                default: "TMC2209"
+                required: true
+              - name: "driver_protocol"
+                type: "choice"
+                options: ["uart", "spi"]
+                default: "uart"
+                condition: "driver_type in ['TMC2240', 'TMC5160', 'TMC2130']"
+              - name: "run_current"
+                type: "float"
+                range: [0.1, 2.5]
+                required: true
+                description: "Should match stepper_y current"
+              - name: "interpolate"
+                type: "bool"
+                default: false
+              - name: "sense_resistor"
+                type: "float"
+                default: 0.075
+                condition: "driver_protocol == 'spi'"
+              - name: "driver_tbl"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_toff"
+                type: "int"
+                default: 3
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2g"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+              - name: "driver_diss2vs"
+                type: "int"
+                default: 1
+                condition: "driver_type == 'TMC5160'"
+
+      # 2.5 Z Axis
+      - id: "2.5"
+        name: "Z Axis"
+        sections:
+          - id: "2.5.1"
+            name: "Z Motor Count"
+            parameters:
+              - name: "z_motor_count"
+                type: "choice"
+                options: [1, 2, 3, 4]
+                default: 1
+                required: true
+              - name: "z_motion_type"
+                type: "choice"
+                options: ["gantry", "bed"]
+                labels: ["Gantry moves (bed fixed)", "Bed moves (gantry fixed)"]
+                condition: "z_motor_count == 2"
+
+          - id: "2.5.2"
+            name: "Stepper Z"
+            klipper_section: "[stepper_z]"
+            required: true
+            parameters:
+              - name: "motor_port"
+                type: "select"
+                source: "board.motor_ports"
+                required: true
+              - name: "drive_type"
+                type: "choice"
+                options: ["leadscrew", "belt"]
+                default: "leadscrew"
+                required: true
+              - name: "leadscrew_pitch"
+                type: "choice"
+                options: [8, 4, 2]
+                labels: ["8mm (T8 standard)", "4mm (high-speed)", "2mm (TR8x2)"]
+                default: 8
+                condition: "drive_type == 'leadscrew'"
+              - name: "belt_pitch"
+                type: "choice"
+                options: [2, 3]
+                condition: "drive_type == 'belt'"
+              - name: "pulley_teeth"
+                type: "choice"
+                options: [16, 20, 24, 32, 40]
+                condition: "drive_type == 'belt'"
+              - name: "gear_ratio"
+                type: "text"
+                description: "e.g., 80:16 for belt reduction"
+              - name: "microsteps"
+                type: "choice"
+                options: [16, 32, 64]
+                default: 32
+              - name: "full_steps_per_rotation"
+                type: "choice"
+                options: [200, 400]
+                default: 200
+              - name: "dir_pin_inverted"
+                type: "bool"
+                default: false
+              - name: "endstop_type"
+                type: "choice"
+                options: ["probe", "physical_mainboard", "physical_toolboard", "sensorless"]
+                default: "probe"
+                required: true
+              - name: "endstop_port"
+                type: "select"
+                source: "board.endstop_ports"
+                condition: "endstop_type == 'physical_mainboard'"
+              - name: "toolboard_endstop_port"
+                type: "select"
+                source: "toolboard.endstop_ports"
+                condition: "endstop_type == 'physical_toolboard'"
+              - name: "switch_config"
+                type: "choice"
+                options: ["nc_gnd", "no_gnd", "nc_vcc", "no_vcc"]
+                default: "nc_gnd"
+                condition: "endstop_type in ['physical_mainboard', 'physical_toolboard']"
+              - name: "position_min"
+                type: "int"
+                default: -5
+              - name: "position_max"
+                type: "int"
+                default: "bed_size_z"
+                required: true
+              - name: "homing_speed"
+                type: "int"
+                default: 10
+              - name: "homing_retract_dist"
+                type: "float"
+                default: 0
+                description: "0 for probe homing, 5 for physical endstop - adjust based on endstop_type"
+
+          - id: "2.5.3"
+            name: "TMC Driver Z"
+            klipper_section: "[tmc2209 stepper_z]"
+            required: true
+            parameters:
+              - name: "driver_type"
+                type: "choice"
+                options: ["TMC2209", "TMC5160", "TMC2130"]
+                default: "TMC2209"
+              - name: "run_current"
+                type: "float"
+                default: 0.8
+                range: [0.1, 2.0]
+              - name: "interpolate"
+                type: "bool"
+                default: false
+
+      # TODO: Additional Z steppers (conditional on z_motor_count)
+      # 2.5.4 Stepper Z1 + 2.5.5 TMC Z1 (if z_motor_count >= 2)
+      # 2.5.6 Stepper Z2 + 2.5.7 TMC Z2 (if z_motor_count >= 3)
+      # 2.5.8 Stepper Z3 + 2.5.9 TMC Z3 (if z_motor_count == 4)
+      # Structure mirrors 2.5.2/2.5.3 - implement during wizard development
+
+      # 2.6 Extruder
+      - id: "2.6"
+        name: "Extruder"
+        sections:
+          - id: "2.6.1"
+            name: "Motor Location"
+            parameters:
+              - name: "location"
+                type: "choice"
+                options: ["mainboard", "toolboard"]
+                required: true  # No default - user must choose (DIY Flexibility Principle)
+              - name: "motor_port_mainboard"
+                type: "select"
+                source: "board.motor_ports"
+                condition: "location == 'mainboard'"
+              - name: "motor_port_toolboard"
+                type: "select"
+                source: "toolboard.motor_ports"
+                condition: "location == 'toolboard'"
+
+          - id: "2.6.2"
+            name: "Extruder Type"
+            required: true
+            description: "Sets rotation_distance and gear_ratio"
+            parameters:
+              - name: "extruder_type"
+                type: "choice"
+                options:
+                  - value: "sherpa_mini"
+                    label: "Sherpa Mini"
+                    rotation_distance: 22.67895
+                    gear_ratio: "50:10"
+                    default_pa: 0.04
+                  - value: "orbiter_v2"
+                    label: "Orbiter v2.0/v2.5"
+                    rotation_distance: 4.637
+                    gear_ratio: "7.5:1"
+                    default_pa: 0.025
+                  - value: "smart_orbiter_v3"
+                    label: "Smart Orbiter v3"
+                    rotation_distance: 4.69
+                    gear_ratio: "7.5:1"
+                    default_pa: 0.015
+                  - value: "clockwork2"
+                    label: "Clockwork 2"
+                    rotation_distance: 22.6789511
+                    gear_ratio: "50:10"
+                    default_pa: 0.04
+                  - value: "galileo2"
+                    label: "Galileo 2"
+                    rotation_distance: 47.088
+                    gear_ratio: "9:1"
+                    default_pa: 0.035
+                  - value: "lgx_lite"
+                    label: "LGX Lite"
+                    rotation_distance: 8
+                    gear_ratio: "44:8"
+                    default_pa: 0.04
+                  - value: "bmg"
+                    label: "BMG"
+                    rotation_distance: 22.6789511
+                    gear_ratio: "50:17"
+                    default_pa: 0.05
+                  - value: "vz_hextrudort_8t"
+                    label: "VZ-Hextrudort 8T"
+                    rotation_distance: 22.2
+                    gear_ratio: "50:8"
+                    default_pa: 0.02
+                  - value: "vz_hextrudort_10t"
+                    label: "VZ-Hextrudort 10T"
+                    rotation_distance: 22.2
+                    gear_ratio: "50:10"
+                    default_pa: 0.02
+                  - value: "custom"
+                    label: "Custom"
+                required: true
+
+          - id: "2.6.3"
+            name: "Extruder Config"
+            klipper_section: "[extruder]"
+            required: true
+            parameters:
+              - name: "dir_pin_inverted"
+                type: "bool"
+                default: false
+              - name: "microsteps"
+                type: "choice"
+                options: [16, 32]
+                default: 16
+              - name: "full_steps_per_rotation"
+                type: "choice"
+                options: [200, 400]
+                default: 200
+              - name: "nozzle_diameter"
+                type: "choice"
+                options: [0.4, 0.5, 0.6, 0.8, 1.0]
+                default: 0.4
+              - name: "filament_diameter"
+                type: "choice"
+                options: [1.75, 2.85]
+                default: 1.75
+              - name: "heater_location"
+                type: "choice"
+                options: ["mainboard", "toolboard"]
+                required: true  # No default - user must choose (DIY Flexibility Principle)
+              - name: "heater_port_mainboard"
+                type: "select"
+                source: "board.heater_ports"
+                condition: "heater_location == 'mainboard'"
+              - name: "heater_port_toolboard"
+                type: "select"
+                source: "toolboard.heater_ports"
+                condition: "heater_location == 'toolboard'"
+              - name: "max_power"
+                type: "float"
+                default: 1.0
+                range: [0.1, 1.0]
+              - name: "sensor_location"
+                type: "choice"
+                options: ["mainboard", "toolboard"]
+                required: true  # No default - user must choose (DIY Flexibility Principle)
+              - name: "sensor_type"
+                type: "choice"
+                options:
+                  - "Generic 3950"
+                  - "ATC Semitec 104GT-2"
+                  - "ATC Semitec 104NT-4-R025H42G"
+                  - "PT1000"
+                  - "SliceEngineering 450"
+                  - "NTC 100K beta 3950"
+              - name: "sensor_port_mainboard"
+                type: "select"
+                source: "board.thermistor_ports"
+                condition: "sensor_location == 'mainboard'"
+              - name: "sensor_port_toolboard"
+                type: "select"
+                source: "toolboard.thermistor_ports"
+                condition: "sensor_location == 'toolboard'"
+              - name: "pullup_resistor"
+                type: "choice_custom"
+                options: [4700, 2200, 10000]
+                allow_custom: true
+              - name: "min_temp"
+                type: "int"
+                default: 0
+              - name: "max_temp"
+                type: "int"
+                default: 300
+              - name: "drive_type"
+                type: "choice"
+                options: ["direct", "bowden"]
+                default: "direct"
+              - name: "max_extrude_only_distance"
+                type: "int"
+                default: 150
+                description: "500 for bowden"
+              - name: "max_extrude_cross_section"
+                type: "float"
+                default: 5
+              - name: "min_extrude_temp"
+                type: "int"
+                default: 170
+              - name: "instantaneous_corner_velocity"
+                type: "float"
+                default: 1.0
+
+      # 2.7 Heated Bed
+      - id: "2.7"
+        name: "Heated Bed"
+        sections:
+          - id: "2.7.1"
+            name: "Heater Configuration"
+            klipper_section: "[heater_bed]"
+            required: true
+            parameters:
+              - name: "heater_pin"
+                type: "select"
+                source: "board.heater_ports"
+                required: true
+                description: "PWM output for SSR/MOSFET"
+              - name: "max_power"
+                type: "float"
+                default: 1.0
+                range: [0.1, 1.0]
+                description: "Reduce for cheap SSRs that can't handle full PWM"
+              - name: "pwm_cycle_time"
+                type: "float"
+                default: 0.0166
+                description: "Usually doesn't need changes (60Hz default)"
+
+          - id: "2.7.2"
+            name: "Thermistor"
+            required: true
+            parameters:
+              - name: "sensor_type"
+                type: "choice"
+                options:
+                  - "Generic 3950"
+                  - "NTC 100K beta 3950"
+                  - "PT1000"
+                  - "ATC Semitec 104GT-2"
+                  - "EPCOS 100K B57560G104F"
+                  - "Honeywell 100K 135-104LAG-J01"
+                required: true
+              - name: "sensor_port"
+                type: "select"
+                source: "board.thermistor_ports"
+                required: true
+              - name: "pullup_resistor"
+                type: "choice_custom"
+                options: [4700, 2200, 10000]
+                allow_custom: true
+                description: "Standard values, or custom for offset correction"
+
+          - id: "2.7.3"
+            name: "Temperature Settings"
+            required: true
+            parameters:
+              - name: "min_temp"
+                type: "int"
+                default: 0
+              - name: "max_temp"
+                type: "int"
+                default: 120
+                description: "Typical max for heated beds"
+              - name: "control"
+                type: "choice"
+                options: ["pid", "watermark"]
+                default: "pid"
+
+          - id: "2.7.4"
+            name: "PID Values"
+            description: "Set to 0 initially - run PID_CALIBRATE HEATER=heater_bed TARGET=60"
+            parameters:
+              - name: "pid_Kp"
+                type: "float"
+                default: 0
+              - name: "pid_Ki"
+                type: "float"
+                default: 0
+              - name: "pid_Kd"
+                type: "float"
+                default: 0
+
+          - id: "2.7.5"
+            name: "Bed Surface"
+            type: "informational"
+            description: "Used for macro hints and slicer recommendations"
+            parameters:
+              - name: "surface_type"
+                type: "choice"
+                options:
+                  - value: "pei_textured"
+                    label: "PEI Textured"
+                  - value: "pei_smooth"
+                    label: "PEI Smooth"
+                  - value: "glass"
+                    label: "Glass"
+                  - value: "fr4"
+                    label: "FR4/G10"
+                  - value: "garolite"
+                    label: "Garolite"
+                  - value: "buildtak"
+                    label: "BuildTak"
+                  - value: "other"
+                    label: "Other"
+
+      # 2.8 Fans
+      - id: "2.8"
+        name: "Fans"
+        sections:
+          - id: "2.8.1"
+            name: "Part Cooling Fan"
+            klipper_section: "[fan]"
+            required: true
+            parameters:
+              - name: "location"
+                type: "choice"
+                options: ["mainboard", "toolboard"]
+                required: true
+              - name: "pin_mainboard"
+                type: "select"
+                source: "board.fan_ports"
+                condition: "location == 'mainboard'"
+              - name: "pin_toolboard"
+                type: "select"
+                source: "toolboard.fan_ports"
+                condition: "location == 'toolboard'"
+              - name: "max_power"
+                type: "float"
+                default: 1.0
+                range: [0.1, 1.0]
+              - name: "kick_start_time"
+                type: "float"
+                default: 0.5
+              - name: "off_below"
+                type: "float"
+                default: 0.1
+                description: "Minimum PWM for fan to spin"
+              - name: "cycle_time"
+                type: "float"
+                default: 0.010
+
+          - id: "2.8.2"
+            name: "Hotend Fan"
+            klipper_section: "[heater_fan hotend_fan]"
+            required: true
+            description: "Always-on when hotend is hot"
+            parameters:
+              - name: "location"
+                type: "choice"
+                options: ["mainboard", "toolboard"]
+                required: true
+              - name: "pin_mainboard"
+                type: "select"
+                source: "board.fan_ports"
+                condition: "location == 'mainboard'"
+              - name: "pin_toolboard"
+                type: "select"
+                source: "toolboard.fan_ports"
+                condition: "location == 'toolboard'"
+              - name: "heater"
+                type: "text"
+                default: "extruder"
+              - name: "heater_temp"
+                type: "int"
+                default: 50
+                description: "Temperature to turn on fan"
+              - name: "fan_speed"
+                type: "float"
+                default: 1.0
+                range: [0.1, 1.0]
+
+          - id: "2.8.3"
+            name: "Controller Fan"
+            klipper_section: "[controller_fan controller_fan]"
+            required: false
+            description: "Electronics cooling"
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: true
+              - name: "pin"
+                type: "select"
+                source: "board.fan_ports"
+                condition: "enabled == true"
+              - name: "kick_start_time"
+                type: "float"
+                default: 0.5
+              - name: "stepper"
+                type: "text"
+                default: "stepper_x"
+                description: "Stepper to monitor for activity"
+              - name: "idle_timeout"
+                type: "int"
+                default: 60
+              - name: "idle_speed"
+                type: "float"
+                default: 0.5
+                description: "Speed when idle but not off"
+
+          - id: "2.8.4"
+            name: "Exhaust Fan"
+            klipper_section: "[fan_generic exhaust_fan]"
+            required: false
+            description: "Chamber exhaust / nevermore"
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+              - name: "pin"
+                type: "select"
+                source: "board.fan_ports"
+                condition: "enabled == true"
+              - name: "max_power"
+                type: "float"
+                default: 1.0
+
+          - id: "2.8.5"
+            name: "Additional Fans"
+            type: "list"
+            klipper_section: "[fan_generic {name}]"
+            required: false
+            description: "RSCS, Nevermore, chamber fans, etc."
+            parameters:
+              - name: "name"
+                type: "text"
+                required: true
+                description: "e.g., RSCS, Nevermore, chamber_fan"
+              - name: "pin_type"
+                type: "choice"
+                options: ["direct", "multi_pin"]
+                default: "direct"
+                description: "Use multi_pin for fans with multiple pins"
+              - name: "pin"
+                type: "select"
+                source: "board.fan_ports"
+                condition: "pin_type == 'direct'"
+              - name: "multi_pin_name"
+                type: "text"
+                condition: "pin_type == 'multi_pin'"
+                description: "Name of multi_pin group (must be defined in 2.16.7)"
+              - name: "max_power"
+                type: "float"
+                default: 1.0
+                range: [0.1, 1.0]
+              - name: "shutdown_speed"
+                type: "float"
+                default: 0
+              - name: "kick_start_time"
+                type: "float"
+                default: 0.1
+              - name: "off_below"
+                type: "float"
+                default: 0.1
+
+      # 2.9 Probe
+      - id: "2.9"
+        name: "Probe"
+        sections:
+          - id: "2.9.1"
+            name: "Probe Type"
+            required: true
+            parameters:
+              - name: "probe_type"
+                type: "choice"
+                options:
+                  - value: "none"
+                    label: "No Probe"
+                  - value: "bltouch"
+                    label: "BLTouch / 3DTouch"
+                    klipper_section: "[bltouch]"
+                  - value: "inductive"
+                    label: "Inductive Probe (PINDA, SuperPINDA)"
+                    klipper_section: "[probe]"
+                  - value: "klicky"
+                    label: "Klicky / Euclid (dockable)"
+                    klipper_section: "[probe]"
+                  - value: "tap"
+                    label: "Voron Tap"
+                    klipper_section: "[probe]"
+                  - value: "beacon"
+                    label: "Beacon (eddy current)"
+                    plugin_required: "beacon"
+                  - value: "cartographer"
+                    label: "Cartographer (eddy current)"
+                    plugin_required: "cartographer"
+                  - value: "btt_eddy"
+                    label: "BTT Eddy"
+                    klipper_section: "[probe_eddy_current]"
+                required: true
+
+          - id: "2.9.2"
+            name: "Probe Connection"
+            condition: "2.9.1.probe_type not in ['none', 'beacon', 'cartographer']"
+            parameters:
+              - name: "location"
+                type: "choice"
+                options: ["mainboard", "toolboard"]
+                required: true
+              - name: "probe_pin_mainboard"
+                type: "select"
+                source: "board.probe_ports"
+                condition: "location == 'mainboard'"
+              - name: "probe_pin_toolboard"
+                type: "select"
+                source: "toolboard.probe_ports"
+                condition: "location == 'toolboard'"
+              - name: "pin_config"
+                type: "choice"
+                options: ["nc_gnd", "no_gnd", "nc_vcc", "no_vcc"]
+                labels: ["NC to GND (^pin)", "NO to GND (^!pin)", "NC to VCC (!pin)", "NO to VCC (pin)"]
+                default: "nc_gnd"
+
+          - id: "2.9.3"
+            name: "BLTouch Settings"
+            klipper_section: "[bltouch]"
+            condition: "2.9.1.probe_type == 'bltouch'"
+            parameters:
+              - name: "sensor_pin"
+                type: "text"
+                description: "Probe signal pin"
+              - name: "control_pin"
+                type: "text"
+                description: "Servo control pin"
+              - name: "x_offset"
+                type: "float"
+                default: 0
+                required: true
+              - name: "y_offset"
+                type: "float"
+                default: 0
+                required: true
+              - name: "speed"
+                type: "float"
+                default: 5.0
+              - name: "samples"
+                type: "int"
+                default: 3
+              - name: "sample_retract_dist"
+                type: "float"
+                default: 3.0
+
+          - id: "2.9.4"
+            name: "Standard Probe Settings"
+            klipper_section: "[probe]"
+            condition: "2.9.1.probe_type in ['inductive', 'klicky', 'tap']"
+            parameters:
+              - name: "x_offset"
+                type: "float"
+                default: 0
+                required: true
+              - name: "y_offset"
+                type: "float"
+                default: 0
+                required: true
+              - name: "z_offset"
+                type: "float"
+                default: 0
+                description: "Set to 0, calibrate with PROBE_CALIBRATE"
+              - name: "speed"
+                type: "float"
+                default: 5.0
+              - name: "samples"
+                type: "int"
+                default: 3
+              - name: "sample_retract_dist"
+                type: "float"
+                default: 2.0
+                description: "0 for Tap probe, 2.0 for other probes - adjust based on probe_type"
+              - name: "samples_result"
+                type: "choice"
+                options: ["median", "average"]
+                default: "median"
+              - name: "samples_tolerance"
+                type: "float"
+                default: 0.006
+              - name: "samples_tolerance_retries"
+                type: "int"
+                default: 3
+
+          - id: "2.9.5"
+            name: "Beacon Settings"
+            klipper_section: "[beacon]"
+            condition: "2.9.1.probe_type == 'beacon'"
+            plugin_required: "beacon"
+            parameters:
+              - name: "serial"
+                type: "text"
+                auto_detect: true
+                required: true
+                description: "/dev/serial/by-id/usb-Beacon_..."
+              - name: "x_offset"
+                type: "float"
+                default: 0
+                required: true
+              - name: "y_offset"
+                type: "float"
+                default: 0
+                required: true
+              # Homing mode - critical for safe_z_home logic
+              - name: "homing_mode"
+                type: "choice"
+                options: ["contact", "proximity"]
+                default: "contact"
+                required: true
+                description: "Contact uses nozzle touch, proximity uses eddy sensing"
+              - name: "contact_max_hotend_temperature"
+                type: "int"
+                default: 180
+                condition: "homing_mode == 'contact'"
+                description: "Max temp for contact probing"
+              - name: "home_z_hop"
+                type: "float"
+                default: 5
+              - name: "home_z_hop_speed"
+                type: "float"
+                default: 30
+              - name: "home_xy_move_speed"
+                type: "float"
+                default: 300
+              - name: "home_autocalibrate"
+                type: "choice"
+                options: ["unhomed", "always", "never"]
+                default: "unhomed"
+              # Mesh settings
+              - name: "mesh_main_direction"
+                type: "choice"
+                options: ["x", "y"]
+                default: "x"
+              - name: "mesh_runs"
+                type: "int"
+                default: 1
+              - name: "eddy_mesh_method"
+                type: "choice"
+                options: ["rapid_scan", "scan"]
+                default: "rapid_scan"
+                description: "Mesh calibration method"
+
+          - id: "2.9.6"
+            name: "Cartographer Settings"
+            klipper_section: "[scanner]"
+            condition: "2.9.1.probe_type == 'cartographer'"
+            plugin_required: "cartographer"
+            parameters:
+              - name: "serial"
+                type: "text"
+                auto_detect: true
+                required: true
+              - name: "x_offset"
+                type: "float"
+                default: 0
+                required: true
+              - name: "y_offset"
+                type: "float"
+                default: 0
+                required: true
+              # Homing mode
+              - name: "homing_mode"
+                type: "choice"
+                options: ["touch", "scan"]
+                default: "touch"
+                required: true
+                description: "Touch uses nozzle contact, scan uses eddy sensing"
+              - name: "scanner_touch_z_offset"
+                type: "float"
+                default: 0.05
+                condition: "homing_mode == 'touch'"
+              - name: "backlash_comp"
+                type: "float"
+                default: 0.5
+              - name: "eddy_mesh_method"
+                type: "choice"
+                options: ["rapid_scan", "scan", "touch"]
+                default: "rapid_scan"
+                description: "Mesh calibration method"
+
+          - id: "2.9.7"
+            name: "BTT Eddy Settings"
+            klipper_section: "[probe_eddy_current]"
+            condition: "2.9.1.probe_type == 'btt_eddy'"
+            parameters:
+              - name: "sensor_type"
+                type: "text"
+                default: "ldc1612"
+              - name: "i2c_mcu"
+                type: "choice"
+                options: ["mcu", "toolboard"]
+                default: "toolboard"
+              - name: "i2c_bus"
+                type: "text"
+                description: "e.g., i2c1_PB6_PB7"
+              - name: "x_offset"
+                type: "float"
+                default: 0
+                required: true
+              - name: "y_offset"
+                type: "float"
+                default: 0
+                required: true
+              - name: "eddy_mesh_method"
+                type: "choice"
+                options: ["rapid_scan", "scan"]
+                default: "rapid_scan"
+                description: "Mesh calibration method"
+
+      # 2.10 Homing
+      - id: "2.10"
+        name: "Homing"
+        sections:
+          - id: "2.10.1"
+            name: "Homing Configuration"
+            parameters:
+              - name: "homing_method"
+                type: "choice"
+                options:
+                  - value: "safe_z_home"
+                    label: "Safe Z Home (standard)"
+                    condition: "2.9.1.probe_type not in ['beacon', 'cartographer']"
+                  - value: "homing_override"
+                    label: "Homing Override (sensorless, custom)"
+                  - value: "beacon_contact"
+                    label: "Beacon Contact"
+                    condition: "2.9.1.probe_type == 'beacon'"
+                  - value: "cartographer_touch"
+                    label: "Cartographer Touch"
+                    condition: "2.9.1.probe_type == 'cartographer'"
+                required: true
+
+          - id: "2.10.2"
+            name: "Safe Z Home"
+            klipper_section: "[safe_z_home]"
+            condition: "2.10.1.homing_method == 'safe_z_home'"
+            parameters:
+              - name: "home_xy_position"
+                type: "text"
+                default: "bed_center"
+                description: "X,Y position for Z homing (default: bed center)"
+              - name: "speed"
+                type: "int"
+                default: 100
+              - name: "z_hop"
+                type: "int"
+                default: 10
+              - name: "z_hop_speed"
+                type: "int"
+                default: 15
+
+          - id: "2.10.3"
+            name: "Sensorless Homing"
+            condition: "2.3.1.endstop_type == 'sensorless' or 2.4.1.endstop_type == 'sensorless'"
+            description: "TMC StallGuard configuration"
+            parameters:
+              - name: "sensorless_current_x"
+                type: "float"
+                description: "Run current during X homing (typically lower than normal)"
+              - name: "sensorless_current_y"
+                type: "float"
+                description: "Run current during Y homing"
+              - name: "homing_retract_x"
+                type: "int"
+                default: 10
+              - name: "homing_retract_y"
+                type: "int"
+                default: 10
+              - name: "use_sensorless_macros"
+                type: "bool"
+                default: true
+                description: "Generate _HOME_X, _HOME_Y macros"
+
+      # 2.11 Bed Leveling
+      - id: "2.11"
+        name: "Bed Leveling"
+        sections:
+          - id: "2.11.1"
+            name: "Leveling Type"
+            parameters:
+              - name: "leveling_type"
+                type: "choice"
+                options:
+                  - value: "none"
+                    label: "None (manual only)"
+                  - value: "z_tilt"
+                    label: "Z Tilt Adjust (2-3 motors)"
+                    condition: "2.5.1.z_motor_count >= 2 and 2.5.1.z_motor_count <= 3"
+                  - value: "qgl"
+                    label: "Quad Gantry Level (4 motors)"
+                    condition: "2.5.1.z_motor_count == 4"
+                  - value: "bed_tilt"
+                    label: "Bed Tilt (tilting bed)"
+                    condition: "2.5.1.z_motion_type == 'bed'"
+                required: true
+
+          - id: "2.11.2"
+            name: "Z Tilt"
+            klipper_section: "[z_tilt]"
+            condition: "2.11.1.leveling_type == 'z_tilt'"
+            parameters:
+              - name: "z_positions"
+                type: "text"
+                description: "Motor positions (auto-generated from Z motor count)"
+              - name: "points"
+                type: "text"
+                description: "Probe points for each motor"
+              - name: "speed"
+                type: "int"
+                default: 200
+              - name: "horizontal_move_z"
+                type: "int"
+                default: 10
+              - name: "retries"
+                type: "int"
+                default: 5
+              - name: "retry_tolerance"
+                type: "float"
+                default: 0.0075
+
+          - id: "2.11.3"
+            name: "Quad Gantry Level"
+            klipper_section: "[quad_gantry_level]"
+            condition: "2.11.1.leveling_type == 'qgl'"
+            parameters:
+              - name: "gantry_corners"
+                type: "text"
+                description: "Gantry corner positions"
+              - name: "points"
+                type: "text"
+                description: "Probe points (4 corners)"
+              - name: "speed"
+                type: "int"
+                default: 200
+              - name: "horizontal_move_z"
+                type: "int"
+                default: 10
+              - name: "retries"
+                type: "int"
+                default: 5
+              - name: "retry_tolerance"
+                type: "float"
+                default: 0.0075
+              - name: "max_adjust"
+                type: "int"
+                default: 10
+
+          - id: "2.11.4"
+            name: "Bed Mesh"
+            klipper_section: "[bed_mesh]"
+            required: true
+            description: "Mesh boundaries even if not used - sets limits for when mesh is generated"
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: true
+              - name: "speed"
+                type: "int"
+                default: 200
+              - name: "horizontal_move_z"
+                type: "int"
+                default: 5
+              - name: "mesh_min"
+                type: "text"
+                default: "auto"
+                description: "Auto-calculated from probe offset + margin"
+              - name: "mesh_max"
+                type: "text"
+                default: "auto"
+                description: "Auto-calculated from bed size - probe offset - margin"
+              - name: "probe_count"
+                type: "text"
+                default: "5,5"
+              - name: "algorithm"
+                type: "choice"
+                options: ["bicubic", "lagrange"]
+                default: "bicubic"
+              - name: "fade_start"
+                type: "float"
+                default: 0.6
+              - name: "fade_end"
+                type: "float"
+                default: 10.0
+              - name: "fade_target"
+                type: "float"
+                default: 0
+
+      # 2.12 Temperature Sensors
+      - id: "2.12"
+        name: "Temperature Sensors"
+        sections:
+          - id: "2.12.1"
+            name: "MCU Temperature"
+            klipper_section: "[temperature_sensor mcu_temp]"
+            required: false
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: true
+              - name: "sensor_type"
+                type: "text"
+                default: "temperature_mcu"
+                readonly: true
+              - name: "sensor_mcu"
+                type: "choice"
+                options: ["mcu", "toolboard", "rpi"]
+                default: "mcu"
+
+          - id: "2.12.2"
+            name: "Chamber Temperature"
+            klipper_section: "[temperature_sensor chamber]"
+            required: false
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+              - name: "sensor_type"
+                type: "choice"
+                options:
+                  - "Generic 3950"
+                  - "NTC 100K beta 3950"
+                  - "ATC Semitec 104GT-2"
+                  - "DS18B20"
+                condition: "enabled == true"
+              - name: "sensor_location"
+                type: "choice"
+                options: ["mainboard", "rpi"]
+                condition: "enabled == true"
+              - name: "sensor_pin_mainboard"
+                type: "select"
+                source: "board.thermistor_ports"
+                condition: "sensor_location == 'mainboard'"
+              - name: "sensor_pin_rpi"
+                type: "text"
+                default: "gpio4"
+                condition: "sensor_location == 'rpi' and sensor_type == 'DS18B20'"
+
+          - id: "2.12.3"
+            name: "Additional Sensors"
+            type: "list"
+            klipper_section: "[temperature_sensor {name}]"
+            required: false
+            parameters:
+              - name: "name"
+                type: "text"
+                required: true
+              - name: "sensor_type"
+                type: "choice"
+                options:
+                  - "temperature_mcu"
+                  - "Generic 3950"
+                  - "NTC 100K beta 3950"
+                  - "PT1000"
+                  - "DS18B20"
+                  - "BME280"
+                  - "AHT10"
+              - name: "sensor_pin"
+                type: "text"
+                condition: "sensor_type not in ['temperature_mcu', 'BME280', 'AHT10']"
+              - name: "i2c_address"
+                type: "text"
+                condition: "sensor_type in ['BME280', 'AHT10']"
+
+      # 2.13 LEDs
+      - id: "2.13"
+        name: "LEDs"
+        sections:
+          - id: "2.13.1"
+            name: "Toolhead LEDs"
+            klipper_section: "[neopixel toolhead_leds]"
+            required: false
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+              - name: "location"
+                type: "choice"
+                options: ["mainboard", "toolboard", "rpi"]
+                condition: "enabled == true"
+              - name: "pin_mainboard"
+                type: "select"
+                source: "board.gpio_ports"
+                condition: "location == 'mainboard'"
+              - name: "pin_toolboard"
+                type: "select"
+                source: "toolboard.gpio_ports"
+                condition: "location == 'toolboard'"
+              - name: "pin_rpi"
+                type: "text"
+                default: "gpio18"
+                condition: "location == 'rpi'"
+              - name: "chain_count"
+                type: "int"
+                default: 3
+                condition: "enabled == true"
+              - name: "color_order"
+                type: "choice"
+                options: ["GRB", "RGB", "GRBW", "RGBW"]
+                default: "GRB"
+              - name: "initial_RED"
+                type: "float"
+                default: 0.0
+              - name: "initial_GREEN"
+                type: "float"
+                default: 0.0
+              - name: "initial_BLUE"
+                type: "float"
+                default: 0.0
+              - name: "initial_WHITE"
+                type: "float"
+                default: 0.0
+                condition: "color_order in ['GRBW', 'RGBW']"
+
+          - id: "2.13.2"
+            name: "Case Light"
+            required: false
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+              - name: "type"
+                type: "choice"
+                options:
+                  - value: "neopixel"
+                    label: "Neopixel/WS2812"
+                    klipper_section: "[neopixel case_light]"
+                  - value: "pwm"
+                    label: "PWM LED strip"
+                    klipper_section: "[output_pin case_light]"
+                  - value: "onoff"
+                    label: "On/Off LED"
+                    klipper_section: "[output_pin case_light]"
+                condition: "enabled == true"
+              - name: "pin"
+                type: "select"
+                source: "board.gpio_ports"
+                condition: "enabled == true"
+              - name: "chain_count"
+                type: "int"
+                default: 10
+                condition: "type == 'neopixel'"
+              - name: "color_order"
+                type: "choice"
+                options: ["GRB", "RGB", "GRBW", "RGBW"]
+                default: "GRB"
+                condition: "type == 'neopixel'"
+
+          - id: "2.13.3"
+            name: "LED Effects Plugin"
+            plugin_required: "led_effect"
+            required: false
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+                description: "Enable LED_Effect plugin for animations"
+
+      # 2.14 Filament Sensors
+      - id: "2.14"
+        name: "Filament Sensors"
+        sections:
+          - id: "2.14.1"
+            name: "Runout Sensor"
+            klipper_section: "[filament_switch_sensor runout_sensor]"
+            required: false
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+              - name: "location"
+                type: "choice"
+                options: ["mainboard", "toolboard"]
+                condition: "enabled == true"
+              - name: "switch_pin_mainboard"
+                type: "select"
+                source: "board.endstop_ports"
+                condition: "location == 'mainboard'"
+              - name: "switch_pin_toolboard"
+                type: "select"
+                source: "toolboard.endstop_ports"
+                condition: "location == 'toolboard'"
+              - name: "pin_config"
+                type: "choice"
+                options: ["nc_gnd", "no_gnd", "nc_vcc", "no_vcc"]
+                labels: ["NC to GND (^pin)", "NO to GND (^!pin)", "NC to VCC (!pin)", "NO to VCC (pin)"]
+                default: "nc_gnd"
+                condition: "enabled == true"
+              - name: "pause_on_runout"
+                type: "bool"
+                default: true
+              - name: "runout_gcode"
+                type: "text"
+                default: "M600"
+              - name: "insert_gcode"
+                type: "text"
+                default: ""
+
+          - id: "2.14.2"
+            name: "Motion Sensor"
+            klipper_section: "[filament_motion_sensor motion_sensor]"
+            required: false
+            description: "Detects filament movement (BTT SFS, etc.)"
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+              - name: "location"
+                type: "choice"
+                options: ["mainboard", "toolboard"]
+                condition: "enabled == true"
+              - name: "switch_pin_mainboard"
+                type: "select"
+                source: "board.endstop_ports"
+                condition: "location == 'mainboard'"
+              - name: "switch_pin_toolboard"
+                type: "select"
+                source: "toolboard.endstop_ports"
+                condition: "location == 'toolboard'"
+              - name: "detection_length"
+                type: "float"
+                default: 7.0
+                description: "mm of filament movement before trigger"
+              - name: "extruder"
+                type: "text"
+                default: "extruder"
+              - name: "pause_on_runout"
+                type: "bool"
+                default: true
+
+      # 2.15 Display
+      - id: "2.15"
+        name: "Display"
+        sections:
+          - id: "2.15.1"
+            name: "Display Type"
+            klipper_section: "[display]"
+            required: false
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+              - name: "lcd_type"
+                type: "choice"
+                options:
+                  - value: "none"
+                    label: "No display"
+                  - value: "uc1701"
+                    label: "UC1701 (Mini12864)"
+                  - value: "st7920"
+                    label: "ST7920 (RepRapDiscount)"
+                  - value: "hd44780"
+                    label: "HD44780 (20x4 LCD)"
+                  - value: "ssd1306"
+                    label: "SSD1306 OLED"
+                  - value: "sh1106"
+                    label: "SH1106 OLED"
+                condition: "enabled == true"
+
+          - id: "2.15.2"
+            name: "Display Pins"
+            condition: "2.15.1.lcd_type != 'none' and 2.15.1.enabled == true"
+            parameters:
+              - name: "cs_pin"
+                type: "text"
+                description: "SPI chip select"
+              - name: "a0_pin"
+                type: "text"
+                description: "Data/Command pin"
+              - name: "rst_pin"
+                type: "text"
+                description: "Reset pin (optional)"
+              - name: "encoder_pins"
+                type: "text"
+                description: "Encoder A, B pins (e.g., ^PA1, ^PA2)"
+              - name: "click_pin"
+                type: "text"
+                description: "Encoder click pin"
+              - name: "contrast"
+                type: "int"
+                default: 63
+                range: [0, 63]
+
+          - id: "2.15.3"
+            name: "Display Menu"
+            condition: "2.15.1.enabled == true"
+            parameters:
+              - name: "menu_timeout"
+                type: "int"
+                default: 40
+              - name: "menu_root"
+                type: "text"
+                default: "__main"
+
+      # 2.16 Advanced Hardware
+      - id: "2.16"
+        name: "Advanced Hardware"
+        sections:
+          - id: "2.16.1"
+            name: "Servo"
+            klipper_section: "[servo {name}]"
+            type: "list"
+            required: false
+            description: "For Klicky dock, filament cutter, etc."
+            parameters:
+              - name: "name"
+                type: "text"
+                required: true
+              - name: "pin"
+                type: "select"
+                source: "board.pwm_ports"
+              - name: "initial_angle"
+                type: "int"
+                default: 0
+                range: [0, 180]
+              - name: "maximum_servo_angle"
+                type: "int"
+                default: 180
+              - name: "minimum_pulse_width"
+                type: "float"
+                default: 0.001
+              - name: "maximum_pulse_width"
+                type: "float"
+                default: 0.002
+
+          - id: "2.16.2"
+            name: "G-Code Buttons"
+            klipper_section: "[gcode_button {name}]"
+            type: "list"
+            required: false
+            parameters:
+              - name: "name"
+                type: "text"
+                required: true
+              - name: "pin"
+                type: "text"
+                required: true
+              - name: "pin_config"
+                type: "choice"
+                options: ["nc_gnd", "no_gnd"]
+                default: "nc_gnd"
+              - name: "press_gcode"
+                type: "text"
+              - name: "release_gcode"
+                type: "text"
+
+          - id: "2.16.3"
+            name: "Output Pins"
+            klipper_section: "[output_pin {name}]"
+            type: "list"
+            required: false
+            description: "Generic GPIO outputs"
+            parameters:
+              - name: "name"
+                type: "text"
+                required: true
+              - name: "pin"
+                type: "select"
+                source: "board.gpio_ports"
+              - name: "pwm"
+                type: "bool"
+                default: false
+              - name: "value"
+                type: "float"
+                default: 0
+              - name: "shutdown_value"
+                type: "float"
+                default: 0
+              - name: "cycle_time"
+                type: "float"
+                default: 0.01
+                condition: "pwm == true"
+
+          - id: "2.16.4"
+            name: "Force Move"
+            klipper_section: "[force_move]"
+            required: false
+            parameters:
+              - name: "enable_force_move"
+                type: "bool"
+                default: true
+                description: "Allows SET_KINEMATIC_POSITION for recovery"
+
+          - id: "2.16.5"
+            name: "Firmware Retraction"
+            klipper_section: "[firmware_retraction]"
+            required: false
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+              - name: "retract_length"
+                type: "float"
+                default: 0.5
+              - name: "retract_speed"
+                type: "int"
+                default: 35
+              - name: "unretract_extra_length"
+                type: "float"
+                default: 0
+              - name: "unretract_speed"
+                type: "int"
+                default: 35
+
+          - id: "2.16.6"
+            name: "Skew Correction"
+            klipper_section: "[skew_correction]"
+            required: false
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+                description: "Enable after calibrating with SKEW_PROFILE"
+
+          - id: "2.16.7"
+            name: "Multi-Pin Groups"
+            klipper_section: "[multi_pin {name}]"
+            type: "list"
+            required: false
+            description: "Combine multiple pins for fans/heaters"
+            parameters:
+              - name: "name"
+                type: "text"
+                required: true
+                description: "e.g., 'Radiator', 'RSCS'"
+              - name: "pins"
+                type: "text"
+                required: true
+                description: "Comma-separated pins, e.g., PA2, PA3"
+
+  - id: "3"
+    name: "Tuning & Optimization"
+    description: "Optional features and calibration"
+    generates_config: true
+    sections:
+      # 3.1 TMC Autotune
+      - id: "3.1"
+        name: "TMC Autotune"
+        plugin_required: "klipper_tmc_autotune"
+        description: "Automatic TMC driver optimization"
+        sections:
+          - id: "3.1.1"
+            name: "Autotune Settings"
+            klipper_section: "[autotune_tmc]"
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+                description: "Check and install plugin during config generation"
+              - name: "motor_x"
+                type: "select"
+                source: "motor_presets"
+                condition: "enabled == true"
+              - name: "motor_y"
+                type: "select"
+                source: "motor_presets"
+                condition: "enabled == true"
+              - name: "motor_z"
+                type: "select"
+                source: "motor_presets"
+                condition: "enabled == true"
+              - name: "motor_extruder"
+                type: "select"
+                source: "motor_presets"
+                condition: "enabled == true"
+              - name: "voltage"
+                type: "choice"
+                options: [24, 48]
+                default: 24
+                condition: "enabled == true"
+              - name: "tuning_goal"
+                type: "choice"
+                options: ["auto", "silent", "performance", "autoswitch"]
+                default: "auto"
+                condition: "enabled == true"
+
+      # 3.2 Input Shaper
+      - id: "3.2"
+        name: "Input Shaper"
+        klipper_section: "[input_shaper]"
+        description: "Resonance compensation"
+        sections:
+          - id: "3.2.1"
+            name: "Shaper Configuration"
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: true
+              - name: "shaper_type_x"
+                type: "choice"
+                options: ["mzv", "ei", "2hump_ei", "3hump_ei", "zv", "zvd"]
+                default: "mzv"
+                description: "Run SHAPER_CALIBRATE to find optimal"
+              - name: "shaper_freq_x"
+                type: "float"
+                default: 0
+                description: "Set to 0, calibrate with accelerometer"
+              - name: "shaper_type_y"
+                type: "choice"
+                options: ["mzv", "ei", "2hump_ei", "3hump_ei", "zv", "zvd"]
+                default: "mzv"
+              - name: "shaper_freq_y"
+                type: "float"
+                default: 0
+              - name: "damping_ratio_x"
+                type: "float"
+                default: 0.1
+              - name: "damping_ratio_y"
+                type: "float"
+                default: 0.1
+
+          - id: "3.2.2"
+            name: "ADXL345 Accelerometer"
+            klipper_section: "[adxl345]"
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+              - name: "location"
+                type: "choice"
+                options: ["rpi", "toolboard", "mainboard"]
+                default: "rpi"
+                condition: "enabled == true"
+              - name: "cs_pin_rpi"
+                type: "text"
+                default: "rpi:None"
+                condition: "location == 'rpi'"
+              - name: "cs_pin_toolboard"
+                type: "select"
+                source: "toolboard.spi_ports"
+                condition: "location == 'toolboard'"
+              - name: "spi_bus"
+                type: "text"
+                condition: "enabled == true"
+              - name: "axes_map"
+                type: "text"
+                default: "x,y,z"
+                description: "Axis mapping (may need adjustment)"
+
+          - id: "3.2.3"
+            name: "Resonance Tester"
+            klipper_section: "[resonance_tester]"
+            condition: "3.2.2.enabled == true"
+            parameters:
+              - name: "accel_chip"
+                type: "text"
+                default: "adxl345"
+              - name: "probe_points"
+                type: "text"
+                default: "bed_center"
+                description: "X,Y,Z point for testing (default: bed center)"
+              - name: "accel_per_hz"
+                type: "int"
+                default: 75
+              - name: "hz_per_sec"
+                type: "int"
+                default: 1
+
+      # 3.3 Pressure Advance
+      - id: "3.3"
+        name: "Pressure Advance"
+        description: "Configured per-extruder in section 2.6"
+        parameters:
+          - name: "pressure_advance"
+            type: "float"
+            default: 0
+            description: "Set based on extruder type, tune with PA test"
+          - name: "smooth_time"
+            type: "float"
+            default: 0.040
+            range: [0.01, 0.2]
+
+      # 3.4 Idle Timeout
+      - id: "3.4"
+        name: "Idle Timeout"
+        klipper_section: "[idle_timeout]"
+        parameters:
+          - name: "timeout"
+            type: "int"
+            default: 600
+            description: "Seconds before heaters turn off"
+          - name: "gcode"
+            type: "text"
+            default: "TURN_OFF_HEATERS"
+
+      # 3.5 Virtual SD Card
+      - id: "3.5"
+        name: "Virtual SD Card"
+        klipper_section: "[virtual_sdcard]"
+        parameters:
+          - name: "path"
+            type: "text"
+            default: "~/printer_data/gcodes"
+          - name: "on_error_gcode"
+            type: "text"
+            default: "CANCEL_PRINT"
+
+      # 3.6 Macros
+      - id: "3.6"
+        name: "Macros"
+        generates:
+          - "macros.cfg"
+          - "macros-helpers.cfg"
+        sections:
+          - id: "3.6.1"
+            name: "START_PRINT Macro"
+            parameters:
+              - name: "preheat_extruder_temp"
+                type: "int"
+                default: 150
+                description: "Pre-heat temp while homing/leveling"
+              - name: "home_before_print"
+                type: "bool"
+                default: true
+              - name: "z_tilt_before_print"
+                type: "bool"
+                default: true
+                condition: "2.11.1.leveling_type in ['z_tilt', 'qgl']"
+              - name: "bed_mesh_before_print"
+                type: "bool"
+                default: true
+              - name: "purge_line"
+                type: "bool"
+                default: true
+              - name: "purge_line_length"
+                type: "int"
+                default: 50
+                condition: "purge_line == true"
+
+          - id: "3.6.2"
+            name: "END_PRINT Macro"
+            parameters:
+              - name: "retract_length"
+                type: "float"
+                default: 10
+              - name: "park_x"
+                type: "int"
+                default: 10
+              - name: "park_y"
+                type: "int"
+                default: 350
+              - name: "park_z_hop"
+                type: "int"
+                default: 20
+              - name: "disable_motors"
+                type: "bool"
+                default: true
+              - name: "turn_off_heaters"
+                type: "bool"
+                default: true
+              - name: "turn_off_fans"
+                type: "bool"
+                default: true
+
+          - id: "3.6.3"
+            name: "PAUSE/RESUME Macros"
+            parameters:
+              - name: "pause_park_x"
+                type: "int"
+                default: 10
+              - name: "pause_park_y"
+                type: "int"
+                default: 10
+              - name: "pause_z_hop"
+                type: "int"
+                default: 10
+              - name: "resume_prime"
+                type: "float"
+                default: 1.0
+                description: "Extrusion length when resuming"
+
+          - id: "3.6.4"
+            name: "Slicer G-code"
+            description: "Generate slicer start/end code snippets"
+            parameters:
+              - name: "slicer"
+                type: "choice"
+                options:
+                  - value: "orcaslicer"
+                    label: "OrcaSlicer / BambuStudio"
+                  - value: "prusaslicer"
+                    label: "PrusaSlicer / SuperSlicer"
+                  - value: "cura"
+                    label: "Cura"
+                  - value: "simplify3d"
+                    label: "Simplify3D"
+              - name: "generate_snippets"
+                type: "bool"
+                default: true
+                description: "Show slicer code to copy after generation"
+
+      # 3.7 Save Variables
+      - id: "3.7"
+        name: "Save Variables"
+        klipper_section: "[save_variables]"
+        parameters:
+          - name: "enabled"
+            type: "bool"
+            default: true
+          - name: "filename"
+            type: "text"
+            default: "~/printer_data/config/variables.cfg"
+
+      # 3.8 Respond
+      - id: "3.8"
+        name: "Console Messages"
+        klipper_section: "[respond]"
+        parameters:
+          - name: "enabled"
+            type: "bool"
+            default: true
+          - name: "default_type"
+            type: "choice"
+            options: ["echo", "command", "error"]
+            default: "echo"
+          - name: "default_prefix"
+            type: "text"
+            default: "echo: "
+
+      # 3.9 Exclude Object
+      - id: "3.9"
+        name: "Exclude Object"
+        klipper_section: "[exclude_object]"
+        description: "Cancel individual objects during print"
+        parameters:
+          - name: "enabled"
+            type: "bool"
+            default: true
+            description: "Requires slicer support (label objects)"
+
+      # 3.10 Arc Support
+      - id: "3.10"
+        name: "Arc Support"
+        klipper_section: "[gcode_arcs]"
+        description: "G2/G3 arc commands"
+        parameters:
+          - name: "enabled"
+            type: "bool"
+            default: true
+          - name: "resolution"
+            type: "float"
+            default: 0.1
+            description: "Arc segment length in mm"
+
+      # 3.11 Pause Resume
+      - id: "3.11"
+        name: "Pause Resume"
+        klipper_section: "[pause_resume]"
+        parameters:
+          - name: "recover_velocity"
+            type: "int"
+            default: 50
+            description: "Velocity when returning to print position"
+
+      # 3.12 KAMP (Adaptive Meshing)
+      - id: "3.12"
+        name: "KAMP - Adaptive Meshing"
+        plugin_required: "Klipper-Adaptive-Meshing-Purging"
+        description: "Mesh only the print area"
+        parameters:
+          - name: "enabled"
+            type: "bool"
+            default: false
+          - name: "mesh_margin"
+            type: "int"
+            default: 5
+            condition: "enabled == true"
+          - name: "fuzz_amount"
+            type: "int"
+            default: 0
+            condition: "enabled == true"
+          - name: "adaptive_purge"
+            type: "bool"
+            default: true
+            condition: "enabled == true"
+
+# Motor presets for current selection
+motor_presets:
+  "LDO-42STH48-2004MAH":
+    run_current: 1.1
+    description: "High torque NEMA17"
+  "Moons MS17HD6P4200":
+    run_current: 1.1
+    description: "High torque alternative"
+  "OMC 17HS19-2004S1":
+    run_current: 1.0
+    description: "Budget option"
+  "LDO-36STH20-1004AHG":
+    run_current: 0.6
+    description: "Extruder pancake"
+  "Moons CSE14HRA1L410A":
+    run_current: 0.85
+    description: "Extruder NEMA14"
+
+# Pin modifier mappings
+pin_modifiers:
+  nc_gnd:
+    prefix: "^"
+    description: "NC switch to GND (pull-up enabled)"
+  no_gnd:
+    prefix: "^!"
+    description: "NO switch to GND (pull-up + invert)"
+  nc_vcc:
+    prefix: "!"
+    description: "NC switch to VCC (invert only)"
+  no_vcc:
+    prefix: ""
+    description: "NO switch to VCC (no modifiers)"
+

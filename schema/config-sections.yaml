@@ -1,0 +1,1158 @@
+# config-sections.yaml
+# Jinja2 templates for generating Klipper configuration from wizard state
+# Version: 2.0
+
+# Template syntax:
+#   {{ variable }} - Insert value from wizard state
+#   {% if condition %} - Conditional block
+#   {# comment #} - Template comment
+#   Filters: | default(value), | int, | float, | lower
+
+# -----------------------------------------------------------------------------
+# MCU Configuration
+# -----------------------------------------------------------------------------
+mcu:
+  main:
+    template: |
+      [mcu]
+      serial: {{ mcu.main.serial }}
+      {% if mcu.main.restart_method is defined and mcu.main.restart_method and mcu.main.restart_method != 'command' %}
+      restart_method: {{ mcu.main.restart_method }}
+      {% endif %}
+
+  toolboard:
+    condition: "mcu.toolboard.enabled"
+    template: |
+      [mcu toolboard]
+      {% if mcu.toolboard.connection_type == 'CAN' %}
+      canbus_uuid: {{ mcu.toolboard.canbus_uuid }}
+      {% else %}
+      serial: {{ mcu.toolboard.serial }}
+      {% endif %}
+
+  host:
+    condition: "mcu.host.enabled"
+    template: |
+      [mcu rpi]
+      serial: /tmp/klipper_host_mcu
+
+# -----------------------------------------------------------------------------
+# Printer Settings
+# -----------------------------------------------------------------------------
+printer:
+  template: |
+    [printer]
+    kinematics: {{ printer.kinematics }}
+    max_velocity: {{ printer.max_velocity | default(300) }}
+    max_accel: {{ printer.max_accel | default(3000) }}
+    max_z_velocity: {{ printer.max_z_velocity | default(15) }}
+    max_z_accel: {{ printer.max_z_accel | default(350) }}
+    {% if printer.square_corner_velocity %}
+    square_corner_velocity: {{ printer.square_corner_velocity }}
+    {% endif %}
+    {% if printer.minimum_cruise_ratio %}
+    minimum_cruise_ratio: {{ printer.minimum_cruise_ratio }}
+    {% endif %}
+
+# -----------------------------------------------------------------------------
+# Steppers
+# -----------------------------------------------------------------------------
+stepper_x:
+  template: |
+    [stepper_x]
+    step_pin: {{ board.pins[stepper_x.motor_port].step }}
+    dir_pin: {% if stepper_x.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_x.motor_port].dir }}
+    enable_pin: !{{ board.pins[stepper_x.motor_port].enable }}
+    rotation_distance: {{ stepper_x.belt_pitch * stepper_x.pulley_teeth }}
+    microsteps: {{ stepper_x.microsteps | default(16) }}
+    full_steps_per_rotation: {{ stepper_x.full_steps_per_rotation | default(200) }}
+    {% if stepper_x.endstop_type == 'sensorless' %}
+    endstop_pin: {{ stepper_x.driver_type | lower }}_stepper_x:virtual_endstop
+    {% else %}
+    {% if stepper_x.endstop_port_toolboard is defined and stepper_x.endstop_port_toolboard %}
+    endstop_pin: toolboard:{{ pin_config[stepper_x.endstop_config] }}{{ toolboard.pins[stepper_x.endstop_port_toolboard].signal }}
+    {% else %}
+    endstop_pin: {{ pin_config[stepper_x.endstop_config] }}{{ board.pins[stepper_x.endstop_port].signal }}
+    {% endif %}
+    {% endif %}
+    position_endstop: {{ stepper_x.position_endstop }}
+    position_min: {{ stepper_x.position_min | default(0) }}
+    position_max: {{ stepper_x.position_max | default(printer.bed_size_x) }}
+    homing_speed: {{ stepper_x.homing_speed | default(50) }}
+    {% if stepper_x.endstop_type != 'sensorless' %}
+    # Allow explicit 0 (required for some probe/virtual-endstop homing behaviors)
+    homing_retract_dist: {{ stepper_x.homing_retract_dist if (stepper_x.homing_retract_dist is defined) else 5 }}
+    {% else %}
+    homing_retract_dist: {{ stepper_x.homing_retract_dist | default(0) }}
+    {% endif %}
+    {% if stepper_x.second_homing_speed %}
+    second_homing_speed: {{ stepper_x.second_homing_speed }}
+    {% endif %}
+
+stepper_y:
+  template: |
+    [stepper_y]
+    step_pin: {{ board.pins[stepper_y.motor_port].step }}
+    dir_pin: {% if stepper_y.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_y.motor_port].dir }}
+    enable_pin: !{{ board.pins[stepper_y.motor_port].enable }}
+    rotation_distance: {{ stepper_y.belt_pitch * stepper_y.pulley_teeth }}
+    microsteps: {{ stepper_y.microsteps | default(16) }}
+    full_steps_per_rotation: {{ stepper_y.full_steps_per_rotation | default(200) }}
+    {% if stepper_y.endstop_type == 'sensorless' %}
+    endstop_pin: {{ stepper_y.driver_type | lower }}_stepper_y:virtual_endstop
+    {% else %}
+    {% if stepper_y.endstop_port_toolboard is defined and stepper_y.endstop_port_toolboard %}
+    endstop_pin: toolboard:{{ pin_config[stepper_y.endstop_config] }}{{ toolboard.pins[stepper_y.endstop_port_toolboard].signal }}
+    {% else %}
+    endstop_pin: {{ pin_config[stepper_y.endstop_config] }}{{ board.pins[stepper_y.endstop_port].signal }}
+    {% endif %}
+    {% endif %}
+    position_endstop: {{ stepper_y.position_endstop }}
+    position_min: {{ stepper_y.position_min | default(0) }}
+    position_max: {{ stepper_y.position_max | default(printer.bed_size_y) }}
+    homing_speed: {{ stepper_y.homing_speed | default(50) }}
+    {% if stepper_y.endstop_type != 'sensorless' %}
+    # Allow explicit 0 (required for some probe/virtual-endstop homing behaviors)
+    homing_retract_dist: {{ stepper_y.homing_retract_dist if (stepper_y.homing_retract_dist is defined) else 5 }}
+    {% else %}
+    homing_retract_dist: {{ stepper_y.homing_retract_dist | default(0) }}
+    {% endif %}
+
+stepper_z:
+  template: |
+    [stepper_z]
+    step_pin: {{ board.pins[stepper_z.motor_port].step }}
+    dir_pin: {% if stepper_z.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_z.motor_port].dir }}
+    enable_pin: !{{ board.pins[stepper_z.motor_port].enable }}
+    {% if stepper_z.drive_type == 'leadscrew' %}
+    rotation_distance: {{ stepper_z.leadscrew_pitch }}
+    {% else %}
+    rotation_distance: {{ stepper_z.belt_pitch * stepper_z.pulley_teeth }}
+    {% endif %}
+    {% if stepper_z.gear_ratio %}
+    gear_ratio: {{ stepper_z.gear_ratio }}
+    {% endif %}
+    microsteps: {{ stepper_z.microsteps | default(32) }}
+    full_steps_per_rotation: {{ stepper_z.full_steps_per_rotation | default(200) }}
+    {% if stepper_z.endstop_type == 'probe' %}
+    endstop_pin: probe:z_virtual_endstop
+    {% elif stepper_z.endstop_type == 'physical_mainboard' %}
+    endstop_pin: {{ pin_config[stepper_z.switch_config] }}{{ board.pins[stepper_z.endstop_port].signal }}
+    {% elif stepper_z.endstop_type == 'physical_toolboard' %}
+    endstop_pin: toolboard:{{ pin_config[stepper_z.switch_config] }}{{ toolboard.pins[stepper_z.toolboard_endstop_port].signal }}
+    {% endif %}
+    position_min: {{ stepper_z.position_min | default(-5) }}
+    position_max: {{ stepper_z.position_max | default(printer.bed_size_z) }}
+    homing_speed: {{ stepper_z.homing_speed | default(10) }}
+    homing_retract_dist: {{ stepper_z.homing_retract_dist | default(0) }}
+
+# AWD (All Wheel Drive) Secondary Steppers
+stepper_x1:
+  condition: "printer.awd_enabled"
+  template: |
+    [stepper_x1]
+    step_pin: {{ board.pins[stepper_x1.motor_port].step }}
+    dir_pin: {% if stepper_x1.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_x1.motor_port].dir }}
+    enable_pin: !{{ board.pins[stepper_x1.motor_port].enable }}
+    rotation_distance: {{ (stepper_x1.belt_pitch | default(stepper_x.belt_pitch)) * (stepper_x1.pulley_teeth | default(stepper_x.pulley_teeth)) }}
+    microsteps: {{ stepper_x1.microsteps | default(stepper_x.microsteps) | default(32) }}
+    full_steps_per_rotation: {{ stepper_x1.full_steps_per_rotation | default(stepper_x.full_steps_per_rotation) | default(200) }}
+
+stepper_y1:
+  condition: "printer.awd_enabled"
+  template: |
+    [stepper_y1]
+    step_pin: {{ board.pins[stepper_y1.motor_port].step }}
+    dir_pin: {% if stepper_y1.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_y1.motor_port].dir }}
+    enable_pin: !{{ board.pins[stepper_y1.motor_port].enable }}
+    rotation_distance: {{ (stepper_y1.belt_pitch | default(stepper_y.belt_pitch)) * (stepper_y1.pulley_teeth | default(stepper_y.pulley_teeth)) }}
+    microsteps: {{ stepper_y1.microsteps | default(stepper_y.microsteps) | default(32) }}
+    full_steps_per_rotation: {{ stepper_y1.full_steps_per_rotation | default(stepper_y.full_steps_per_rotation) | default(200) }}
+
+# -----------------------------------------------------------------------------
+# TMC Drivers
+# -----------------------------------------------------------------------------
+tmc_stepper_x:
+  template: |
+    [{{ stepper_x.driver_type | lower }} stepper_x]
+    {% if stepper_x.driver_protocol == 'spi' %}
+    cs_pin: {{ board.pins[stepper_x.motor_port].cs }}
+    spi_software_miso_pin: {{ board.spi.miso }}
+    spi_software_mosi_pin: {{ board.spi.mosi }}
+    spi_software_sclk_pin: {{ board.spi.sclk }}
+    {% else %}
+    uart_pin: {{ board.pins[stepper_x.motor_port].uart }}
+    {% endif %}
+    run_current: {{ stepper_x.run_current }}
+    interpolate: {{ stepper_x.interpolate | default(false) | lower }}
+    {% if stepper_x.driver_protocol == 'spi' %}
+    sense_resistor: {{ stepper_x.sense_resistor | default(0.075) }}
+    {% endif %}
+    {% if stepper_x.driver_type == 'TMC5160' %}
+    driver_tbl: {{ stepper_x.driver_tbl | default(1) }}
+    driver_toff: {{ stepper_x.driver_toff | default(3) }}
+    driver_diss2g: {{ stepper_x.driver_diss2g | default(1) }}
+    driver_diss2vs: {{ stepper_x.driver_diss2vs | default(1) }}
+    {% endif %}
+    {% if stepper_x.endstop_type == 'sensorless' %}
+    diag_pin: ^{{ board.pins[stepper_x.motor_port].diag }}
+    driver_SGTHRS: {{ stepper_x.driver_SGTHRS | default(70) }}
+    {% endif %}
+
+tmc_stepper_y:
+  template: |
+    [{{ stepper_y.driver_type | lower }} stepper_y]
+    {% if stepper_y.driver_protocol == 'spi' %}
+    cs_pin: {{ board.pins[stepper_y.motor_port].cs }}
+    spi_software_miso_pin: {{ board.spi.miso }}
+    spi_software_mosi_pin: {{ board.spi.mosi }}
+    spi_software_sclk_pin: {{ board.spi.sclk }}
+    {% else %}
+    uart_pin: {{ board.pins[stepper_y.motor_port].uart }}
+    {% endif %}
+    run_current: {{ stepper_y.run_current }}
+    interpolate: {{ stepper_y.interpolate | default(false) | lower }}
+    {% if stepper_y.driver_protocol == 'spi' %}
+    sense_resistor: {{ stepper_y.sense_resistor | default(0.075) }}
+    {% endif %}
+    {% if stepper_y.driver_type == 'TMC5160' %}
+    driver_tbl: {{ stepper_y.driver_tbl | default(1) }}
+    driver_toff: {{ stepper_y.driver_toff | default(3) }}
+    driver_diss2g: {{ stepper_y.driver_diss2g | default(1) }}
+    driver_diss2vs: {{ stepper_y.driver_diss2vs | default(1) }}
+    {% endif %}
+    {% if stepper_y.endstop_type == 'sensorless' %}
+    diag_pin: ^{{ board.pins[stepper_y.motor_port].diag }}
+    driver_SGTHRS: {{ stepper_y.driver_SGTHRS | default(70) }}
+    {% endif %}
+
+tmc_stepper_z:
+  template: |
+    [{{ stepper_z.driver_type | default('TMC2209') | lower }} stepper_z]
+    uart_pin: {{ board.pins[stepper_z.motor_port].uart }}
+    run_current: {{ stepper_z.run_current | default(0.8) }}
+    interpolate: {{ stepper_z.interpolate | default(false) | lower }}
+
+# AWD TMC Drivers
+tmc_stepper_x1:
+  condition: "printer.awd_enabled"
+  template: |
+    [{{ stepper_x1.driver_type | lower }} stepper_x1]
+    {% if stepper_x1.driver_protocol == 'spi' %}
+    cs_pin: {{ board.pins[stepper_x1.motor_port].cs }}
+    spi_software_miso_pin: {{ board.spi.miso }}
+    spi_software_mosi_pin: {{ board.spi.mosi }}
+    spi_software_sclk_pin: {{ board.spi.sclk }}
+    {% else %}
+    uart_pin: {{ board.pins[stepper_x1.motor_port].uart }}
+    {% endif %}
+    run_current: {{ stepper_x1.run_current }}
+    interpolate: {{ stepper_x1.interpolate | default(false) | lower }}
+    {% if stepper_x1.driver_protocol == 'spi' %}
+    sense_resistor: {{ stepper_x1.sense_resistor | default(0.075) }}
+    {% endif %}
+    {% if stepper_x1.driver_type == 'TMC5160' %}
+    driver_tbl: {{ stepper_x1.driver_tbl | default(1) }}
+    driver_toff: {{ stepper_x1.driver_toff | default(3) }}
+    driver_diss2g: {{ stepper_x1.driver_diss2g | default(1) }}
+    driver_diss2vs: {{ stepper_x1.driver_diss2vs | default(1) }}
+    {% endif %}
+
+tmc_stepper_y1:
+  condition: "printer.awd_enabled"
+  template: |
+    [{{ stepper_y1.driver_type | lower }} stepper_y1]
+    {% if stepper_y1.driver_protocol == 'spi' %}
+    cs_pin: {{ board.pins[stepper_y1.motor_port].cs }}
+    spi_software_miso_pin: {{ board.spi.miso }}
+    spi_software_mosi_pin: {{ board.spi.mosi }}
+    spi_software_sclk_pin: {{ board.spi.sclk }}
+    {% else %}
+    uart_pin: {{ board.pins[stepper_y1.motor_port].uart }}
+    {% endif %}
+    run_current: {{ stepper_y1.run_current }}
+    interpolate: {{ stepper_y1.interpolate | default(false) | lower }}
+    {% if stepper_y1.driver_protocol == 'spi' %}
+    sense_resistor: {{ stepper_y1.sense_resistor | default(0.075) }}
+    {% endif %}
+    {% if stepper_y1.driver_type == 'TMC5160' %}
+    driver_tbl: {{ stepper_y1.driver_tbl | default(1) }}
+    driver_toff: {{ stepper_y1.driver_toff | default(3) }}
+    driver_diss2g: {{ stepper_y1.driver_diss2g | default(1) }}
+    driver_diss2vs: {{ stepper_y1.driver_diss2vs | default(1) }}
+    {% endif %}
+
+# -----------------------------------------------------------------------------
+# Extruder
+# -----------------------------------------------------------------------------
+extruder:
+  template: |
+    [extruder]
+    {% if extruder.location == 'toolboard' %}
+    step_pin: toolboard:{{ toolboard.pins[extruder.motor_port_toolboard].step }}
+    dir_pin: {% if extruder.dir_pin_inverted %}!{% endif %}toolboard:{{ toolboard.pins[extruder.motor_port_toolboard].dir }}
+    enable_pin: !toolboard:{{ toolboard.pins[extruder.motor_port_toolboard].enable }}
+    {% else %}
+    step_pin: {{ board.pins[extruder.motor_port_mainboard].step }}
+    dir_pin: {% if extruder.dir_pin_inverted %}!{% endif %}{{ board.pins[extruder.motor_port_mainboard].dir }}
+    enable_pin: !{{ board.pins[extruder.motor_port_mainboard].enable }}
+    {% endif %}
+    rotation_distance: {{ extruder_presets[extruder.extruder_type].rotation_distance }}
+    gear_ratio: {{ extruder_presets[extruder.extruder_type].gear_ratio }}
+    microsteps: {{ extruder.microsteps | default(16) }}
+    full_steps_per_rotation: {{ extruder.full_steps_per_rotation | default(200) }}
+    nozzle_diameter: {{ extruder.nozzle_diameter | default(0.4) }}
+    filament_diameter: {{ extruder.filament_diameter | default(1.75) }}
+    {% if extruder.heater_location == 'toolboard' %}
+    heater_pin: toolboard:{{ toolboard.pins[extruder.heater_port_toolboard].signal }}
+    {% else %}
+    heater_pin: {{ board.pins[extruder.heater_port_mainboard].signal }}
+    {% endif %}
+    max_power: {{ extruder.max_power | default(1.0) }}
+    {% if extruder.sensor_location == 'toolboard' %}
+    sensor_pin: toolboard:{{ toolboard.pins[extruder.sensor_port_toolboard].signal }}
+    {% else %}
+    sensor_pin: {{ board.pins[extruder.sensor_port_mainboard].signal }}
+    {% endif %}
+    sensor_type: {{ extruder.sensor_type }}
+    {% if extruder.pullup_resistor %}
+    pullup_resistor: {{ extruder.pullup_resistor }}
+    {% endif %}
+    min_temp: {{ extruder.min_temp | default(0) }}
+    max_temp: {{ extruder.max_temp | default(300) }}
+    min_extrude_temp: {{ extruder.min_extrude_temp | default(170) }}
+    max_extrude_only_distance: {{ extruder.max_extrude_only_distance | default(150) }}
+    max_extrude_cross_section: {{ extruder.max_extrude_cross_section | default(5) }}
+    pressure_advance: {{ extruder_presets[extruder.extruder_type].default_pa | default(0.04) }}
+    pressure_advance_smooth_time: 0.040
+    # PID values - run PID_CALIBRATE HEATER=extruder TARGET=240
+    control: pid
+    pid_Kp: 0
+    pid_Ki: 0
+    pid_Kd: 0
+
+# -----------------------------------------------------------------------------
+# Heater Bed
+# -----------------------------------------------------------------------------
+heater_bed:
+  template: |
+    [heater_bed]
+    heater_pin: {{ board.pins[heater_bed.heater_pin].signal }}
+    sensor_pin: {{ board.pins[heater_bed.sensor_port].signal }}
+    sensor_type: {{ heater_bed.sensor_type }}
+    {% if heater_bed.pullup_resistor %}
+    pullup_resistor: {{ heater_bed.pullup_resistor }}
+    {% endif %}
+    max_power: {{ heater_bed.max_power | default(1.0) }}
+    {% if heater_bed.pwm_cycle_time is defined and heater_bed.pwm_cycle_time and heater_bed.pwm_cycle_time != 0.0166 %}
+    pwm_cycle_time: {{ heater_bed.pwm_cycle_time }}
+    {% endif %}
+    min_temp: {{ heater_bed.min_temp | default(0) }}
+    max_temp: {{ heater_bed.max_temp | default(120) }}
+    # PID values - run PID_CALIBRATE HEATER=heater_bed TARGET=60
+    control: {{ heater_bed.control | default('pid') }}
+    pid_Kp: 0
+    pid_Ki: 0
+    pid_Kd: 0
+
+# -----------------------------------------------------------------------------
+# Fans
+# -----------------------------------------------------------------------------
+fan:
+  template: |
+    [fan]
+    {% if fans.part_cooling.location == 'toolboard' %}
+    pin: toolboard:{{ toolboard.pins[fans.part_cooling.pin_toolboard].signal }}
+    {% else %}
+    pin: {{ board.pins[fans.part_cooling.pin_mainboard].signal }}
+    {% endif %}
+    max_power: {{ fans.part_cooling.max_power | default(1.0) }}
+    kick_start_time: {{ fans.part_cooling.kick_start_time | default(0.5) }}
+    off_below: {{ fans.part_cooling.off_below | default(0.1) }}
+    cycle_time: {{ fans.part_cooling.cycle_time | default(0.010) }}
+
+heater_fan:
+  template: |
+    [heater_fan hotend_fan]
+    {% if fans.hotend.location == 'toolboard' %}
+    pin: toolboard:{{ toolboard.pins[fans.hotend.pin_toolboard].signal }}
+    {% else %}
+    pin: {{ board.pins[fans.hotend.pin_mainboard].signal }}
+    {% endif %}
+    heater: {{ fans.hotend.heater | default('extruder') }}
+    heater_temp: {{ fans.hotend.heater_temp | default(50) }}
+    fan_speed: {{ fans.hotend.fan_speed | default(1.0) }}
+
+    # Additional heater-controlled fans (Radiator, hotend_pump, etc.)
+    {% if fans.additional_fans %}
+    {% for fan in fans.additional_fans %}
+    {% if fan.control_mode | default('manual') == 'heater' %}
+    [heater_fan {{ fan.name }}]
+    {% if fan.pin_type == 'multi_pin' %}
+    pin: multi_pin:{{ fan.multi_pin_name }}
+    {% else %}
+    {% if fan.location | default('mainboard') == 'toolboard' %}
+    pin: toolboard:{{ toolboard.pins[fan.pin].signal }}
+    {% else %}
+    pin: {{ board.pins[fan.pin].signal }}
+    {% endif %}
+    {% endif %}
+    heater: {{ fan.heater | default('extruder') }}
+    heater_temp: {{ fan.heater_temp | default(50) }}
+    fan_speed: {{ fan.fan_speed | default(1.0) }}
+
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
+controller_fan:
+  condition: "fans.controller.enabled"
+  template: |
+    [controller_fan controller_fan]
+    pin: {{ board.pins[fans.controller.pin].signal }}
+    kick_start_time: {{ fans.controller.kick_start_time | default(0.5) }}
+    stepper: {{ fans.controller.stepper | default('stepper_x') }}
+    idle_timeout: {{ fans.controller.idle_timeout | default(60) }}
+    idle_speed: {{ fans.controller.idle_speed | default(0.5) }}
+
+# Generic fans (RSCS, Nevermore, exhaust, etc.)
+fan_generic:
+  condition: "fans.additional_fans"
+  type: "list"
+  template: |
+    {% for fan in fans.additional_fans %}
+    {% if fan.control_mode | default('manual') != 'heater' %}
+    [fan_generic {{ fan.name }}]
+    {% if fan.pin_type == 'multi_pin' %}
+    pin: multi_pin:{{ fan.multi_pin_name }}
+    {% else %}
+    {% if fan.location | default('mainboard') == 'toolboard' %}
+    pin: toolboard:{{ toolboard.pins[fan.pin].signal }}
+    {% else %}
+    pin: {{ board.pins[fan.pin].signal }}
+    {% endif %}
+    {% endif %}
+    max_power: {{ fan.max_power | default(1.0) }}
+    shutdown_speed: {{ fan.shutdown_speed | default(0) }}
+    kick_start_time: {{ fan.kick_start_time | default(0.1) }}
+    off_below: {{ fan.off_below | default(0.1) }}
+
+    {% endif %}
+    {% endfor %}
+
+# -----------------------------------------------------------------------------
+# Probe
+# -----------------------------------------------------------------------------
+probe:
+  condition: "probe.probe_type in ['inductive', 'klicky', 'tap']"
+  template: |
+    [probe]
+    {% if probe.location == 'toolboard' %}
+    pin: toolboard:{{ pin_config[probe.pin_config] }}{{ toolboard.pins[probe.probe_pin_toolboard].signal }}
+    {% else %}
+    pin: {{ pin_config[probe.pin_config] }}{{ board.pins[probe.probe_pin_mainboard].signal }}
+    {% endif %}
+    x_offset: {{ probe.x_offset | default(0) }}
+    y_offset: {{ probe.y_offset | default(0) }}
+    #z_offset: 0  # Calibrate with PROBE_CALIBRATE
+    speed: {{ probe.speed | default(5) }}
+    samples: {{ probe.samples | default(3) }}
+    sample_retract_dist: {{ probe.sample_retract_dist | default(2) }}
+    samples_result: {{ probe.samples_result | default('median') }}
+    samples_tolerance: {{ probe.samples_tolerance | default(0.006) }}
+    samples_tolerance_retries: {{ probe.samples_tolerance_retries | default(3) }}
+
+bltouch:
+  condition: "probe.probe_type == 'bltouch'"
+  template: |
+    [bltouch]
+    sensor_pin: {{ probe.sensor_pin }}
+    control_pin: {{ probe.control_pin }}
+    x_offset: {{ probe.x_offset | default(0) }}
+    y_offset: {{ probe.y_offset | default(0) }}
+    #z_offset: 0  # Calibrate with PROBE_CALIBRATE
+    speed: {{ probe.speed | default(5) }}
+    samples: {{ probe.samples | default(3) }}
+    sample_retract_dist: {{ probe.sample_retract_dist | default(3) }}
+
+# Eddy Current Probes
+beacon:
+  condition: "probe.probe_type == 'beacon'"
+  template: |
+    [beacon]
+    serial: {{ probe.serial }}
+    x_offset: {{ probe.x_offset | default(0) }}
+    y_offset: {{ probe.y_offset | default(0) }}
+    {% if probe.homing_mode == 'contact' %}
+    contact_max_hotend_temperature: {{ probe.contact_max_hotend_temperature | default(180) }}
+    {% endif %}
+    home_xy_position: {{ homing.home_xy_position | default(printer.bed_size_x / 2 ~ ', ' ~ printer.bed_size_y / 2) }}
+    home_z_hop: {{ probe.home_z_hop | default(5) }}
+    home_z_hop_speed: {{ probe.home_z_hop_speed | default(30) }}
+    home_xy_move_speed: {{ probe.home_xy_move_speed | default(300) }}
+    home_method: {{ probe.homing_mode | default('contact') }}
+    home_method_when_homed: proximity
+    home_autocalibrate: {{ probe.home_autocalibrate | default('unhomed') }}
+    mesh_main_direction: {{ probe.mesh_main_direction | default('x') }}
+    mesh_runs: {{ probe.mesh_runs | default(1) }}
+
+cartographer:
+  condition: "probe.probe_type == 'cartographer'"
+  template: |
+    [scanner]
+    serial: {{ probe.serial }}
+    x_offset: {{ probe.x_offset | default(0) }}
+    y_offset: {{ probe.y_offset | default(0) }}
+    calibration_method: {{ probe.homing_mode | default('touch') }}
+    {% if probe.homing_mode == 'touch' %}
+    scanner_touch_z_offset: {{ probe.scanner_touch_z_offset | default(0.05) }}
+    {% endif %}
+    backlash_comp: {{ probe.backlash_comp | default(0.5) }}
+
+btt_eddy:
+  condition: "probe.probe_type == 'btt_eddy'"
+  template: |
+    [probe_eddy_current btt_eddy]
+    sensor_type: {{ probe.sensor_type | default('ldc1612') }}
+    {% if probe.i2c_mcu == 'toolboard' %}
+    i2c_mcu: toolboard
+    {% endif %}
+    {% if probe.i2c_bus %}
+    i2c_bus: {{ probe.i2c_bus }}
+    {% endif %}
+    x_offset: {{ probe.x_offset | default(0) }}
+    y_offset: {{ probe.y_offset | default(0) }}
+
+# -----------------------------------------------------------------------------
+# Homing
+# -----------------------------------------------------------------------------
+safe_z_home:
+  # CRITICAL: Do NOT generate safe_z_home when eddy probes use contact/touch mode
+  # Beacon/Cartographer handle homing internally via home_xy_position in their sections
+  condition: "homing.homing_method == 'safe_z_home' and not (probe.probe_type == 'beacon' and probe.homing_mode == 'contact') and not (probe.probe_type == 'cartographer' and probe.homing_mode == 'touch')"
+  template: |
+    [safe_z_home]
+    {% if homing.home_xy_position is not defined or not homing.home_xy_position or homing.home_xy_position == 'bed_center' %}
+    home_xy_position: {{ (printer.bed_size_x / 2) | int }}, {{ (printer.bed_size_y / 2) | int }}
+    {% else %}
+    home_xy_position: {{ homing.home_xy_position }}
+    {% endif %}
+    speed: {{ homing.speed | default(100) }}
+    z_hop: {{ homing.z_hop | default(10) }}
+    z_hop_speed: {{ homing.z_hop_speed | default(15) }}
+
+# -----------------------------------------------------------------------------
+# Bed Leveling
+# -----------------------------------------------------------------------------
+bed_mesh:
+  condition: "bed_leveling.bed_mesh.enabled"
+  template: |
+    [bed_mesh]
+    speed: {{ bed_leveling.bed_mesh.speed | default(200) }}
+    {% if probe.probe_type in ['beacon', 'cartographer', 'btt_eddy'] %}
+    # Eddy probes need lower horizontal_move_z (2-3mm vs 5mm for standard)
+    horizontal_move_z: 3
+    {% else %}
+    horizontal_move_z: {{ bed_leveling.bed_mesh.horizontal_move_z | default(5) }}
+    {% endif %}
+    {% if bed_leveling.bed_mesh.mesh_min == 'auto' %}
+    mesh_min: {{ (probe.x_offset | abs + 10) | int }}, {{ (probe.y_offset | abs + 10) | int }}
+    {% else %}
+    mesh_min: {{ bed_leveling.bed_mesh.mesh_min }}
+    {% endif %}
+    {% if bed_leveling.bed_mesh.mesh_max == 'auto' %}
+    mesh_max: {{ (printer.bed_size_x - probe.x_offset | abs - 10) | int }}, {{ (printer.bed_size_y - probe.y_offset | abs - 10) | int }}
+    {% else %}
+    mesh_max: {{ bed_leveling.bed_mesh.mesh_max }}
+    {% endif %}
+    {% if bed_leveling.bed_mesh.probe_count is defined and bed_leveling.bed_mesh.probe_count %}
+    probe_count: {{ bed_leveling.bed_mesh.probe_count }}
+    {% endif %}
+    algorithm: {{ bed_leveling.bed_mesh.algorithm | default('bicubic') }}
+    fade_start: {{ bed_leveling.bed_mesh.fade_start | default(0.6) }}
+    fade_end: {{ bed_leveling.bed_mesh.fade_end | default(10.0) }}
+    fade_target: {{ bed_leveling.bed_mesh.fade_target | default(0) }}
+
+z_tilt:
+  condition: "bed_leveling.leveling_type == 'z_tilt'"
+  template: |
+    [z_tilt]
+    z_positions: {{ bed_leveling.z_tilt.z_positions }}
+    points: {{ bed_leveling.z_tilt.points }}
+    speed: {{ bed_leveling.z_tilt.speed | default(200) }}
+    horizontal_move_z: {{ bed_leveling.z_tilt.horizontal_move_z | default(10) }}
+    retries: {{ bed_leveling.z_tilt.retries | default(5) }}
+    retry_tolerance: {{ bed_leveling.z_tilt.retry_tolerance | default(0.0075) }}
+
+quad_gantry_level:
+  condition: "bed_leveling.leveling_type == 'qgl'"
+  template: |
+    [quad_gantry_level]
+    gantry_corners: {{ bed_leveling.qgl.gantry_corners }}
+    points: {{ bed_leveling.qgl.points }}
+    speed: {{ bed_leveling.qgl.speed | default(200) }}
+    horizontal_move_z: {{ bed_leveling.qgl.horizontal_move_z | default(10) }}
+    retries: {{ bed_leveling.qgl.retries | default(5) }}
+    retry_tolerance: {{ bed_leveling.qgl.retry_tolerance | default(0.0075) }}
+    max_adjust: {{ bed_leveling.qgl.max_adjust | default(10) }}
+
+# -----------------------------------------------------------------------------
+# Common Sections (always included)
+# -----------------------------------------------------------------------------
+common:
+  virtual_sdcard:
+    template: |
+      [virtual_sdcard]
+      path: {{ tuning.virtual_sdcard.path | default('~/printer_data/gcodes') }}
+      on_error_gcode: {{ tuning.virtual_sdcard.on_error_gcode | default('CANCEL_PRINT') }}
+
+  idle_timeout:
+    template: |
+      [idle_timeout]
+      timeout: {{ tuning.idle_timeout.timeout | default(600) }}
+      gcode:
+          {{ tuning.idle_timeout.gcode | default('TURN_OFF_HEATERS') | indent(4) }}
+
+  pause_resume:
+    template: |
+      [pause_resume]
+      recover_velocity: {{ tuning.pause_resume.recover_velocity | default(50) }}
+
+  exclude_object:
+    condition: "tuning.exclude_object.enabled"
+    template: |
+      [exclude_object]
+
+  gcode_arcs:
+    # Always include gcode_arcs for G2/G3 support
+    template: |
+      [gcode_arcs]
+      resolution: {{ tuning.arc_support.resolution | default(0.1) }}
+
+  respond:
+    condition: "tuning.respond.enabled"
+    template: |
+      [respond]
+      default_type: {{ tuning.respond.default_type | default('echo') }}
+      default_prefix: {{ tuning.respond.default_prefix | default('echo: ') }}
+
+  save_variables:
+    condition: "tuning.save_variables.enabled"
+    template: |
+      [save_variables]
+      filename: {{ tuning.save_variables.filename | default('~/printer_data/config/variables.cfg') }}
+
+  force_move:
+    condition: "advanced.force_move.enable_force_move"
+    template: |
+      [force_move]
+      enable_force_move: True
+
+  firmware_retraction:
+    condition: "advanced.firmware_retraction.enabled"
+    template: |
+      [firmware_retraction]
+      retract_length: {{ advanced.firmware_retraction.retract_length | default(0.5) }}
+      retract_speed: {{ advanced.firmware_retraction.retract_speed | default(35) }}
+      unretract_extra_length: {{ advanced.firmware_retraction.unretract_extra_length | default(0) }}
+      unretract_speed: {{ advanced.firmware_retraction.unretract_speed | default(35) }}
+
+  # Macro configuration variables
+  macro_config:
+    template: |
+      [gcode_macro _MACRO_CONFIG]
+      description: Configuration variables for START_PRINT and END_PRINT macros
+      # Printer Dimensions (from wizard)
+      variable_bed_size_x: {{ printer.bed_size_x }}
+      variable_bed_size_y: {{ printer.bed_size_y }}
+      variable_bed_size_z: {{ printer.bed_size_z }}
+      variable_bed_center_x: {{ (printer.bed_size_x / 2) | int }}
+      variable_bed_center_y: {{ (printer.bed_size_y / 2) | int }}
+      # Probe and Leveling
+      variable_probe_type: "{{ probe.probe_type | default('none') }}"
+      {% if probe.probe_type in ['beacon', 'cartographer', 'btt_eddy'] %}
+      variable_eddy_mesh_method: "{{ probe.eddy_mesh_method | default('rapid_scan') }}"
+      {% else %}
+      variable_eddy_mesh_method: "none"
+      {% endif %}
+      {% if bed_leveling.leveling_type == 'qgl' %}
+      variable_leveling_method: "quad_gantry_level"
+      {% elif bed_leveling.leveling_type == 'z_tilt' %}
+      variable_leveling_method: "z_tilt"
+      {% else %}
+      variable_leveling_method: "none"
+      {% endif %}
+      variable_leveling_enabled: {{ (bed_leveling.leveling_type | default('none') | lower) != 'none' }}
+      variable_z_calibration_enabled: {{ (bed_leveling.z_calibration_enabled | default(true) | string | lower) }}
+      variable_always_home_z: {{ (bed_leveling.always_home_z | default(false) | string | lower) }}
+      # Heat Soak
+      variable_heat_soak_time: {{ macros.heat_soak_time | default(0) }}
+      # Chamber Heating
+      variable_chamber_temp_default: {{ macros.chamber_temp_default | default(0) }}
+      # Bed Mesh
+      variable_bed_mesh_mode: "{{ macros.bed_mesh_mode | default('adaptive') }}"
+      # Nozzle Cleaning (Brush)
+      variable_brush_enabled: {{ macros.brush_enabled | default(false) | lower }}
+      variable_brush_x: {{ macros.brush_x | default(50.0) }}
+      variable_brush_y: {{ macros.brush_y | default(317.0) }}
+      variable_brush_z: {{ macros.brush_z | default(1.0) }}
+      variable_brush_width: {{ macros.brush_width | default(30.0) }}
+      variable_wipe_count: {{ macros.wipe_count | default(3) }}
+      # Purge Settings
+      variable_purge_style: "{{ macros.purge_style | default('adaptive') }}"
+      variable_purge_amount: {{ macros.purge_amount | default(30.0) }}
+      variable_purge_x: {{ macros.purge_x | default(5) }}
+      variable_purge_y: {{ macros.purge_y | default(5) }}
+      # Bucket (for blob/voron purge)
+      variable_bucket_x: {{ macros.bucket_x | default((printer.bed_size_x / 2) | int) }}
+      variable_bucket_y: {{ macros.bucket_y | default(printer.bed_size_y - 5) }}
+      variable_bucket_z: {{ macros.bucket_z | default(5.0) }}
+      # LED Status
+      variable_led_enabled: {{ macros.led_enabled | default(false) | lower }}
+      variable_led_name: "{{ macros.led_name | default('status_led') }}"
+      # Park Position (END_PRINT)
+      variable_park_position: "{{ macros.park_position | default('front') }}"
+      variable_park_z_hop: {{ macros.park_z_hop | default(10.0) }}
+      # Default park_z_max should scale with printer Z travel.
+      # Use (bed_size_z - 5) as a sane cap (also consistent with z_max - 5 safety margin in the macro).
+      variable_park_z_max: {{ (macros.park_z_max | default(printer.bed_size_z - 5)) | float }}
+      # Cooldown (END_PRINT)
+      variable_turn_off_bed: {{ macros.turn_off_bed | default(true) | lower }}
+      variable_turn_off_extruder: {{ macros.turn_off_extruder | default(true) | lower }}
+      variable_turn_off_fans: {{ macros.turn_off_fans | default(false) | lower }}
+      variable_fan_off_delay: {{ macros.fan_off_delay | default(0) }}
+      variable_motor_off_delay: {{ macros.motor_off_delay | default(300) }}
+      # Retract (END_PRINT)
+      variable_end_retract_length: {{ macros.end_retract_length | default(10.0) }}
+      variable_end_retract_speed: {{ macros.end_retract_speed | default(30.0) }}
+      gcode:
+          # Configuration only - no gcode
+
+  # _BED_MESH macro with probe-aware method selection
+  bed_mesh_macro:
+    render: raw
+    template: |
+      [gcode_macro _BED_MESH]
+      description: Run bed mesh with appropriate method for probe type
+      gcode:
+          {% set cfg = printer["gcode_macro _MACRO_CONFIG"] %}
+          {% set MODE = params.MODE|default("adaptive")|lower %}
+
+          {% if MODE == "none" %}
+              M117 Skipping mesh
+          {% elif MODE == "saved" %}
+              BED_MESH_PROFILE LOAD=default
+          {% elif cfg.probe_type in ['beacon', 'cartographer', 'btt_eddy'] %}
+              # Eddy probes use rapid_scan or scan method
+              BED_MESH_CALIBRATE METHOD={cfg.eddy_mesh_method}
+          {% else %}
+              # Standard probes
+              BED_MESH_CALIBRATE
+          {% endif %}
+
+  # Stepper identification & calibration macros (kept separate for readability/continuity)
+  calibration:
+    render: raw
+    template: |
+      # ═════════════════════════════════════════════════════════════════════════════
+      # STEPPER IDENTIFICATION & CALIBRATION MACROS
+      # Generated by gschpoozi
+      # ═════════════════════════════════════════════════════════════════════════════
+      #
+      # These macros help you:
+      # 1. Identify which physical motor is connected to which driver
+      # 2. Verify motor directions are correct
+      # 3. For CoreXY AWD: Test motor pairs safely without risk of fighting
+      #
+      # Reference: https://www.klipper3d.org/Config_checks.html
+      #            https://mpx.wiki/Troubleshooting/corexy-direction
+      # ═════════════════════════════════════════════════════════════════════════════
+
+      [force_move]
+      enable_force_move: True
+      # Required for STEPPER_BUZZ and FORCE_MOVE commands
+
+      # ─────────────────────────────────────────────────────────────────────────────
+      # TMC DRIVER STATUS
+      # ─────────────────────────────────────────────────────────────────────────────
+
+      [gcode_macro QUERY_TMC_STATUS]
+      description: Query TMC driver status for all configured steppers
+      gcode:
+          {% set steppers = printer.motion_report.steppers|default([]) %}
+          M118 === TMC Driver Status ===
+          {% for stepper in steppers %}
+              {% set tmc_name = "tmc2209_" ~ stepper %}
+              {% if printer[tmc_name] is defined %}
+                  M118 {stepper}: TMC2209 detected
+                  DUMP_TMC STEPPER={stepper}
+              {% else %}
+                  {% set tmc_name = "tmc2240_" ~ stepper %}
+                  {% if printer[tmc_name] is defined %}
+                      M118 {stepper}: TMC2240 detected
+                      DUMP_TMC STEPPER={stepper}
+                  {% else %}
+                      {% set tmc_name = "tmc5160_" ~ stepper %}
+                      {% if printer[tmc_name] is defined %}
+                          M118 {stepper}: TMC5160 detected
+                          DUMP_TMC STEPPER={stepper}
+                      {% endif %}
+                  {% endif %}
+              {% endif %}
+          {% endfor %}
+          M118 === End TMC Status ===
+
+      [gcode_macro CHECK_MOTOR_CONNECTED]
+      description: Check if a motor appears connected via TMC driver status
+      gcode:
+          {% set stepper = params.STEPPER|default("stepper_x") %}
+          M118 Checking {stepper}...
+          DUMP_TMC STEPPER={stepper}
+          M118 Look for 'ola' or 'olb' flags - if set, motor may be disconnected
+
+      # ─────────────────────────────────────────────────────────────────────────────
+      # INDIVIDUAL STEPPER IDENTIFICATION
+      # ─────────────────────────────────────────────────────────────────────────────
+
+      [gcode_macro IDENTIFY_STEPPER]
+      description: Buzz a single stepper to identify which physical motor it is
+      gcode:
+          {% set stepper = params.STEPPER|default("stepper_x") %}
+          M118 === Identifying {stepper} ===
+          M118 Watch which motor moves (10 short buzzes)
+          STEPPER_BUZZ STEPPER={stepper}
+          M118 === Done identifying {stepper} ===
+
+      [gcode_macro IDENTIFY_ALL_STEPPERS]
+      description: Buzz each stepper one by one with pauses for identification
+      gcode:
+          M118 === STEPPER IDENTIFICATION SEQUENCE ===
+          M118 Each stepper will buzz 10 times. Watch and note which motor moves.
+          M118
+          M118 Starting in 3 seconds...
+          G4 P3000
+
+          M118 >>> STEPPER_X - Watch now...
+          STEPPER_BUZZ STEPPER=stepper_x
+          G4 P2000
+
+          M118 >>> STEPPER_Y - Watch now...
+          STEPPER_BUZZ STEPPER=stepper_y
+          G4 P2000
+
+          {% if printer.configfile.config.stepper_x1 is defined %}
+          M118 >>> STEPPER_X1 - Watch now...
+          STEPPER_BUZZ STEPPER=stepper_x1
+          G4 P2000
+          {% endif %}
+
+          {% if printer.configfile.config.stepper_y1 is defined %}
+          M118 >>> STEPPER_Y1 - Watch now...
+          STEPPER_BUZZ STEPPER=stepper_y1
+          G4 P2000
+          {% endif %}
+
+          M118 >>> STEPPER_Z - Watch now...
+          STEPPER_BUZZ STEPPER=stepper_z
+          G4 P2000
+
+          {% if printer.configfile.config.stepper_z1 is defined %}
+          M118 >>> STEPPER_Z1 - Watch now...
+          STEPPER_BUZZ STEPPER=stepper_z1
+          G4 P2000
+          {% endif %}
+
+          {% if printer.configfile.config.stepper_z2 is defined %}
+          M118 >>> STEPPER_Z2 - Watch now...
+          STEPPER_BUZZ STEPPER=stepper_z2
+          G4 P2000
+          {% endif %}
+
+          {% if printer.configfile.config.stepper_z3 is defined %}
+          M118 >>> STEPPER_Z3 - Watch now...
+          STEPPER_BUZZ STEPPER=stepper_z3
+          G4 P2000
+          {% endif %}
+
+          M118 >>> EXTRUDER - Watch now...
+          STEPPER_BUZZ STEPPER=extruder
+
+          M118 === IDENTIFICATION COMPLETE ===
+          M118 Make note of which physical motor corresponds to each stepper name.
+
+      # ─────────────────────────────────────────────────────────────────────────────
+      # COREXY AWD SAFE PAIR TESTING
+      # Test one motor pair at a time to prevent motors from fighting
+      # ─────────────────────────────────────────────────────────────────────────────
+
+      [gcode_macro AWD_TEST_PAIR_A]
+      description: Test first motor pair (X+Y) with second pair (X1+Y1) disabled
+      gcode:
+          {% set distance = params.DISTANCE|default(20)|float %}
+          {% set speed = params.SPEED|default(50)|float %}
+
+          M118 ════════════════════════════════════════════════════════════
+          M118 AWD PAIR A TEST (stepper_x + stepper_y)
+          M118 ════════════════════════════════════════════════════════════
+          M118 This test moves ONLY stepper_x and stepper_y.
+          M118 stepper_x1 and stepper_y1 are DISABLED.
+          M118 The toolhead should move in a square pattern.
+
+          # Disable second pair
+          {% if printer.configfile.config.stepper_x1 is defined %}
+              SET_STEPPER_ENABLE STEPPER=stepper_x1 ENABLE=0
+          {% endif %}
+          {% if printer.configfile.config.stepper_y1 is defined %}
+              SET_STEPPER_ENABLE STEPPER=stepper_y1 ENABLE=0
+          {% endif %}
+
+          # Enable first pair
+          SET_STEPPER_ENABLE STEPPER=stepper_x ENABLE=1
+          SET_STEPPER_ENABLE STEPPER=stepper_y ENABLE=1
+
+          M118 Moving +X...
+          FORCE_MOVE STEPPER=stepper_x DISTANCE={distance} VELOCITY={speed}
+          FORCE_MOVE STEPPER=stepper_y DISTANCE={distance} VELOCITY={speed}
+          G4 P500
+
+          M118 Moving +Y...
+          FORCE_MOVE STEPPER=stepper_x DISTANCE={distance} VELOCITY={speed}
+          FORCE_MOVE STEPPER=stepper_y DISTANCE={-distance} VELOCITY={speed}
+          G4 P500
+
+          M118 Moving -X...
+          FORCE_MOVE STEPPER=stepper_x DISTANCE={-distance} VELOCITY={speed}
+          FORCE_MOVE STEPPER=stepper_y DISTANCE={-distance} VELOCITY={speed}
+          G4 P500
+
+          M118 Moving -Y (back to start)...
+          FORCE_MOVE STEPPER=stepper_x DISTANCE={-distance} VELOCITY={speed}
+          FORCE_MOVE STEPPER=stepper_y DISTANCE={distance} VELOCITY={speed}
+
+          M118 PAIR A TEST COMPLETE
+          M118 Did the toolhead move in a correct square pattern?
+
+      [gcode_macro AWD_TEST_PAIR_B]
+      description: Test second motor pair (X1+Y1) with first pair (X+Y) disabled
+      gcode:
+          {% set distance = params.DISTANCE|default(20)|float %}
+          {% set speed = params.SPEED|default(50)|float %}
+
+          {% if printer.configfile.config.stepper_x1 is not defined or printer.configfile.config.stepper_y1 is not defined %}
+              M118 ERROR: AWD_TEST_PAIR_B requires AWD configuration (stepper_x1 and stepper_y1)
+              M118 This macro is only for All Wheel Drive printers.
+          {% else %}
+              M118 ════════════════════════════════════════════════════════════
+              M118 AWD PAIR B TEST (stepper_x1 + stepper_y1)
+              M118 ════════════════════════════════════════════════════════════
+              M118 This test moves ONLY stepper_x1 and stepper_y1.
+              M118 stepper_x and stepper_y are DISABLED.
+              M118 Should move in the SAME pattern as Pair A.
+
+              # Disable first pair
+              SET_STEPPER_ENABLE STEPPER=stepper_x ENABLE=0
+              SET_STEPPER_ENABLE STEPPER=stepper_y ENABLE=0
+
+              # Enable second pair
+              SET_STEPPER_ENABLE STEPPER=stepper_x1 ENABLE=1
+              SET_STEPPER_ENABLE STEPPER=stepper_y1 ENABLE=1
+
+              M118 Moving +X...
+              FORCE_MOVE STEPPER=stepper_x1 DISTANCE={distance} VELOCITY={speed}
+              FORCE_MOVE STEPPER=stepper_y1 DISTANCE={distance} VELOCITY={speed}
+              G4 P500
+
+              M118 Moving +Y...
+              FORCE_MOVE STEPPER=stepper_x1 DISTANCE={distance} VELOCITY={speed}
+              FORCE_MOVE STEPPER=stepper_y1 DISTANCE={-distance} VELOCITY={speed}
+              G4 P500
+
+              M118 Moving -X...
+              FORCE_MOVE STEPPER=stepper_x1 DISTANCE={-distance} VELOCITY={speed}
+              FORCE_MOVE STEPPER=stepper_y1 DISTANCE={-distance} VELOCITY={speed}
+              G4 P500
+
+              M118 Moving -Y (back to start)...
+              FORCE_MOVE STEPPER=stepper_x1 DISTANCE={-distance} VELOCITY={speed}
+              FORCE_MOVE STEPPER=stepper_y1 DISTANCE={distance} VELOCITY={speed}
+
+              M118 PAIR B TEST COMPLETE
+              M118 Did it move the SAME as Pair A?
+          {% endif %}
+
+      [gcode_macro AWD_ENABLE_ALL]
+      description: Re-enable all AWD motors after testing
+      gcode:
+          M118 Re-enabling all motors...
+          SET_STEPPER_ENABLE STEPPER=stepper_x ENABLE=1
+          SET_STEPPER_ENABLE STEPPER=stepper_y ENABLE=1
+          {% if printer.configfile.config.stepper_x1 is defined %}
+              SET_STEPPER_ENABLE STEPPER=stepper_x1 ENABLE=1
+          {% endif %}
+          {% if printer.configfile.config.stepper_y1 is defined %}
+              SET_STEPPER_ENABLE STEPPER=stepper_y1 ENABLE=1
+          {% endif %}
+          M118 All motors enabled.
+
+      [gcode_macro AWD_FULL_TEST]
+      description: Run complete AWD motor pair verification sequence
+      gcode:
+          {% set distance = params.DISTANCE|default(20)|float %}
+
+          M118 ════════════════════════════════════════════════════════════════════
+          M118 COREXY AWD FULL CALIBRATION SEQUENCE
+          M118 ════════════════════════════════════════════════════════════════════
+          M118 Testing each motor pair separately for safety.
+          M118 If anything looks wrong, use EMERGENCY STOP (M112)!
+          M118 Starting Pair A test in 5 seconds...
+          G4 P5000
+
+          AWD_TEST_PAIR_A DISTANCE={distance}
+
+          M118 Pausing 5 seconds before Pair B test...
+          G4 P5000
+
+          AWD_TEST_PAIR_B DISTANCE={distance}
+
+          AWD_ENABLE_ALL
+
+          M118 ════════════════════════════════════════════════════════════════════
+          M118 AWD CALIBRATION COMPLETE
+          M118 ════════════════════════════════════════════════════════════════════
+          M118 If both pairs moved identically: AWD is correctly configured!
+          M118 If not, see: https://mpx.wiki/Troubleshooting/corexy-direction
+
+      # ─────────────────────────────────────────────────────────────────────────────
+      # CALIBRATION WIZARD
+      # ─────────────────────────────────────────────────────────────────────────────
+
+      [gcode_macro STEPPER_CALIBRATION_WIZARD]
+      description: Display stepper calibration instructions
+      gcode:
+          M118 ════════════════════════════════════════════════════════════════════
+          M118 STEPPER CALIBRATION WIZARD
+          M118 ════════════════════════════════════════════════════════════════════
+          M118
+          M118 STEP 1: MOTOR IDENTIFICATION
+          M118 Run: IDENTIFY_ALL_STEPPERS
+          M118 Watch each motor and note which one corresponds to each name.
+          M118
+          M118 STEP 2: TMC STATUS CHECK
+          M118 Run: QUERY_TMC_STATUS
+          M118 Verify all drivers communicate properly.
+          M118
+          M118 STEP 3: DIRECTION VERIFICATION
+          M118 Run: AWD_FULL_TEST
+          M118 Tests each motor pair separately for safety.
+          M118
+          M118 ════════════════════════════════════════════════════════════════════
+          M118 References:
+          M118   https://www.klipper3d.org/Config_checks.html
+          M118   https://mpx.wiki/Troubleshooting/corexy-direction
+          M118 ════════════════════════════════════════════════════════════════════
+
+# Multi-pin groups (for fans with multiple pins)
+multi_pin:
+  condition: "advanced.multi_pins"
+  type: "list"
+  template: |
+    {% for pin_group in advanced.multi_pins %}
+    [multi_pin {{ pin_group.name }}]
+    pins: {{ pin_group.pins }}
+
+    {% endfor %}
+
+# -----------------------------------------------------------------------------
+# Temperature Sensors
+# -----------------------------------------------------------------------------
+temperature_sensor:
+  condition: "temperature_sensors"
+  type: "list"
+  template: |
+    {% for sensor in temperature_sensors %}
+    {% if sensor.type == 'temperature_mcu' %}
+    [temperature_sensor {{ sensor.name }}]
+    sensor_type: temperature_mcu
+    sensor_mcu: {{ sensor.mcu | default('mcu') }}
+    {% elif sensor.type == 'temperature_host' %}
+    [temperature_sensor {{ sensor.name }}]
+    sensor_type: temperature_host
+    {% elif sensor.type == 'temperature_sensor' %}
+    [temperature_sensor {{ sensor.name }}]
+    sensor_type: {{ sensor.sensor_type }}
+    sensor_pin: {{ sensor.sensor_pin }}
+    {% endif %}
+
+    {% endfor %}
+
+# -----------------------------------------------------------------------------
+# LEDs
+# -----------------------------------------------------------------------------
+neopixel:
+  condition: "leds"
+  type: "list"
+  template: |
+    {% for led in leds %}
+    [neopixel {{ led.name }}]
+    {% if led.location == 'toolboard' %}
+    pin: toolboard:{{ led.pin }}
+    {% else %}
+    pin: {{ led.pin }}
+    {% endif %}
+    chain_count: {{ led.chain_count | default(1) }}
+    color_order: {{ led.color_order | default('GRB') }}
+    initial_RED: 0.2
+    initial_GREEN: 0.2
+    initial_BLUE: 0.2
+
+    {% endfor %}
+
+# -----------------------------------------------------------------------------
+# Filament Sensors
+# -----------------------------------------------------------------------------
+filament_switch_sensor:
+  condition: "filament_sensors"
+  type: "list"
+  template: |
+    {% for sensor in filament_sensors %}
+    {% set _pullup = sensor.pin_pullup | default(true) %}
+    {% set _pulldown = sensor.pin_pulldown | default(false) %}
+    {% set _invert = sensor.pin_invert | default(false) %}
+    {% set _mods = ('^' if _pullup else ('~' if _pulldown else '')) ~ ('!' if _invert else '') %}
+    {% if sensor.type == 'switch' %}
+    [filament_switch_sensor {{ sensor.name }}]
+    {% if sensor.location == 'toolboard' %}
+    switch_pin: {{ _mods }}toolboard:{{ sensor.pin }}
+    {% else %}
+    switch_pin: {{ _mods }}{{ sensor.pin }}
+    {% endif %}
+    pause_on_runout: {{ sensor.pause_on_runout | default(true) | lower }}
+    runout_gcode:
+        M117 Filament runout detected!
+        PAUSE
+    {% elif sensor.type == 'motion' %}
+    [filament_motion_sensor {{ sensor.name }}]
+    {% if sensor.location == 'toolboard' %}
+    switch_pin: {{ _mods }}toolboard:{{ sensor.pin }}
+    {% else %}
+    switch_pin: {{ _mods }}{{ sensor.pin }}
+    {% endif %}
+    detection_length: {{ sensor.detection_length | default(7.0) }}
+    extruder: extruder
+    pause_on_runout: {{ sensor.pause_on_runout | default(true) | lower }}
+    runout_gcode:
+        M117 Filament runout detected!
+        PAUSE
+    {% endif %}
+
+    {% endfor %}
+
+# -----------------------------------------------------------------------------
+# Pin Configuration Mappings
+# -----------------------------------------------------------------------------
+pin_config:
+  nc_gnd: "^"      # NC switch to GND (pull-up)
+  no_gnd: "^!"     # NO switch to GND (pull-up + invert)
+  nc_vcc: "!"      # NC switch to VCC (invert)
+  no_vcc: ""       # NO switch to VCC (no modifiers)
+

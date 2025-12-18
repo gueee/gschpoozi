@@ -108,6 +108,8 @@ This is hardware-critical code - bad configs can damage printers or cause fires.
 3. **User configs are user data** - never overwrite without backup
 4. **Ask, don't assume** - clarify requirements before coding
 5. **All changes must be reversible** - document rollback procedures
+6. **Use WSL git for all git operations** - Windows git sees CRLF/LF differences as changes; WSL git respects `.gitattributes` properly
+7. **Validate YAML after editing** - Check for duplicate keys with `grep -E "^[a-z_]+:" file.yaml | sort | uniq -d` after editing YAML files
 
 When proposing changes, include: affected files, specific changes with reasoning, testing plan, rollback plan, and assumptions.
 

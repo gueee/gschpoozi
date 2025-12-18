@@ -24,6 +24,106 @@ if [[ -z "${action}" ]]; then
   exit 2
 fi
 
+# ------------------------------------------------------------------------------
+# Minimal UI helpers
+#
+# scripts/lib/klipper-install.sh expects a handful of UI helper functions and
+# color/box constants (ported from earlier bash wizard versions). When invoked
+# from the Python wizard we want these routines to run in a plain TTY.
+# ------------------------------------------------------------------------------
+
+# Colors (ANSI)
+RED="${RED:-'\033[0;31m'}"
+GREEN="${GREEN:-'\033[0;32m'}"
+YELLOW="${YELLOW:-'\033[0;33m'}"
+BLUE="${BLUE:-'\033[0;34m'}"
+MAGENTA="${MAGENTA:-'\033[0;35m'}"
+CYAN="${CYAN:-'\033[0;36m'}"
+WHITE="${WHITE:-'\033[0;37m'}"
+
+BRED="${BRED:-'\033[1;31m'}"
+BGREEN="${BGREEN:-'\033[1;32m'}"
+BYELLOW="${BYELLOW:-'\033[1;33m'}"
+BBLUE="${BBLUE:-'\033[1;34m'}"
+BMAGENTA="${BMAGENTA:-'\033[1;35m'}"
+BCYAN="${BCYAN:-'\033[1;36m'}"
+BWHITE="${BWHITE:-'\033[1;37m'}"
+
+NC="${NC:-'\033[0m'}"
+
+# Box drawing
+BOX_TL="${BOX_TL:-"╔"}"
+BOX_TR="${BOX_TR:-"╗"}"
+BOX_BL="${BOX_BL:-"╚"}"
+BOX_BR="${BOX_BR:-"╝"}"
+BOX_H="${BOX_H:-"═"}"
+BOX_V="${BOX_V:-"║"}"
+BOX_LT="${BOX_LT:-"╠"}"
+BOX_RT="${BOX_RT:-"╣"}"
+
+clear_screen() {
+  # Best-effort clear that works in most TTY contexts
+  command -v clear >/dev/null 2>&1 && clear || printf '\033c'
+}
+
+print_header() {
+  local title="${1:-}"
+  local width="${2:-60}"
+  local line
+  line="$(printf '%*s' "${width}" '' | tr ' ' "${BOX_H}")"
+  local padding
+  padding=$(( (width - ${#title} - 2) / 2 ))
+  if [[ "${padding}" -lt 0 ]]; then padding=0; fi
+  printf "%b\n" "${BCYAN}${BOX_TL}${line}${BOX_TR}${NC}"
+  printf "%b\n" "${BCYAN}${BOX_V}${NC}$(printf '%*s' "${padding}" "")${BWHITE} ${title} ${NC}$(printf '%*s' "$((width - padding - ${#title} - 2))" "")${BCYAN}${BOX_V}${NC}"
+  printf "%b\n" "${BCYAN}${BOX_LT}${line}${BOX_RT}${NC}"
+}
+
+print_footer() {
+  local width="${1:-60}"
+  local line
+  line="$(printf '%*s' "${width}" '' | tr ' ' "${BOX_H}")"
+  printf "%b\n" "${BCYAN}${BOX_BL}${line}${BOX_BR}${NC}"
+}
+
+print_separator() {
+  local width="${1:-60}"
+  printf "%b\n" "${BCYAN}${BOX_LT}$(printf '%*s' "${width}" "" | tr ' ' "${BOX_H}")${BOX_RT}${NC}"
+}
+
+print_action_item() {
+  local key="${1:-}"
+  local label="${2:-}"
+  printf "%b\n" "${BCYAN}${BOX_V}${NC}  ${BGREEN}${key})${NC} ${label}"
+}
+
+wait_for_key() {
+  printf "%b" "${WHITE}Press Enter to continue...${NC}"
+  read -r _ || true
+}
+
+confirm() {
+  # Two modes:
+  # - Default: y/N prompt
+  # - If prompt contains "Type 'yes'", require literal 'yes' (safety double-confirm)
+  local prompt="${1:-Are you sure?}"
+  local answer
+
+  if [[ "${prompt}" == *"Type 'yes'"* ]]; then
+    printf "%b" "${BYELLOW}${prompt}${NC}: "
+    read -r answer || answer=""
+    [[ "${answer}" == "yes" ]]
+    return $?
+  fi
+
+  printf "%b" "${BYELLOW}${prompt}${NC} [y/N]: "
+  read -r answer || answer=""
+  case "${answer,,}" in
+    y|yes) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Source installer library (expects INSTALL_LIB_DIR to point at scripts/lib)
 export INSTALL_LIB_DIR="${REPO_ROOT}/scripts/lib"
 # shellcheck source=/dev/null

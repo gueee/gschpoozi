@@ -1234,16 +1234,30 @@ class GschpooziWizard:
         else:
             status_lines.append("✗ Klippy virtual environment NOT found")
 
-        # Check service
+        # Check service (systemd). Be robust on systems without systemd (containers, some WSL, etc.).
         import subprocess
-        result = subprocess.run(
-            ["systemctl", "is-active", "klipper"],
-            capture_output=True, text=True
-        )
-        if result.stdout.strip() == "active":
-            status_lines.append("✓ Klipper service is running")
-        else:
-            status_lines.append("✗ Klipper service is NOT running")
+        import shutil
+        try:
+            if not shutil.which("systemctl"):
+                status_lines.append("⚠ systemctl not found (service status unknown)")
+            else:
+                result = subprocess.run(
+                    ["systemctl", "is-active", "klipper"],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+                state = (result.stdout or "").strip()
+                if state == "active":
+                    status_lines.append("✓ Klipper service is running")
+                elif state:
+                    status_lines.append(f"✗ Klipper service is NOT running ({state})")
+                else:
+                    # Some systemctl errors only print to stderr
+                    err = (result.stderr or "").strip()
+                    status_lines.append(f"⚠ Klipper service status unknown ({err or 'no output'})")
+        except Exception as e:
+            status_lines.append(f"⚠ Klipper service check failed ({type(e).__name__}: {e})")
 
         self.ui.msgbox(
             "Klipper Installation Status:\n\n" + "\n".join(status_lines),
@@ -1261,16 +1275,29 @@ class GschpooziWizard:
         else:
             status_lines.append("✗ Moonraker directory NOT found")
 
-        # Check service
+        # Check service (systemd). Be robust on systems without systemd (containers, some WSL, etc.).
         import subprocess
-        result = subprocess.run(
-            ["systemctl", "is-active", "moonraker"],
-            capture_output=True, text=True
-        )
-        if result.stdout.strip() == "active":
-            status_lines.append("✓ Moonraker service is running")
-        else:
-            status_lines.append("✗ Moonraker service is NOT running")
+        import shutil
+        try:
+            if not shutil.which("systemctl"):
+                status_lines.append("⚠ systemctl not found (service status unknown)")
+            else:
+                result = subprocess.run(
+                    ["systemctl", "is-active", "moonraker"],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+                state = (result.stdout or "").strip()
+                if state == "active":
+                    status_lines.append("✓ Moonraker service is running")
+                elif state:
+                    status_lines.append(f"✗ Moonraker service is NOT running ({state})")
+                else:
+                    err = (result.stderr or "").strip()
+                    status_lines.append(f"⚠ Moonraker service status unknown ({err or 'no output'})")
+        except Exception as e:
+            status_lines.append(f"⚠ Moonraker service check failed ({type(e).__name__}: {e})")
 
         self.ui.msgbox(
             "Moonraker Installation Status:\n\n" + "\n".join(status_lines),

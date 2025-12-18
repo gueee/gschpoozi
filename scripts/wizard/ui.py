@@ -211,7 +211,9 @@ class WizardUI:
         args = [
             "--title", title or self.title,
             "--inputbox", text,
-            str(height), str(width), default
+            # Whiptail incorrectly treats a default value that starts with '-' (e.g. '-4')
+            # as a CLI option unless we end option parsing explicitly.
+            str(height), str(width), "--", default
         ]
         
         code, output = self._run(args)

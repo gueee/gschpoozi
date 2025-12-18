@@ -78,6 +78,8 @@ class GschpooziWizard:
                 text,
                 str(height),
                 str(width),
+                # Important: defaults like "-4" must not be parsed as whiptail CLI options.
+                "--",
                 default,
             ]
             rc, out = self.ui._run(args)  # type: ignore[attr-defined]

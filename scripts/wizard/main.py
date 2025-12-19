@@ -539,6 +539,179 @@ class GschpooziWizard:
             return self.ui.inputbox(prompt, default=default_pin or "", title=title)
         return tag_to_pin.get(choice, default_pin or "")
 
+    def _looks_like_raw_pin(self, value: str) -> bool:
+        """
+        Best-effort heuristic to decide if a string is already a raw MCU pin (vs a port-id like 'FAN0').
+
+        Keep this conservative: if we can't tell, we prefer resolving via board templates.
+        """
+        s = (value or "").strip()
+        if not s:
+            return False
+        if ":" in s:
+            # e.g. "toolboard:PA4" / "mcu:PA4" -> don't treat as a raw mainboard pin
+            return False
+        if re.match(r"^P[A-Z]\d+$", s):
+            # e.g. PA1, PF13, PC0
+            return True
+        if re.match(r"^gpio\d+$", s, flags=re.IGNORECASE):
+            # e.g. gpio26
+            return True
+        return False
+
+    def _collect_mainboard_used_pins(self, *, exclude_pins: set[str] | None = None) -> dict[str, str]:
+        """
+        Collect a mapping of raw mainboard pins -> description for conflict detection.
+
+        This intentionally focuses on pins the wizard assigns (steppers/fans/heaters/sensors), not a full parser.
+        """
+        exclude = set()
+        for p in (exclude_pins or set()):
+            if isinstance(p, str) and p.strip():
+                exclude.add(p.strip())
+
+        board_id = self.state.get("mcu.main.board_type", "")
+        board_data = self._load_board_data(board_id, "boards")
+        if not isinstance(board_data, dict) or not board_data:
+            return {}
+
+        used: dict[str, str] = {}
+
+        def _add(pin: str, desc: str) -> None:
+            pin = (pin or "").strip()
+            if not pin or ":" in pin:
+                return
+            if pin in exclude:
+                return
+            used.setdefault(pin, desc)
+
+        def _resolve_from_group(value: str, group: str) -> str:
+            v = (value or "").strip()
+            if not v:
+                return ""
+            group_data = board_data.get(group, {})
+            if isinstance(group_data, dict) and v in group_data:
+                info = group_data.get(v)
+                if isinstance(info, dict):
+                    pin = info.get("pin") or info.get("signal_pin")
+                    if isinstance(pin, str) and pin:
+                        return pin
+                if isinstance(info, str) and info:
+                    return info
+            return v if self._looks_like_raw_pin(v) else ""
+
+        def _add_motor_port(port_id: str, desc: str) -> None:
+            port_id = (port_id or "").strip()
+            if not port_id:
+                return
+            mp = board_data.get("motor_ports", {})
+            info = mp.get(port_id) if isinstance(mp, dict) else None
+            if not isinstance(info, dict):
+                if self._looks_like_raw_pin(port_id):
+                    _add(port_id, desc)
+                return
+            for k in ("step_pin", "dir_pin", "enable_pin", "uart_pin", "cs_pin", "diag_pin"):
+                v = info.get(k)
+                if isinstance(v, str) and v:
+                    _add(v, f"{desc} ({k})")
+
+        # Steppers / motors (mainboard motor ports)
+        for stepper in ("stepper_x", "stepper_y", "stepper_z", "stepper_x1", "stepper_y1", "stepper_z1", "stepper_z2", "stepper_z3"):
+            _add_motor_port(self.state.get(f"{stepper}.motor_port", ""), f"Stepper {stepper} motor")
+
+        # Extruder motor (only if on mainboard)
+        motor_location = self.state.get("extruder.location", "mainboard") or "mainboard"
+        if motor_location == "mainboard":
+            _add_motor_port(self.state.get("extruder.motor_port_mainboard", ""), "Extruder motor")
+
+        # Endstops (mainboard)
+        for stepper in ("stepper_x", "stepper_y", "stepper_z"):
+            port = self.state.get(f"{stepper}.endstop_port", "")
+            pin = _resolve_from_group(port, "endstop_ports") if port else ""
+            if pin:
+                _add(pin, f"{stepper} endstop")
+
+        # Heaters (mainboard)
+        extruder_heater = self.state.get("extruder.heater_port_mainboard", "")
+        if extruder_heater:
+            _add(_resolve_from_group(extruder_heater, "heater_ports"), "Extruder heater")
+        bed_heater = self.state.get("heater_bed.heater_pin", "")
+        if bed_heater:
+            _add(_resolve_from_group(bed_heater, "heater_ports"), "Heated bed heater")
+
+        # Thermistors (mainboard)
+        extruder_sensor = self.state.get("extruder.sensor_port_mainboard", "")
+        if extruder_sensor:
+            _add(_resolve_from_group(extruder_sensor, "thermistor_ports"), "Extruder thermistor")
+        bed_sensor = self.state.get("heater_bed.sensor_port", "")
+        if bed_sensor:
+            _add(_resolve_from_group(bed_sensor, "thermistor_ports"), "Bed thermistor")
+
+        # Fans (mainboard)
+        part_pin = self.state.get("fans.part_cooling.pin_mainboard", "")
+        if part_pin:
+            _add(_resolve_from_group(part_pin, "fan_ports"), "Part cooling fan")
+        hotend_pin = self.state.get("fans.hotend.pin_mainboard", "")
+        if hotend_pin:
+            _add(_resolve_from_group(hotend_pin, "fan_ports"), "Hotend fan")
+        controller_pin = self.state.get("fans.controller.pin", "")
+        if controller_pin:
+            _add(_resolve_from_group(controller_pin, "fan_ports"), "Controller fan")
+
+        additional_fans = self.state.get("fans.additional_fans", [])
+        if isinstance(additional_fans, list):
+            for idx, fan in enumerate(additional_fans, start=1):
+                if not isinstance(fan, dict):
+                    continue
+                loc = (fan.get("location") or "mainboard").strip()
+                if loc != "mainboard":
+                    continue
+                pin = (fan.get("pin") or "").strip()
+                if pin:
+                    _add(_resolve_from_group(pin, "fan_ports"), f"Additional fan #{idx}")
+                pins = fan.get("pins")
+                if isinstance(pins, list):
+                    for p in pins:
+                        if isinstance(p, str) and p.strip():
+                            _add(_resolve_from_group(p, "fan_ports"), f"Additional fan #{idx} (multi_pin)")
+
+        # Raw pins already (only if they look like raw mainboard pins)
+        probe_sensor_pin = self.state.get("probe.sensor_pin", "")
+        if isinstance(probe_sensor_pin, str) and self._looks_like_raw_pin(probe_sensor_pin):
+            _add(probe_sensor_pin, "Probe sensor_pin")
+
+        temp_sensors = self.state.get("temperature_sensors.additional", [])
+        if isinstance(temp_sensors, list):
+            for s in temp_sensors:
+                if not isinstance(s, dict):
+                    continue
+                pin = s.get("sensor_pin")
+                name = (s.get("name") or "additional").strip()
+                if isinstance(pin, str) and self._looks_like_raw_pin(pin):
+                    _add(pin, f"Temp sensor ({name})")
+
+        filament_sensors = self.state.get("filament_sensors", [])
+        if isinstance(filament_sensors, list):
+            for s in filament_sensors:
+                if not isinstance(s, dict):
+                    continue
+                pin = s.get("pin")
+                name = (s.get("name") or "filament").strip()
+                if isinstance(pin, str) and self._looks_like_raw_pin(pin):
+                    _add(pin, f"Filament sensor ({name})")
+
+        leds = self.state.get("leds", [])
+        if isinstance(leds, list):
+            for s in leds:
+                if not isinstance(s, dict):
+                    continue
+                pin = s.get("pin")
+                name = (s.get("name") or "led").strip()
+                if isinstance(pin, str) and self._looks_like_raw_pin(pin):
+                    _add(pin, f"LED ({name})")
+
+        return used
+
     # -------------------------------------------------------------------------
     # Heater discovery / picker helpers
     # -------------------------------------------------------------------------
@@ -3919,31 +4092,37 @@ class GschpooziWizard:
         # (PT1000 especially needs correct value for accurate readings)
         # Default to 2200 for toolboards, 4700 for mainboards
         default_pullup = 2200 if sensor_location == "toolboard" else 4700
-        current_pullup = self.state.get("extruder.pullup_resistor", default_pullup)
+        extruder_cfg = self.state.get_section("extruder")
+        has_pullup_key = isinstance(extruder_cfg, dict) and ("pullup_resistor" in extruder_cfg)
+        current_pullup = extruder_cfg.get("pullup_resistor") if has_pullup_key else None
+        effective_pullup = int(current_pullup) if isinstance(current_pullup, int) else int(default_pullup)
         pullup_resistor = self.ui.radiolist(
             "Thermistor pullup resistor value:\n\n"
             "(Check your board - most mainboards use 4.7kΩ, most toolboards use 2.2kΩ)\n"
             "Wrong value = wrong temperature readings!",
             [
-                ("2200", "2.2kΩ (most toolboards: EBB, SHT36, Nitehawk)", current_pullup == 2200),
-                ("4700", "4.7kΩ (most mainboards)", current_pullup == 4700),
-                ("1000", "1kΩ (some PT1000 boards)", current_pullup == 1000),
-                ("10000", "10kΩ (rare)", current_pullup == 10000),
+                ("2200", "2.2kΩ (most toolboards: EBB, SHT36, Nitehawk)", effective_pullup == 2200 and not (has_pullup_key and current_pullup is None)),
+                ("4700", "4.7kΩ (most mainboards)", effective_pullup == 4700 and not (has_pullup_key and current_pullup is None)),
+                ("1000", "1kΩ (some PT1000 boards)", effective_pullup == 1000 and not (has_pullup_key and current_pullup is None)),
+                ("10000", "10kΩ (rare)", effective_pullup == 10000 and not (has_pullup_key and current_pullup is None)),
+                ("none", "None (omit from config)", bool(has_pullup_key and current_pullup is None)),
                 ("custom", "Enter custom value", False),
             ],
             title="Hotend - Pullup Resistor"
         )
         if pullup_resistor is None:
             return
-        if pullup_resistor == "custom":
+        if pullup_resistor == "none":
+            pullup_resistor = None
+        elif pullup_resistor == "custom":
             pullup_resistor = self.ui.inputbox(
                 "Enter pullup resistor value (Ω):",
-                default=str(current_pullup),
+                default=str(effective_pullup),
                 title="Hotend - Custom Pullup"
             )
             if pullup_resistor is None:
                 return
-        pullup_resistor = int(pullup_resistor)
+        pullup_resistor = int(pullup_resistor) if pullup_resistor else None
 
         # Temperature settings
         min_temp = self.ui.inputbox(
@@ -4082,6 +4261,185 @@ class GschpooziWizard:
             title="Configuration Saved"
         )
 
+    def _collect_used_mainboard_pins(self, exclude_bed: bool = False) -> set:
+        """Collect mainboard pins already assigned in wizard state.
+
+        Args:
+            exclude_bed: If True, don't include heater_bed pins (useful when re-configuring bed).
+
+        Returns:
+            Set of port IDs that are already in use.
+        """
+        used = set()
+
+        # Steppers (mainboard motor ports)
+        for axis in ["stepper_x", "stepper_y", "stepper_z", "stepper_x1", "stepper_y1"]:
+            port = self.state.get(f"{axis}.motor_port")
+            if port:
+                used.add(port)
+            endstop = self.state.get(f"{axis}.endstop_port")
+            if endstop:
+                used.add(endstop)
+
+        # Z motors (if multiple)
+        z_count = self.state.get("stepper_z.z_motor_count", 1) or 1
+        for i in range(1, int(z_count)):
+            port = self.state.get(f"stepper_z{i}.motor_port")
+            if port:
+                used.add(port)
+
+        # Extruder (mainboard)
+        if self.state.get("extruder.location") == "mainboard":
+            port = self.state.get("extruder.motor_port_mainboard")
+            if port:
+                used.add(port)
+        if self.state.get("extruder.heater_location") == "mainboard":
+            port = self.state.get("extruder.heater_port_mainboard")
+            if port:
+                used.add(port)
+        if self.state.get("extruder.sensor_location") == "mainboard":
+            port = self.state.get("extruder.sensor_port_mainboard")
+            if port:
+                used.add(port)
+
+        # Heater bed
+        if not exclude_bed:
+            bed_heater = self.state.get("heater_bed.heater_pin")
+            if bed_heater:
+                used.add(bed_heater)
+            bed_sensor = self.state.get("heater_bed.sensor_port")
+            if bed_sensor:
+                used.add(bed_sensor)
+
+        # Fans (mainboard)
+        if self.state.get("fans.part_cooling.location") == "mainboard":
+            pin = self.state.get("fans.part_cooling.pin_mainboard")
+            if pin:
+                used.add(pin)
+        if self.state.get("fans.hotend.location") == "mainboard":
+            pin = self.state.get("fans.hotend.pin_mainboard")
+            if pin:
+                used.add(pin)
+        controller_pin = self.state.get("fans.controller.pin")
+        if controller_pin:
+            used.add(controller_pin)
+
+        # Additional fans
+        for fan in self.state.get("fans.additional_fans", []) or []:
+            if isinstance(fan, dict) and fan.get("location") == "mainboard":
+                pin = fan.get("pin")
+                if pin:
+                    used.add(pin)
+
+        # Probe
+        probe_pin = self.state.get("probe.probe_pin_mainboard")
+        if probe_pin:
+            used.add(probe_pin)
+
+        return used
+
+    def _build_output_pin_options(self, board_data: dict, current_value: str, used_pins: set) -> list:
+        """Build radiolist options for output pins (heaters, fans, misc outputs).
+
+        Returns list of (tag, label, is_selected) tuples.
+        """
+        options = []
+        seen_tags = set()
+
+        # Priority groups for output pins
+        groups = ["heater_ports", "fan_ports", "misc_ports", "endstop_ports"]
+
+        for group in groups:
+            group_data = board_data.get(group, {})
+            if not isinstance(group_data, dict):
+                continue
+
+            for port_id, port_info in group_data.items():
+                if port_id in used_pins:
+                    continue  # Skip already used
+
+                if isinstance(port_info, dict):
+                    pin = port_info.get("pin") or port_info.get("signal_pin") or ""
+                    label = port_info.get("label", port_id)
+                    if pin:
+                        label = f"{label} ({pin})"
+                else:
+                    label = port_id
+                    pin = str(port_info) if port_info else ""
+
+                tag = port_id
+                if tag in seen_tags:
+                    continue
+                seen_tags.add(tag)
+
+                is_selected = (port_id == current_value)
+                options.append((tag, f"{label} [{group}]", is_selected))
+
+        # Sort: bed-related first, then alphabetically
+        def sort_key(item):
+            tag, label, _ = item
+            is_bed = "bed" in tag.lower() or "hb" == tag.lower() or "tb" == tag.lower()
+            return (0 if is_bed else 1, tag.lower())
+
+        options.sort(key=sort_key)
+
+        # Ensure something is selected
+        if options and not any(x[2] for x in options):
+            options[0] = (options[0][0], options[0][1], True)
+
+        return options
+
+    def _build_thermistor_pin_options(self, board_data: dict, current_value: str, used_pins: set) -> list:
+        """Build radiolist options for thermistor/ADC pins.
+
+        Returns list of (tag, label, is_selected) tuples.
+        """
+        options = []
+        seen_tags = set()
+
+        # Priority: thermistor ports first, then misc
+        groups = ["thermistor_ports", "misc_ports"]
+
+        for group in groups:
+            group_data = board_data.get(group, {})
+            if not isinstance(group_data, dict):
+                continue
+
+            for port_id, port_info in group_data.items():
+                if port_id in used_pins:
+                    continue  # Skip already used
+
+                if isinstance(port_info, dict):
+                    pin = port_info.get("pin") or port_info.get("signal_pin") or ""
+                    label = port_info.get("label", port_id)
+                    if pin:
+                        label = f"{label} ({pin})"
+                else:
+                    label = port_id
+                    pin = str(port_info) if port_info else ""
+
+                tag = port_id
+                if tag in seen_tags:
+                    continue
+                seen_tags.add(tag)
+
+                is_selected = (port_id == current_value)
+                options.append((tag, f"{label} [{group}]", is_selected))
+
+        # Sort: bed-related first, then alphabetically
+        def sort_key(item):
+            tag, label, _ = item
+            is_bed = "bed" in tag.lower() or "tb" == tag.lower()
+            return (0 if is_bed else 1, tag.lower())
+
+        options.sort(key=sort_key)
+
+        # Ensure something is selected
+        if options and not any(x[2] for x in options):
+            options[0] = (options[0][0], options[0][1], True)
+
+        return options
+
     def _heater_bed_setup(self) -> None:
         """Configure heated bed per schema 2.7."""
         # Get current values
@@ -4095,34 +4453,35 @@ class GschpooziWizard:
         current_control = self.state.get("heater_bed.control", "pid")
         current_surface = self.state.get("heater_bed.surface_type", "")
 
+        # Load board data for pin lists
+        board_id = self.state.get("mcu.main.board_type", "")
+        board_data = self._load_board_data(board_id, "boards")
+
+        # Collect pins already in use (excluding bed itself, since we're reconfiguring it)
+        used_pins = self._collect_used_mainboard_pins(exclude_bed=True)
+
         # === 2.7.1: Heater Configuration ===
-        # Heater pin selection (bed heater is always on mainboard)
-        heater_ports = self._get_board_ports("heater_ports", "boards")
-        if heater_ports:
-            # Filter to show bed heater
-            bed_ports = [(p, l, p == current_heater_pin or "Bed" in l or p == "HB")
-                        for p, l, d in heater_ports if "Bed" in l or p == "HB"]
-            if bed_ports:
-                heater_pin = self.ui.radiolist(
-                    "Select heated bed heater pin:",
-                    bed_ports,
-                    title="Heated Bed - Heater Pin"
-                )
-            else:
-                # No specific bed port found, show all heater ports
-                heater_pin = self.ui.radiolist(
-                    "Select heated bed heater pin:",
-                    [(p, l, p == current_heater_pin or d) for p, l, d in heater_ports],
-                    title="Heated Bed - Heater Pin"
-                )
-        else:
-            heater_pin = self.ui.inputbox(
-                "Enter heated bed heater pin:",
-                default=current_heater_pin or "HB",
-                title="Heated Bed - Heater Pin"
+        # Build comprehensive list of output pins for bed heater (SSR/MOSFET friendly)
+        heater_options = self._build_output_pin_options(board_data, current_heater_pin, used_pins)
+        if not heater_options:
+            self.ui.msgbox(
+                "No output pins found in board definition.\n\n"
+                "Please select a mainboard first in MCU Setup.",
+                title="Heated Bed - Error"
             )
+            return
+
+        heater_pin = self.ui.radiolist(
+            "Select heated bed heater pin:\n\n"
+            "(For SSR/external MOSFET, pick any available output)",
+            heater_options,
+            title="Heated Bed - Heater Pin"
+        )
         if heater_pin is None:
             return
+
+        # Add heater pin to used set before thermistor selection
+        used_pins.add(heater_pin)
 
         max_power = self.ui.inputbox(
             "Heater max power (0.1-1.0):\n\n"
@@ -4143,31 +4502,22 @@ class GschpooziWizard:
             return
 
         # === 2.7.2: Thermistor ===
-        # Thermistor port selection (bed thermistor is always on mainboard)
-        sensor_ports = self._get_board_ports("thermistor_ports", "boards")
-        if sensor_ports:
-            # Filter to show bed thermistor
-            bed_sensors = [(p, l, p == current_sensor_port or "Bed" in l or p == "TB")
-                          for p, l, d in sensor_ports if "Bed" in l or p == "TB"]
-            if bed_sensors:
-                sensor_port = self.ui.radiolist(
-                    "Select bed thermistor port:",
-                    bed_sensors,
-                    title="Heated Bed - Thermistor Port"
-                )
-            else:
-                # No specific bed port found, show all thermistor ports
-                sensor_port = self.ui.radiolist(
-                    "Select bed thermistor port:",
-                    [(p, l, p == current_sensor_port or d) for p, l, d in sensor_ports],
-                    title="Heated Bed - Thermistor Port"
-                )
-        else:
-            sensor_port = self.ui.inputbox(
-                "Enter bed thermistor port:",
-                default=current_sensor_port or "TB",
-                title="Heated Bed - Thermistor Port"
+        # Build comprehensive list of ADC/thermistor pins
+        sensor_options = self._build_thermistor_pin_options(board_data, current_sensor_port, used_pins)
+        if not sensor_options:
+            self.ui.msgbox(
+                "No thermistor/ADC pins found in board definition.\n\n"
+                "Please select a mainboard first in MCU Setup.",
+                title="Heated Bed - Error"
             )
+            return
+
+        sensor_port = self.ui.radiolist(
+            "Select bed thermistor port:\n\n"
+            "(Any ADC input can be used)",
+            sensor_options,
+            title="Heated Bed - Thermistor Port"
+        )
         if sensor_port is None:
             return
 
@@ -4188,29 +4538,32 @@ class GschpooziWizard:
         if sensor_type is None:
             return
 
-        # Pullup resistor (only for NTC thermistors)
+        # Pullup resistor with None option
         pullup_resistor = None
-        if sensor_type != "PT1000":
-            current_pullup = self.state.get("heater_bed.pullup_resistor", 4700)
-            pullup_resistor = self.ui.radiolist(
-                "Bed thermistor pullup resistor value:\n\n"
-                "(Most mainboards use 4.7kΩ standard)",
-                [
-                    ("4700", "4.7kΩ (standard)", current_pullup == 4700),
-                    ("2200", "2.2kΩ", current_pullup == 2200),
-                    ("10000", "10kΩ", current_pullup == 10000),
-                    ("custom", "Enter custom value", False),
-                ],
-                title="Heated Bed - Pullup Resistor"
-            )
-            if pullup_resistor == "custom":
-                pullup_resistor = self.ui.inputbox(
-                    "Enter pullup resistor value (Ω):",
-                    default=str(current_pullup),
-                    title="Heated Bed - Custom Pullup"
-                )
-            if pullup_resistor:
-                pullup_resistor = int(pullup_resistor)
+        bed_cfg = self.state.get_section("heater_bed")
+        has_pullup_key = isinstance(bed_cfg, dict) and ("pullup_resistor" in bed_cfg)
+        current_pullup = bed_cfg.get("pullup_resistor") if has_pullup_key else 4700
+        effective_pullup = int(current_pullup) if isinstance(current_pullup, int) else 4700
+        is_none = has_pullup_key and current_pullup is None
+
+        pullup_resistor = self.ui.radiolist(
+            "Bed thermistor pullup resistor value:\n\n"
+            "(Most mainboards use 4.7kΩ standard)",
+            [
+                ("4700", "4.7kΩ (standard)", effective_pullup == 4700 and not is_none),
+                ("2200", "2.2kΩ", effective_pullup == 2200 and not is_none),
+                ("10000", "10kΩ", effective_pullup == 10000 and not is_none),
+                ("1000", "1kΩ (some PT1000)", effective_pullup == 1000 and not is_none),
+                ("none", "None (omit from config)", is_none),
+            ],
+            title="Heated Bed - Pullup Resistor"
+        )
+        if pullup_resistor is None:
+            return
+        if pullup_resistor == "none":
+            pullup_resistor = None
+        else:
+            pullup_resistor = int(pullup_resistor)
 
         # === 2.7.3: Temperature Settings ===
         min_temp = self.ui.inputbox(
@@ -4274,8 +4627,8 @@ class GschpooziWizard:
         self.state.set("heater_bed.pwm_cycle_time", float(pwm_cycle_time or 0.0166))
         self.state.set("heater_bed.sensor_port", sensor_port)
         self.state.set("heater_bed.sensor_type", sensor_type or "Generic 3950")
-        if pullup_resistor:
-            self.state.set("heater_bed.pullup_resistor", pullup_resistor)
+        # Store pullup_resistor explicitly (None means "omit from config")
+        self.state.set("heater_bed.pullup_resistor", pullup_resistor)
         self.state.set("heater_bed.min_temp", int(min_temp or 0))
         self.state.set("heater_bed.max_temp", int(max_temp or 120))
         self.state.set("heater_bed.control", control or "pid")

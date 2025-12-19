@@ -242,22 +242,12 @@ class GschpooziWizard:
             return 1
     
     def _run_systemctl(self, action: str, service: str) -> bool:
-        """Run systemctl command (KIAUH-style).
+        """Run systemctl command interactively (allows sudo password prompt).
         
         Returns True on success, False on failure.
         """
-        import subprocess
-        try:
-            subprocess.run(
-                ["sudo", "systemctl", action, service],
-                stderr=subprocess.PIPE,
-                check=True,
-            )
-            return True
-        except subprocess.CalledProcessError:
-            return False
-        except Exception:
-            return False
+        exit_code = self._run_shell_interactive(f"sudo systemctl {action} {service}")
+        return exit_code == 0
 
     def _backup_file(self, path: Path) -> None:
         """Create a timestamped backup of a file if it exists."""

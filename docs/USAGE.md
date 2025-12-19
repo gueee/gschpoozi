@@ -137,14 +137,35 @@ Complete sections 1-3, then use option 4 to generate your config files.
 
 ---
 
-## Klipper Setup (Install/Update/Remove + CAN)
+## Klipper Setup
 
-The **Klipper Setup** section is intended to provide a KIAUH-like workflow:
+The **Klipper Setup** section provides KIAUH-style component management and related tools.
 
-- Install / update / **full uninstall** / reinstall common Klipper components (Klipper, Moonraker, Mainsail/Fluidd, etc.)
-- Basic “is it running?” health checks for Klipper and Moonraker
-- CAN helper to bring up `can0` and optionally make it persistent (systemd service)
-- Guided Katapult / flashing helper (USB DFU + CAN firmware flash)
+### Menu Options
+
+| Option | Description |
+|--------|-------------|
+| **1.1 Manage Klipper Components** | KIAUH-style status view with Install/Update/Remove/Reinstall |
+| **1.2 CAN Interface Setup** | Configure can0, install can-utils, create persistent service |
+| **1.3 Katapult / Flashing** | USB DFU and CAN firmware flashing helper |
+| **1.4 Update Manager Fix** | Git fetch workaround for network issues |
+
+### Manage Klipper Components
+
+Shows installation status for all Klipper ecosystem components:
+- **Klipper** - Core firmware
+- **Moonraker** - API server
+- **Mainsail** / **Fluidd** - Web interfaces
+- **Crowsnest** - Camera streaming
+- **Sonar** - Network keepalive
+- **Timelapse** - Print timelapse plugin
+- **KlipperScreen** - Touchscreen UI
+
+Each component shows: installed status, version (from git), and service state (running/stopped/disabled).
+
+Selecting a component offers context-appropriate actions:
+- **Not installed**: Install
+- **Installed**: Update, Remove (full uninstall), Reinstall
 
 **Safety notes:**
 - Install/remove actions may prompt for `sudo` and will modify system services.

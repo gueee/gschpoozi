@@ -891,15 +891,13 @@ class GschpooziWizard:
         while True:
             choice = self.ui.menu(
                 "Klipper Setup\n\n"
-                "KIAUH-like component management + quick health checks.\n"
+                "Manage Klipper ecosystem components and related tools.\n"
                 "Warning: install/remove actions may require sudo and can modify system services.",
                 [
-                    ("1.1", "Check Klipper         (Verify installation)"),
-                    ("1.2", "Check Moonraker       (Verify API)"),
-                    ("1.3", "Manage Components     (Install/Update/Remove/Reinstall)"),
-                    ("1.4", "CAN Interface Setup   (can0 / can-utils / systemd)"),
-                    ("1.5", "Katapult / Flashing   (DFU + CAN firmware flash)"),
-                    ("1.6", "Update Manager Fix    (Git fetch workaround)"),
+                    ("1.1", "Manage Klipper Components  (KIAUH-style install/update/remove)"),
+                    ("1.2", "CAN Interface Setup       (can0 / can-utils / systemd)"),
+                    ("1.3", "Katapult / Flashing       (DFU + CAN firmware flash)"),
+                    ("1.4", "Update Manager Fix        (Git fetch workaround)"),
                     ("B", "Back to Main Menu"),
                 ],
                 title="1. Klipper Setup",
@@ -908,16 +906,12 @@ class GschpooziWizard:
             if choice is None or choice == "B":
                 break
             elif choice == "1.1":
-                self._check_klipper()
-            elif choice == "1.2":
-                self._check_moonraker()
-            elif choice == "1.3":
                 self._manage_klipper_components()
-            elif choice == "1.4":
+            elif choice == "1.2":
                 self._can_interface_setup()
-            elif choice == "1.5":
+            elif choice == "1.3":
                 self._katapult_setup()
-            elif choice == "1.6":
+            elif choice == "1.4":
                 self._update_manager_git_fetch_workaround()
 
     def _update_manager_git_fetch_workaround(self) -> None:
@@ -1037,11 +1031,111 @@ class GschpooziWizard:
                 else:
                     self.ui.msgbox("git fetch: FAILED / HUNG\n\n" + out, title="Fetch Test")
 
+    def _get_component_status(self, component: str) -> dict:
+        """Get installation status for a Klipper ecosystem component.
+        
+        Returns dict with: installed, version, service_running, service_enabled, path
+        """
+        import subprocess
+        
+        status = {
+            "installed": False,
+            "version": None,
+            "service_running": False,
+            "service_enabled": False,
+            "path": None,
+        }
+        
+        # Component paths and service names
+        component_info = {
+            "klipper": {"path": Path.home() / "klipper", "service": "klipper"},
+            "moonraker": {"path": Path.home() / "moonraker", "service": "moonraker"},
+            "mainsail": {"path": Path.home() / "mainsail", "service": None},  # nginx-served
+            "fluidd": {"path": Path.home() / "fluidd", "service": None},  # nginx-served
+            "crowsnest": {"path": Path.home() / "crowsnest", "service": "crowsnest"},
+            "sonar": {"path": Path.home() / "sonar", "service": "sonar"},
+            "timelapse": {"path": Path.home() / "moonraker-timelapse", "service": None},  # moonraker plugin
+            "klipperscreen": {"path": Path.home() / "KlipperScreen", "service": "KlipperScreen"},
+        }
+        
+        info = component_info.get(component.lower())
+        if not info:
+            return status
+        
+        path = info["path"]
+        service = info["service"]
+        
+        # Check if installed (directory exists)
+        if path.exists():
+            status["installed"] = True
+            status["path"] = str(path)
+            
+            # Try to get version from git
+            try:
+                r = subprocess.run(
+                    ["git", "describe", "--tags", "--always"],
+                    cwd=str(path),
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if r.returncode == 0:
+                    status["version"] = r.stdout.strip()
+            except Exception:
+                pass
+        
+        # Check service status
+        if service:
+            try:
+                r = subprocess.run(
+                    ["systemctl", "is-active", service],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                status["service_running"] = (r.stdout.strip() == "active")
+            except Exception:
+                pass
+            
+            try:
+                r = subprocess.run(
+                    ["systemctl", "is-enabled", service],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                status["service_enabled"] = (r.stdout.strip() == "enabled")
+            except Exception:
+                pass
+        
+        return status
+
+    def _format_component_status(self, component: str, status: dict) -> str:
+        """Format component status for menu display."""
+        if not status["installed"]:
+            return f"{component:<14} [ Not installed ]"
+        
+        parts = ["✓"]
+        if status["version"]:
+            parts.append(status["version"][:20])
+        
+        if status["service_running"]:
+            parts.append("running")
+        elif status.get("service_enabled") is not None:
+            # Has a service but not running
+            if status["service_enabled"]:
+                parts.append("stopped")
+            else:
+                parts.append("disabled")
+        
+        return f"{component:<14} [ {' | '.join(parts)} ]"
+
     def _manage_klipper_components(self) -> None:
         """
-        KIAUH-like component manager.
-
-        Uses scripts/lib/klipper-install.sh via scripts/tools/klipper_component_manager.sh.
+        KIAUH-style component manager.
+        
+        Shows installation status for each component, then allows
+        Install/Update/Remove/Reinstall actions.
         """
         repo_root = REPO_ROOT
         tool = repo_root / "scripts" / "tools" / "klipper_component_manager.sh"
@@ -1049,73 +1143,105 @@ class GschpooziWizard:
             self.ui.msgbox(f"Missing tool: {tool}", title="Error")
             return
 
+        # Component definitions
+        components = [
+            ("klipper", "Klipper"),
+            ("moonraker", "Moonraker"),
+            ("mainsail", "Mainsail"),
+            ("fluidd", "Fluidd"),
+            ("crowsnest", "Crowsnest"),
+            ("sonar", "Sonar"),
+            ("timelapse", "Timelapse"),
+            ("klipperscreen", "KlipperScreen"),
+        ]
+
         while True:
+            # Build menu with current status
+            menu_items = []
+            for comp_id, comp_name in components:
+                status = self._get_component_status(comp_id)
+                label = self._format_component_status(comp_name, status)
+                menu_items.append((comp_id, label))
+            
+            menu_items.append(("update-all", "─────────────────────────────────"))
+            menu_items.append(("update-all", "Update ALL installed components"))
+            menu_items.append(("B", "Back"))
+
             choice = self.ui.menu(
                 "Manage Klipper Components\n\n"
-                "This can install, update, fully remove, or reinstall Klipper ecosystem components.\n"
-                "Your ~/printer_data/config is preserved by the remove routines, but services and\n"
-                "software directories (~/klipper, ~/moonraker, nginx sites, etc.) can be changed.\n\n"
-                "Pick an action:",
-                [
-                    ("install", "Install a component"),
-                    ("update", "Update a component"),
-                    ("remove", "FULL uninstall a component"),
-                    ("reinstall", "FULL uninstall + reinstall a component"),
-                    ("update-all", "Update all installed components"),
-                    ("KS", "KlipperScreen (managed separately)"),
-                    ("B", "Back"),
-                ],
-                title="Component Manager",
-                height=22,
-                width=90,
-                menu_height=10,
+                "Select a component to Install/Update/Remove/Reinstall.\n"
+                "Your ~/printer_data/config is preserved by remove routines.",
+                menu_items,
+                title="Klipper Components",
+                height=26,
+                width=100,
+                menu_height=14,
             )
+            
             if choice is None or choice == "B":
                 return
 
-            if choice == "KS":
-                # Reuse the existing KlipperScreen manager (has install/update/remove + config).
+            if choice == "update-all":
+                if self.ui.yesno(
+                    "Update ALL installed components?\n\n"
+                    "This uses KIAUH-style routines and may restart services.\n"
+                    "You may be prompted for sudo.",
+                    title="Confirm Update All",
+                    default_no=True,
+                ):
+                    self._run_tty_command(["bash", str(tool), "update-all"])
+                continue
+
+            # Selected a specific component - show actions
+            comp_name = dict(components).get(choice, choice)
+            status = self._get_component_status(choice)
+            
+            # Build action menu based on current status
+            if choice == "klipperscreen":
+                # KlipperScreen has its own manager with config options
                 self._klipperscreen_setup()
                 continue
+            
+            action_items = []
+            if status["installed"]:
+                action_items.append(("update", "Update"))
+                action_items.append(("remove", "Remove (FULL uninstall)"))
+                action_items.append(("reinstall", "Reinstall (remove + install)"))
+            else:
+                action_items.append(("install", "Install"))
+            action_items.append(("B", "Back"))
 
-            if choice == "update-all":
-                self.ui.msgbox(
-                    "About to run: Update ALL installed components.\n\n"
-                    "This uses the installer library (KIAUH-style) and may restart services.\n"
-                    "You may be prompted for sudo.",
-                    title="Confirm",
-                    height=12,
-                    width=80,
-                )
-                self._run_tty_command(["bash", str(tool), "update-all"])
-                continue
+            status_text = "INSTALLED" if status["installed"] else "NOT INSTALLED"
+            version_text = f"Version: {status['version']}" if status["version"] else ""
+            service_text = ""
+            if status["service_running"]:
+                service_text = "Service: running"
+            elif status.get("service_enabled") is not None:
+                service_text = f"Service: {'enabled but stopped' if status['service_enabled'] else 'disabled'}"
 
-            component = self.ui.radiolist(
-                "Select component:",
-                [
-                    ("klipper", "Klipper", True),
-                    ("moonraker", "Moonraker", False),
-                    ("mainsail", "Mainsail", False),
-                    ("fluidd", "Fluidd", False),
-                    ("crowsnest", "Crowsnest", False),
-                    ("sonar", "Sonar", False),
-                    ("timelapse", "Timelapse", False),
-                ],
-                title="Component",
-                height=22,
+            action = self.ui.menu(
+                f"{comp_name}\n\n"
+                f"Status: {status_text}\n"
+                f"{version_text}\n"
+                f"{service_text}\n\n"
+                "Select action:",
+                action_items,
+                title=f"{comp_name} Actions",
+                height=20,
                 width=80,
-                list_height=10,
+                menu_height=6,
             )
-            if component is None:
+            
+            if action is None or action == "B":
                 continue
 
             # Safety confirmation for destructive actions
-            if choice in ("remove", "reinstall"):
+            if action in ("remove", "reinstall"):
                 if not self.ui.yesno(
-                    "WARNING: This is a FULL uninstall action.\n\n"
-                    "It will stop/disable services and delete component directories/venvs.\n"
-                    "Your ~/printer_data/config is intended to be preserved, but this can still break\n"
-                    "a working setup if you uninstall the wrong thing.\n\n"
+                    f"WARNING: This will FULLY uninstall {comp_name}.\n\n"
+                    "It will stop/disable services and delete the component directory.\n"
+                    "Your ~/printer_data/config is preserved, but this can still break\n"
+                    "a working setup.\n\n"
                     "Proceed?",
                     title="Danger Zone",
                     default_no=True,
@@ -1124,7 +1250,7 @@ class GschpooziWizard:
                 ):
                     continue
 
-            self._run_tty_command(["bash", str(tool), choice, component])
+            self._run_tty_command(["bash", str(tool), action, choice])
 
     def _can_interface_setup(self) -> None:
         """
@@ -1215,96 +1341,6 @@ class GschpooziWizard:
         )
 
         self._run_tty_command(["bash", str(tool)])
-
-    def _check_klipper(self) -> None:
-        """Check Klipper installation status."""
-        # TODO: Actually check Klipper status
-        klipper_path = Path.home() / "klipper"
-        klippy_env = Path.home() / "klippy-env"
-
-        status_lines = []
-
-        if klipper_path.exists():
-            status_lines.append("✓ Klipper directory found")
-        else:
-            status_lines.append("✗ Klipper directory NOT found")
-
-        if klippy_env.exists():
-            status_lines.append("✓ Klippy virtual environment found")
-        else:
-            status_lines.append("✗ Klippy virtual environment NOT found")
-
-        # Check service (systemd). Be robust on systems without systemd (containers, some WSL, etc.).
-        import subprocess
-        import shutil
-        try:
-            if not shutil.which("systemctl"):
-                status_lines.append("⚠ systemctl not found (service status unknown)")
-            else:
-                result = subprocess.run(
-                    ["systemctl", "is-active", "klipper"],
-                    capture_output=True,
-                    text=True,
-                    timeout=3,
-                )
-                state = (result.stdout or "").strip()
-                if state == "active":
-                    status_lines.append("✓ Klipper service is running")
-                elif state:
-                    status_lines.append(f"✗ Klipper service is NOT running ({state})")
-                else:
-                    # Some systemctl errors only print to stderr
-                    err = (result.stderr or "").strip()
-                    status_lines.append(f"⚠ Klipper service status unknown ({err or 'no output'})")
-        except Exception as e:
-            status_lines.append(f"⚠ Klipper service check failed ({type(e).__name__}: {e})")
-
-        self.ui.msgbox(
-            "Klipper Installation Status:\n\n" + "\n".join(status_lines),
-            title="Klipper Check"
-        )
-
-    def _check_moonraker(self) -> None:
-        """Check Moonraker installation status."""
-        moonraker_path = Path.home() / "moonraker"
-
-        status_lines = []
-
-        if moonraker_path.exists():
-            status_lines.append("✓ Moonraker directory found")
-        else:
-            status_lines.append("✗ Moonraker directory NOT found")
-
-        # Check service (systemd). Be robust on systems without systemd (containers, some WSL, etc.).
-        import subprocess
-        import shutil
-        try:
-            if not shutil.which("systemctl"):
-                status_lines.append("⚠ systemctl not found (service status unknown)")
-            else:
-                result = subprocess.run(
-                    ["systemctl", "is-active", "moonraker"],
-                    capture_output=True,
-                    text=True,
-                    timeout=3,
-                )
-                state = (result.stdout or "").strip()
-                if state == "active":
-                    status_lines.append("✓ Moonraker service is running")
-                elif state:
-                    status_lines.append(f"✗ Moonraker service is NOT running ({state})")
-                else:
-                    err = (result.stderr or "").strip()
-                    status_lines.append(f"⚠ Moonraker service status unknown ({err or 'no output'})")
-        except Exception as e:
-            status_lines.append(f"⚠ Moonraker service check failed ({type(e).__name__}: {e})")
-
-        self.ui.msgbox(
-            "Moonraker Installation Status:\n\n" + "\n".join(status_lines),
-            title="Moonraker Check"
-        )
-
-    # NOTE: Web interface / optional services are now handled in the component manager.
 
     # -------------------------------------------------------------------------
     # Category 2: Hardware Setup

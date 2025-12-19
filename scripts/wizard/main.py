@@ -5598,10 +5598,18 @@ class GschpooziWizard:
 
                     exit_code = self._run_shell_interactive(str(install_script))
                     if exit_code == 0:
+                        # Ensure service is enabled and started
+                        print("\n" + "=" * 60)
+                        print("Enabling and starting KlipperScreen service...")
+                        print("=" * 60 + "\n")
+                        self._run_systemctl("enable", "KlipperScreen")
+                        self._run_systemctl("start", "KlipperScreen")
+                        
                         if update_mgr:
                             self._ensure_moonraker_update_manager_entry("KlipperScreen", update_mgr)
                         self.ui.msgbox(
-                            "KlipperScreen installed successfully!",
+                            "KlipperScreen installed successfully!\n\n"
+                            "Service has been enabled and started.",
                             title="Installation Complete",
                         )
                     else:
@@ -5681,11 +5689,16 @@ class GschpooziWizard:
 
                 ok, msg = self._write_klipperscreen_conf(new_host, new_port)
                 if ok:
-                    self.ui.msgbox(
+                    # Restart service for changes to take effect
+                    restart = self.ui.yesno(
                         f"Configuration saved!\n\nHost: {new_host}\nPort: {new_port}\n\n"
-                        "Restart KlipperScreen for changes to take effect.",
+                        "Restart KlipperScreen now?",
                         title="Configuration Saved",
+                        default_no=False,
                     )
+                    if restart:
+                        self._run_systemctl("restart", "KlipperScreen")
+                        self.ui.msgbox("KlipperScreen restarted!", title="Done")
                 else:
                     self.ui.msgbox(f"Failed to write config:\n\n{msg}", title="Error")
                 continue

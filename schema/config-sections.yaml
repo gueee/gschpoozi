@@ -345,7 +345,7 @@ extruder:
     {% else %}
     sensor_pin: {{ "^" if extruder.sensor_pullup | default(false) else "" }}{{ board.pins[extruder.sensor_port_mainboard].signal }}
     {% endif %}
-    sensor_type: {{ extruder.sensor_type }}
+    sensor_type: {{ extruder.sensor_type | default('Generic 3950', true) }}
     {% if extruder.pullup_resistor is defined and extruder.pullup_resistor %}
     pullup_resistor: {{ extruder.pullup_resistor }}
     {% endif %}
@@ -370,7 +370,7 @@ heater_bed:
     [heater_bed]
     heater_pin: {% if heater_bed.heater_pin in board.pins %}{{ board.pins[heater_bed.heater_pin].signal }}{% else %}{{ heater_bed.heater_pin }}{% endif %}
     sensor_pin: {% if heater_bed.sensor_port in board.pins %}{{ board.pins[heater_bed.sensor_port].signal }}{% else %}{{ heater_bed.sensor_port }}{% endif %}
-    sensor_type: {{ heater_bed.sensor_type | default('Generic 3950') }}
+    sensor_type: {{ heater_bed.sensor_type | default('Generic 3950', true) }}
     {% if heater_bed.pullup_resistor %}
     pullup_resistor: {{ heater_bed.pullup_resistor }}
     {% endif %}

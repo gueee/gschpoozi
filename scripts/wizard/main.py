@@ -198,6 +198,19 @@ class GschpooziWizard:
         except Exception:
             return {}
 
+    def _load_mmu_template(self, filename: str) -> dict:
+        """Load a JSON template from templates/mmu/ (e.g. mmu-types.json)."""
+        try:
+            mmu_dir = REPO_ROOT / "templates" / "mmu"
+            path = mmu_dir / filename
+            if not path.exists():
+                return {}
+            with open(path) as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
     def _has_passwordless_sudo(self) -> bool:
         """Return True if sudo can run non-interactively (no password prompt)."""
         try:
@@ -1693,8 +1706,522 @@ class GschpooziWizard:
                 self._configure_toolboard()
             elif choice == "2.1.3":
                 self._configure_host_mcu()
+            elif choice == "2.1.4":
+                self._additional_mcus_setup()
             else:
                 self.ui.msgbox("Coming soon!", title=choice)
+
+    def _additional_mcus_setup(self) -> None:
+        """Configure additional MCUs (MMU/filament changers, buffers, expansion boards)."""
+        mmu_types_tpl = self._load_mmu_template("mmu-types.json") or {}
+        mmu_types = mmu_types_tpl.get("types", {}) if isinstance(mmu_types_tpl.get("types", {}), dict) else {}
+        software_defs = mmu_types_tpl.get("software", {}) if isinstance(mmu_types_tpl.get("software", {}), dict) else {}
+
+        boards_tpl = self._load_mmu_template("mmu-boards.json") or {}
+        boards = boards_tpl.get("boards", {}) if isinstance(boards_tpl.get("boards", {}), dict) else {}
+
+        buffers_tpl = self._load_mmu_template("buffers.json") or {}
+        buffers = buffers_tpl.get("buffers", {}) if isinstance(buffers_tpl.get("buffers", {}), dict) else {}
+
+        def _get_entries() -> list:
+            entries = self.state.get("mcu.additional", [])
+            if not isinstance(entries, list):
+                return []
+            return [e for e in entries if isinstance(e, dict)]
+
+        def _save_entries(entries: list) -> None:
+            self.state.set("mcu.additional", entries)
+            self.state.save()
+
+        def _entry_label(entry: dict) -> str:
+            etype = entry.get("type", "unknown")
+            hw = entry.get("hardware", "")
+            board = entry.get("board", "")
+            conn = entry.get("connection", "")
+            sw = entry.get("software", "")
+            parts = []
+            if etype:
+                parts.append(str(etype))
+            if hw:
+                parts.append(str(hw))
+            if board:
+                parts.append(str(board))
+            if conn:
+                parts.append(str(conn))
+            if sw:
+                parts.append(str(sw))
+            return " / ".join(parts) if parts else "Unknown entry"
+
+        def _select_software(allowed: list) -> str | None:
+            allowed = [a for a in allowed if a in ("happy_hare", "afc")]
+            if not allowed:
+                return None
+            if len(allowed) == 1:
+                return allowed[0]
+            # Use template names when available
+            options = []
+            for key in allowed:
+                name = key
+                if isinstance(software_defs.get(key), dict):
+                    name = software_defs[key].get("name", key)
+                options.append((key, name))
+            chosen = self.ui.radiolist(
+                "Select the software ecosystem to install/use:",
+                [(k, v, i == 0) for i, (k, v) in enumerate(options)],
+                title="Software",
+            )
+            return chosen
+
+        def _select_board() -> str | None:
+            if not boards:
+                self.ui.msgbox(
+                    "No MMU board definitions found.\n\n"
+                    "Expected: templates/mmu/mmu-boards.json",
+                    title="Error",
+                )
+                return None
+
+            items = []
+            for board_id, b in boards.items():
+                if not isinstance(b, dict):
+                    continue
+                items.append((board_id, b.get("name", board_id)))
+            items.sort(key=lambda x: x[1].lower())
+            items.append(("other_unknown", "Other / Unknown"))
+
+            choice = self.ui.menu(
+                "Select controller board:",
+                items,
+                title="MMU Controller Board",
+                height=20,
+                width=100,
+                menu_height=12,
+            )
+            return choice if choice and choice != "B" else None
+
+        def _select_connection(default_conn: str | None = None) -> tuple[str | None, dict]:
+            default_conn = default_conn if default_conn in ("usb", "can") else "usb"
+            conn = self.ui.radiolist(
+                "How is this additional MCU connected?",
+                [
+                    ("usb", "USB serial", default_conn == "usb"),
+                    ("can", "CAN bus", default_conn == "can"),
+                ],
+                title="Connection Type",
+            )
+            if not conn:
+                return None, {}
+
+            data: dict = {"connection": conn}
+            if conn == "usb":
+                serial = self.ui.inputbox(
+                    "Enter the MCU serial path (usually /dev/serial/by-id/...):",
+                    title="USB Serial",
+                    default="/dev/serial/by-id/usb-Klipper_",
+                    width=100,
+                )
+                if not serial:
+                    return None, {}
+                data["serial"] = serial
+            else:
+                uuid = self.ui.inputbox(
+                    "Enter the CAN UUID (from `ls /dev/serial/by-id` or `ip -details link show can0` tooling):",
+                    title="CAN UUID",
+                    default="",
+                    width=100,
+                )
+                if not uuid:
+                    return None, {}
+                data["can_uuid"] = uuid
+
+            return conn, data
+
+        while True:
+            entries = _get_entries()
+            status = f"{len(entries)} configured" if entries else "none configured"
+
+            choice = self.ui.menu(
+                "Additional MCUs\n\n"
+                f"Current: {status}\n\n"
+                "Use this section for add-on controller MCUs and related systems like:\n"
+                "- MMU/filament changers (ERCF, Tradrack, BoxTurtle, ...)\n"
+                "- Smart buffers (LLL Plus) and feedback systems\n\n"
+                "Note: Firmware flashing/pin mapping is still hardware-specific; this wizard focuses on recording\n"
+                "the topology and offering software installers.\n",
+                [
+                    ("ADD_MMU", "Add MMU / Filament Changer"),
+                    ("ADD_BUF", "Add Filament Buffer"),
+                    ("VIEW", "View configured entries"),
+                    ("REMOVE", "Remove an entry"),
+                    ("B", "Back"),
+                ],
+                title="2.1.4 Additional MCUs",
+                height=24,
+                width=120,
+                menu_height=10,
+            )
+
+            if choice is None or choice == "B":
+                return
+
+            if choice == "VIEW":
+                if not entries:
+                    self.ui.msgbox("No additional MCUs configured yet.", title="Additional MCUs")
+                    continue
+                lines = ["Configured entries:\n"]
+                for i, e in enumerate(entries, start=1):
+                    lines.append(f"{i}. {_entry_label(e)}")
+                self.ui.msgbox("\n".join(lines), title="Additional MCUs", height=20, width=110)
+                continue
+
+            if choice == "REMOVE":
+                if not entries:
+                    self.ui.msgbox("No entries to remove.", title="Remove")
+                    continue
+                items = [(str(i), _entry_label(e)) for i, e in enumerate(entries)]
+                pick = self.ui.menu(
+                    "Select entry to remove:",
+                    items + [("B", "Back")],
+                    title="Remove Entry",
+                    height=20,
+                    width=120,
+                    menu_height=12,
+                )
+                if pick is None or pick == "B":
+                    continue
+                try:
+                    idx = int(pick)
+                except ValueError:
+                    continue
+                if idx < 0 or idx >= len(entries):
+                    continue
+                if not self.ui.yesno(f"Remove:\n\n{_entry_label(entries[idx])}\n\nAre you sure?", title="Confirm Remove"):
+                    continue
+                entries.pop(idx)
+                _save_entries(entries)
+                self.ui.msgbox("Entry removed.", title="Removed")
+                continue
+
+            if choice == "ADD_MMU":
+                if not mmu_types:
+                    self.ui.msgbox(
+                        "No MMU type definitions found.\n\n"
+                        "Expected: templates/mmu/mmu-types.json",
+                        title="Error",
+                    )
+                    continue
+
+                type_items = []
+                for mmu_id, info in mmu_types.items():
+                    if not isinstance(info, dict):
+                        continue
+                    type_items.append((mmu_id, info.get("name", mmu_id)))
+                type_items.sort(key=lambda x: x[1].lower())
+                mmu_choice = self.ui.menu(
+                    "Select your MMU/filament changer type:",
+                    type_items + [("B", "Back")],
+                    title="MMU Type",
+                    height=22,
+                    width=120,
+                    menu_height=14,
+                )
+                if mmu_choice is None or mmu_choice == "B":
+                    continue
+
+                mmu_info = mmu_types.get(mmu_choice, {}) if isinstance(mmu_types.get(mmu_choice), dict) else {}
+                versions = mmu_info.get("versions", [])
+                version = None
+                if isinstance(versions, list) and versions:
+                    if len(versions) == 1:
+                        version = versions[0]
+                    else:
+                        version = self.ui.radiolist(
+                            "Select hardware version:",
+                            [(v, v, i == 0) for i, v in enumerate(versions)],
+                            title="MMU Version",
+                        )
+                        if version is None:
+                            continue
+
+                gates = self.ui.inputbox(
+                    "How many gates/lanes does your MMU have?",
+                    title="Gate Count",
+                    default=str((mmu_info.get(\"typical_num_gates\") or [])[0] if isinstance(mmu_info.get(\"typical_num_gates\"), list) and mmu_info.get(\"typical_num_gates\") else 4),
+                )
+                if gates is None:
+                    continue
+                try:
+                    num_gates = int(str(gates).strip())
+                except ValueError:
+                    self.ui.msgbox("Gate count must be a number.", title="Error")
+                    continue
+                if num_gates < 1:
+                    self.ui.msgbox("Gate count must be >= 1.", title="Error")
+                    continue
+
+                board_id = _select_board()
+                if board_id is None:
+                    continue
+                board_info = boards.get(board_id, {}) if isinstance(boards.get(board_id), dict) else {}
+                default_conn = board_info.get("connection") if isinstance(board_info.get("connection"), str) else "usb"
+                conn, conn_data = _select_connection(default_conn=default_conn)
+                if conn is None:
+                    continue
+
+                allowed_sw = mmu_info.get("recommended_software", ["happy_hare", "afc"])
+                if not isinstance(allowed_sw, list):
+                    allowed_sw = ["happy_hare", "afc"]
+                sw = _select_software(allowed_sw)
+                if sw is None:
+                    self.ui.msgbox("No software option available for this MMU type.", title="Error")
+                    continue
+
+                entry = {
+                    "type": "mmu",
+                    "hardware": mmu_choice,
+                    "version": version,
+                    "num_gates": num_gates,
+                    "board": board_id,
+                    "software": sw,
+                    **conn_data,
+                }
+                entries.append(entry)
+                _save_entries(entries)
+
+                install_now = self.ui.yesno(
+                    "Saved configuration.\n\n"
+                    "Do you want to run the software installer now?\n\n"
+                    "This will open an interactive terminal step.",
+                    title="Install Software Now?",
+                    default_no=True,
+                )
+                if install_now:
+                    if sw == "happy_hare":
+                        if hasattr(self, "_install_happy_hare"):
+                            self._install_happy_hare()
+                        else:
+                            self.ui.msgbox("Happy Hare installer not implemented yet.", title="Not Implemented")
+                    else:
+                        if hasattr(self, "_install_afc"):
+                            self._install_afc()
+                        else:
+                            self.ui.msgbox("AFC installer not implemented yet.", title="Not Implemented")
+
+                continue
+
+            if choice == "ADD_BUF":
+                if not buffers:
+                    self.ui.msgbox(
+                        "No buffer definitions found.\n\n"
+                        "Expected: templates/mmu/buffers.json",
+                        title="Error",
+                    )
+                    continue
+
+                buf_items = []
+                for buf_id, info in buffers.items():
+                    if not isinstance(info, dict):
+                        continue
+                    buf_items.append((buf_id, info.get("name", buf_id)))
+                buf_items.sort(key=lambda x: x[1].lower())
+                buf_choice = self.ui.menu(
+                    "Select buffer type:",
+                    buf_items + [("B", "Back")],
+                    title="Filament Buffer",
+                    height=22,
+                    width=120,
+                    menu_height=14,
+                )
+                if buf_choice is None or buf_choice == "B":
+                    continue
+
+                buf_info = buffers.get(buf_choice, {}) if isinstance(buffers.get(buf_choice), dict) else {}
+                requires_mcu = bool(buf_info.get("requires_additional_mcu", False))
+
+                entry: dict = {"type": "buffer", "hardware": buf_choice}
+
+                if requires_mcu:
+                    board_id = _select_board()
+                    if board_id is None:
+                        continue
+                    board_info = boards.get(board_id, {}) if isinstance(boards.get(board_id), dict) else {}
+                    default_conn = board_info.get("connection") if isinstance(board_info.get("connection"), str) else "usb"
+                    conn, conn_data = _select_connection(default_conn=default_conn)
+                    if conn is None:
+                        continue
+                    entry.update({"board": board_id, **conn_data})
+
+                # Optional: record a signal pin for smart buffers (runout/break)
+                wants_signal = self.ui.yesno(
+                    "Does this buffer provide a runout/break detection signal you want to wire into Klipper?",
+                    title="Buffer Signal",
+                    default_no=True,
+                )
+                if wants_signal:
+                    pin = self.ui.inputbox(
+                        "Enter the MCU pin for the buffer signal (optional):",
+                        title="Signal Pin",
+                        default="",
+                        width=80,
+                    )
+                    if pin:
+                        entry["signal_pin"] = pin
+
+                entries.append(entry)
+                _save_entries(entries)
+                self.ui.msgbox("Buffer saved.", title="Saved")
+                continue
+
+    def _install_happy_hare(self) -> None:
+        """Install Happy Hare MMU stack (interactive installer)."""
+        from pathlib import Path
+
+        repo = "https://github.com/moggieuk/Happy-Hare.git"
+        target_dir = Path.home() / "Happy-Hare"
+        installer = target_dir / "install.sh"
+
+        if not self.ui.yesno(
+            "Install/Update Happy Hare?\n\n"
+            "This will:\n"
+            "- Clone (or update) Happy-Hare in your home directory\n"
+            "- Run the interactive installer (it will ask you questions)\n\n"
+            "You may be prompted for your sudo password.\n\n"
+            "Continue?",
+            title="Happy Hare",
+            default_no=False,
+        ):
+            return
+
+        print("\n" + "=" * 60)
+        print("Happy Hare (MMU) installer")
+        print("=" * 60 + "\n")
+
+        # Clone or update repo
+        if target_dir.exists():
+            print(f"Updating {target_dir} ...\n")
+            self._run_tty_command(["bash", "-lc", f"cd {target_dir} && git pull"])
+        else:
+            print(f"Cloning {repo} -> {target_dir} ...\n")
+            rc = self._run_tty_command(["bash", "-lc", f"cd ~ && git clone {repo} {target_dir}"])
+            if rc != 0:
+                self.ui.msgbox(
+                    "Failed to clone Happy-Hare repository.\n\n"
+                    "Check the terminal output for details.",
+                    title="Happy Hare",
+                )
+                return
+
+        if not installer.exists():
+            self.ui.msgbox(
+                f"Happy Hare installer not found at:\n{installer}\n\n"
+                "Clone/update may have failed.",
+                title="Happy Hare",
+            )
+            return
+
+        print("\n" + "=" * 60)
+        print("Running Happy Hare interactive installer (./install.sh -i)...")
+        print("=" * 60 + "\n")
+        rc = self._run_tty_command(["bash", "-lc", f"cd {target_dir} && chmod +x ./install.sh && ./install.sh -i"])
+
+        if rc == 0:
+            self.ui.msgbox(
+                "Happy Hare installer finished.\n\n"
+                "Next steps are typically:\n"
+                "- Validate the generated mmu config files\n"
+                "- Finish pin mapping/tuning per your hardware\n"
+                "- Restart Klipper/Moonraker if needed",
+                title="Happy Hare",
+                height=16,
+                width=90,
+            )
+        else:
+            self.ui.msgbox(
+                f"Happy Hare installer exited with code {rc}.\n\n"
+                "Check the terminal output above for the error details.",
+                title="Happy Hare",
+            )
+
+    def _install_afc(self) -> None:
+        """Install AFC-Klipper-Add-On stack (interactive installer)."""
+        from pathlib import Path
+
+        repo = "https://github.com/ArmoredTurtle/AFC-Klipper-Add-On.git"
+        target_dir = Path.home() / "AFC-Klipper-Add-On"
+        installer = target_dir / "install-afc.sh"
+
+        if not self.ui.yesno(
+            "Install/Update AFC-Klipper-Add-On?\n\n"
+            "This will:\n"
+            "- Clone (or update) AFC-Klipper-Add-On in your home directory\n"
+            "- (Optionally) install dependencies: jq + crudini\n"
+            "- Run the installer script\n\n"
+            "You may be prompted for your sudo password.\n\n"
+            "Continue?",
+            title="AFC",
+            default_no=False,
+        ):
+            return
+
+        print("\n" + "=" * 60)
+        print("AFC-Klipper-Add-On installer")
+        print("=" * 60 + "\n")
+
+        # Clone or update repo
+        if target_dir.exists():
+            print(f"Updating {target_dir} ...\n")
+            self._run_tty_command(["bash", "-lc", f"cd {target_dir} && git pull"])
+        else:
+            print(f"Cloning {repo} -> {target_dir} ...\n")
+            rc = self._run_tty_command(["bash", "-lc", f"cd ~ && git clone {repo} {target_dir}"])
+            if rc != 0:
+                self.ui.msgbox(
+                    "Failed to clone AFC-Klipper-Add-On repository.\n\n"
+                    "Check the terminal output for details.",
+                    title="AFC",
+                )
+                return
+
+        if not installer.exists():
+            self.ui.msgbox(
+                f"AFC installer not found at:\n{installer}\n\n"
+                "Clone/update may have failed.",
+                title="AFC",
+            )
+            return
+
+        install_deps = self.ui.yesno(
+            "Install/update dependencies first?\n\n"
+            "AFC recommends: jq and crudini\n\n"
+            "Install via apt-get now?",
+            title="AFC Dependencies",
+            default_no=False,
+        )
+        if install_deps:
+            print("\n" + "=" * 60)
+            print("Installing dependencies: jq crudini")
+            print("=" * 60 + "\n")
+            self._run_tty_command(["bash", "-lc", "sudo apt-get update && sudo apt-get install -y jq crudini"])
+
+        print("\n" + "=" * 60)
+        print("Running AFC installer (./install-afc.sh)...")
+        print("=" * 60 + "\n")
+        rc = self._run_tty_command(["bash", "-lc", f"cd {target_dir} && chmod +x ./install-afc.sh && ./install-afc.sh"])
+
+        if rc == 0:
+            self.ui.msgbox(
+                "AFC installer finished.\n\n"
+                "If it asked you to add includes to printer.cfg, do that next and restart Klipper.",
+                title="AFC",
+                height=14,
+                width=90,
+            )
+        else:
+            self.ui.msgbox(
+                f"AFC installer exited with code {rc}.\n\n"
+                "Check the terminal output above for the error details.",
+                title="AFC",
+            )
 
     def _load_boards(self, board_type: str = "boards") -> list:
         """Load board definitions from templates directory.

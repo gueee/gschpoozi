@@ -1,0 +1,218 @@
+{
+  "description": "Multi-material units (MMU) / filament changer ecosystems for Klipper. This wizard section focuses on additional MCUs + required software installs.",
+
+  "software": {
+    "happy_hare": {
+      "name": "Happy Hare",
+      "repo": "https://github.com/moggieuk/Happy-Hare",
+      "install": {
+        "clone_dir": "~/Happy-Hare",
+        "command": "cd ~ && git clone https://github.com/moggieuk/Happy-Hare.git && cd Happy-Hare && ./install.sh -i"
+      },
+      "notes": [
+        "Universal MMU driver for Klipper; supports many MMU families.",
+        "Installs Klipper + Moonraker components and adds Moonraker update_manager entries.",
+        "Interactive installer will ask MMU type, MCU type, gate count, and some hardware options."
+      ]
+    },
+    "afc": {
+      "name": "AFC-Klipper-Add-On",
+      "repo": "https://github.com/ArmoredTurtle/AFC-Klipper-Add-On",
+      "install": {
+        "clone_dir": "~/AFC-Klipper-Add-On",
+        "command": "cd ~ && git clone https://github.com/ArmoredTurtle/AFC-Klipper-Add-On.git && cd AFC-Klipper-Add-On && ./install-afc.sh"
+      },
+      "dependencies": [
+        "jq",
+        "crudini"
+      ],
+      "notes": [
+        "ArmoredTurtle Automated Filament Control software for modern filament control systems (e.g. BoxTurtle/NightOwl).",
+        "Install script includes update path (re-run installer)."
+      ]
+    }
+  },
+
+  "types": {
+    "ercf": {
+      "name": "ERCF (Enraged Rabbit Carrot Feeder)",
+      "family": "ERCF",
+      "versions": ["1.1", "2.0", "3.0"],
+      "selector": true,
+      "servo": true,
+      "encoder": true,
+      "espooler": false,
+      "typical_num_gates": [5, 6, 9, 12],
+      "recommended_software": ["happy_hare"],
+      "notes": [
+        "Generally uses a dedicated MMU controller MCU (USB or CAN).",
+        "Often benefits from separate power and careful tuning/calibration."
+      ]
+    },
+
+    "tradrack": {
+      "name": "Tradrack",
+      "family": "Tradrack",
+      "versions": ["1.0"],
+      "selector": true,
+      "servo": true,
+      "encoder": false,
+      "encoder_optional": true,
+      "espooler": false,
+      "typical_num_gates": [5, 6, 8],
+      "recommended_software": ["happy_hare"],
+      "notes": [
+        "Some builds add an optional encoder mod.",
+        "Typically uses dedicated MMU controller MCU." 
+      ]
+    },
+
+    "box_turtle": {
+      "name": "BoxTurtle",
+      "family": "BoxTurtle",
+      "versions": ["1.0"],
+      "selector": false,
+      "servo": false,
+      "encoder": false,
+      "espooler": true,
+      "typical_num_gates": [4],
+      "recommended_software": ["happy_hare", "afc"],
+      "notes": [
+        "Often uses eSpooler-style rewind/assist motor(s).",
+        "Supported by both Happy Hare and ArmoredTurtle AFC plugin; users typically choose one ecosystem." 
+      ]
+    },
+
+    "night_owl": {
+      "name": "Night Owl",
+      "family": "NightOwl",
+      "versions": ["1.0"],
+      "selector": false,
+      "servo": false,
+      "encoder": false,
+      "espooler": false,
+      "recommended_software": ["happy_hare", "afc"],
+      "notes": [
+        "Supported by both Happy Hare and ArmoredTurtle AFC plugin; users typically choose one ecosystem." 
+      ]
+    },
+
+    "angry_beaver": {
+      "name": "Angry Beaver",
+      "family": "AngryBeaver",
+      "versions": ["1.0"],
+      "selector": false,
+      "servo": false,
+      "encoder": false,
+      "espooler": false,
+      "recommended_software": ["happy_hare"],
+      "notes": [
+        "Type-B style systems often treat the selector as virtual and may have multiple filament drive steppers." 
+      ]
+    },
+
+    "_3ms": {
+      "name": "3MS (Modular Multi Material System)",
+      "family": "3MS",
+      "versions": ["1.0"],
+      "selector": false,
+      "servo": false,
+      "encoder": false,
+      "espooler": false,
+      "recommended_software": ["happy_hare"],
+      "notes": [
+        "Happy Hare includes a 3MS quick start path; configuration is highly dependent on the specific build." 
+      ]
+    },
+
+    "_3d_chameleon": {
+      "name": "3D Chameleon",
+      "family": "3DChameleon",
+      "versions": ["1.0"],
+      "selector": true,
+      "selector_type": "rotary",
+      "servo": false,
+      "encoder": false,
+      "espooler": false,
+      "recommended_software": ["happy_hare"],
+      "notes": [
+        "Rotary selector type." 
+      ]
+    },
+
+    "picommu": {
+      "name": "PicoMMU",
+      "family": "PicoMMU",
+      "versions": ["1.0"],
+      "selector": false,
+      "servo": true,
+      "encoder": false,
+      "espooler": false,
+      "recommended_software": ["happy_hare"]
+    },
+
+    "quattro_box": {
+      "name": "QuattroBox",
+      "family": "QuattroBox",
+      "versions": ["1.0", "1.1"],
+      "selector": false,
+      "servo": false,
+      "encoder": true,
+      "espooler": false,
+      "recommended_software": ["happy_hare"]
+    },
+
+    "mmx": {
+      "name": "MMX",
+      "family": "MMX",
+      "versions": ["1.0"],
+      "selector": false,
+      "servo": true,
+      "encoder": false,
+      "espooler": false,
+      "recommended_software": ["happy_hare"]
+    },
+
+    "vivid": {
+      "name": "BTT ViViD (VVD)",
+      "family": "VVD",
+      "versions": ["1.0"],
+      "selector": true,
+      "servo": false,
+      "encoder": false,
+      "espooler": true,
+      "recommended_software": ["happy_hare"],
+      "notes": [
+        "Happy Hare has specific paths for VVD/KMS style dedicated electronics." 
+      ]
+    },
+
+    "kms": {
+      "name": "KMS",
+      "family": "KMS",
+      "versions": ["1.0"],
+      "selector": false,
+      "servo": false,
+      "encoder": true,
+      "espooler": true,
+      "recommended_software": ["happy_hare"],
+      "notes": [
+        "KMS setups may include an additional 'buffer/sync-feedback' MCU; Happy Hare installer supports multiple related MCUs for some systems." 
+      ]
+    },
+
+    "other_custom": {
+      "name": "Other / Custom",
+      "family": "Custom",
+      "versions": ["custom"],
+      "selector": null,
+      "servo": null,
+      "encoder": null,
+      "espooler": null,
+      "recommended_software": ["happy_hare", "afc"],
+      "notes": [
+        "For unknown hardware, the wizard can still install software and record MCU connection details, but detailed pin mapping and tuning will be manual." 
+      ]
+    }
+  }
+}

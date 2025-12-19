@@ -1,0 +1,70 @@
+{
+  "description": "Filament buffers and buffer-adjacent hardware that may be connected as additional MCUs and/or exposed to Klipper via sensors.",
+
+  "buffers": {
+    "mellow_lll_plus": {
+      "name": "Mellow LLL Plus Smart Buffer",
+      "manufacturer": "Mellow",
+      "category": "smart_buffer",
+      "requires_additional_mcu": false,
+      "requires_installation": false,
+      "notes": [
+        "Standalone powered buffer with automatic feeding behavior.",
+        "Optional filament break/runout detection output can be wired to a mainboard/MCU input pin and configured as a Klipper filament sensor."
+      ],
+      "wiring": {
+        "power": "12V-24V",
+        "signal": "Optional runout/break detect signal to an MCU input pin"
+      },
+      "klipper_config": {
+        "filament_switch_sensor buffer_runout": {
+          "switch_pin": "ASSIGN_IN_WIZARD",
+          "pause_on_runout": true,
+          "runout_gcode": "PAUSE",
+          "insert_gcode": ""
+        }
+      }
+    },
+
+    "espooler": {
+      "name": "eSpooler (rewinder/assist motors)",
+      "manufacturer": "Various",
+      "category": "rewinder",
+      "requires_additional_mcu": true,
+      "requires_installation": true,
+      "recommended_software": ["happy_hare"],
+      "notes": [
+        "Typically uses one or more small DC motors (e.g., N20) per lane to rewind/assist.",
+        "Happy Hare supports an optional [mmu_espooler] section to control rewind/assist outputs and optional trigger pins."
+      ],
+      "happy_hare_config_notes": [
+        "Happy Hare generates/installs mmu/base/*.cfg and includes optional espooler stubs in mmu_hardware.cfg.",
+        "You will still need to validate pins and gate count and tune speeds/thresholds."
+      ]
+    },
+
+    "sync_feedback": {
+      "name": "Sync Feedback (tension/compression buffer sensing)",
+      "manufacturer": "Various",
+      "category": "feedback_sensor",
+      "requires_additional_mcu": true,
+      "requires_installation": true,
+      "recommended_software": ["happy_hare"],
+      "notes": [
+        "Buffer systems that measure filament tension/compression and feed data back to the MMU logic.",
+        "Some ecosystems use a separate small MCU for these sensors; software support is typically integrated into the MMU stack (e.g., Happy Hare for supported systems)."
+      ]
+    },
+
+    "simple_buffer": {
+      "name": "Passive Filament Buffer",
+      "manufacturer": "Various",
+      "category": "passive_buffer",
+      "requires_additional_mcu": false,
+      "requires_installation": false,
+      "notes": [
+        "No MCU/software needed. Wizard records it for documentation only." 
+      ]
+    }
+  }
+}

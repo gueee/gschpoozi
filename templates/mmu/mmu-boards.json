@@ -1,0 +1,113 @@
+{
+  "description": "Common controller MCUs/boards used for MMUs, filament changers, and related buffer/sensor boards.",
+
+  "connection_types": ["usb", "can"],
+
+  "boards": {
+    "btt_mmb_v1_0": {
+      "name": "BTT MMB v1.0",
+      "manufacturer": "BigTreeTech",
+      "category": "mmu_controller",
+      "connection": "can",
+      "notes": [
+        "CAN-connected MMU controller commonly used with ERCF/BoxTurtle-class systems."
+      ]
+    },
+    "btt_mmb_v1_1": {
+      "name": "BTT MMB v1.1",
+      "manufacturer": "BigTreeTech",
+      "category": "mmu_controller",
+      "connection": "can"
+    },
+    "btt_mmb_v2_0": {
+      "name": "BTT MMB v2.0",
+      "manufacturer": "BigTreeTech",
+      "category": "mmu_controller",
+      "connection": "can"
+    },
+
+    "fysetc_burrows_erb_v1": {
+      "name": "Fysetc Burrows ERB v1",
+      "manufacturer": "Fysetc",
+      "category": "mmu_controller",
+      "connection": "usb",
+      "notes": [
+        "Often RP2040-based; confirm serial/by-id on your host."
+      ]
+    },
+    "fysetc_burrows_erb_v2": {
+      "name": "Fysetc Burrows ERB v2",
+      "manufacturer": "Fysetc",
+      "category": "mmu_controller",
+      "connection": "usb"
+    },
+
+    "easy_brd_samd21": {
+      "name": "EASY-BRD (SAMD21)",
+      "manufacturer": "Community/Various",
+      "category": "mmu_controller",
+      "connection": "usb",
+      "notes": [
+        "Classic EASY-BRD used by many Type-A MMU builds."
+      ]
+    },
+    "easy_brd_rp2040": {
+      "name": "EASY-BRD (RP2040)",
+      "manufacturer": "Community/Various",
+      "category": "mmu_controller",
+      "connection": "usb"
+    },
+
+    "mellow_easy_brd_can_v1": {
+      "name": "Mellow EASY-BRD CAN v1.x",
+      "manufacturer": "Mellow",
+      "category": "mmu_controller",
+      "connection": "can"
+    },
+    "mellow_easy_brd_can_v2": {
+      "name": "Mellow EASY-BRD CAN v2.x",
+      "manufacturer": "Mellow",
+      "category": "mmu_controller",
+      "connection": "can"
+    },
+
+    "btt_skr_pico_v1_0": {
+      "name": "BTT SKR Pico v1.0",
+      "manufacturer": "BigTreeTech",
+      "category": "general_mcu",
+      "connection": "usb",
+      "notes": [
+        "Used in some MMU builds (and many other auxiliary MCU roles)."
+      ]
+    },
+
+    "afc_lite_v1_0": {
+      "name": "AFC Lite v1.0",
+      "manufacturer": "ArmoredTurtle/Community",
+      "category": "afc_controller",
+      "connection": "usb",
+      "notes": [
+        "AFC ecosystem controller board; verify supported wiring/pins per AFC docs."
+      ]
+    },
+    "afc_x_controller": {
+      "name": "AFC-X Controller",
+      "manufacturer": "ArmoredTurtle/Community",
+      "category": "afc_controller",
+      "connection": "usb",
+      "notes": [
+        "AFC ecosystem controller board for multi-filament control systems."
+      ]
+    },
+
+    "other_unknown": {
+      "name": "Other / Unknown",
+      "manufacturer": "Various",
+      "category": "general_mcu",
+      "connection": "usb",
+      "notes": [
+        "Wizard will record connection details; pin mapping and firmware flashing are manual."
+      ]
+    }
+  }
+}

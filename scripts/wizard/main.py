@@ -1033,11 +1033,11 @@ class GschpooziWizard:
 
     def _get_component_status(self, component: str) -> dict:
         """Get installation status for a Klipper ecosystem component.
-        
+
         Returns dict with: installed, version, service_running, service_enabled, has_service, path
         """
         import subprocess
-        
+
         status = {
             "installed": False,
             "version": None,
@@ -1046,7 +1046,7 @@ class GschpooziWizard:
             "service_enabled": False,
             "path": None,
         }
-        
+
         # Component paths and service names
         component_info = {
             "klipper": {"path": Path.home() / "klipper", "service": "klipper"},
@@ -1058,20 +1058,20 @@ class GschpooziWizard:
             "timelapse": {"path": Path.home() / "moonraker-timelapse", "service": None},  # moonraker plugin
             "klipperscreen": {"path": Path.home() / "KlipperScreen", "service": "KlipperScreen"},
         }
-        
+
         info = component_info.get(component.lower())
         if not info:
             return status
-        
+
         path = info["path"]
         service = info["service"]
         status["has_service"] = (service is not None)
-        
+
         # Check if installed (directory exists)
         if path.exists():
             status["installed"] = True
             status["path"] = str(path)
-            
+
             # Try to get version from git
             try:
                 r = subprocess.run(
@@ -1085,7 +1085,7 @@ class GschpooziWizard:
                     status["version"] = r.stdout.strip()
             except Exception:
                 pass
-        
+
         # Check service status
         if service:
             try:
@@ -1098,7 +1098,7 @@ class GschpooziWizard:
                 status["service_running"] = (r.stdout.strip() == "active")
             except Exception:
                 pass
-            
+
             try:
                 r = subprocess.run(
                     ["systemctl", "is-enabled", service],
@@ -1109,18 +1109,18 @@ class GschpooziWizard:
                 status["service_enabled"] = (r.stdout.strip() == "enabled")
             except Exception:
                 pass
-        
+
         return status
 
     def _format_component_status(self, component: str, status: dict) -> str:
         """Format component status for menu display."""
         if not status["installed"]:
             return f"{component:<14} [ Not installed ]"
-        
+
         parts = ["✓"]
         if status["version"]:
             parts.append(status["version"][:20])
-        
+
         # Only show service status for components that have a systemd service
         if status.get("has_service"):
             if status["service_running"]:
@@ -1129,13 +1129,13 @@ class GschpooziWizard:
                 parts.append("stopped")
             else:
                 parts.append("disabled")
-        
+
         return f"{component:<14} [ {' | '.join(parts)} ]"
 
     def _manage_klipper_components(self) -> None:
         """
         KIAUH-style component manager.
-        
+
         Shows installation status for each component, then allows
         Install/Update/Remove/Reinstall actions.
         """
@@ -1164,7 +1164,7 @@ class GschpooziWizard:
                 status = self._get_component_status(comp_id)
                 label = self._format_component_status(comp_name, status)
                 menu_items.append((comp_id, label))
-            
+
             menu_items.append(("update-all", "─────────────────────────────────"))
             menu_items.append(("update-all", "Update ALL installed components"))
             menu_items.append(("B", "Back"))
@@ -1179,7 +1179,7 @@ class GschpooziWizard:
                 width=100,
                 menu_height=14,
             )
-            
+
             if choice is None or choice == "B":
                 return
 
@@ -1197,13 +1197,13 @@ class GschpooziWizard:
             # Selected a specific component - show actions
             comp_name = dict(components).get(choice, choice)
             status = self._get_component_status(choice)
-            
+
             # Build action menu based on current status
             if choice == "klipperscreen":
                 # KlipperScreen has its own manager with config options
                 self._klipperscreen_setup()
                 continue
-            
+
             action_items = []
             if status["installed"]:
                 action_items.append(("update", "Update"))
@@ -1236,7 +1236,7 @@ class GschpooziWizard:
                 width=80,
                 menu_height=6,
             )
-            
+
             if action is None or action == "B":
                 continue
 

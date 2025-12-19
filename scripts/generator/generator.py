@@ -222,6 +222,9 @@ class ConfigGenerator:
                 context["heater_bed"]["heater_pin"] = board_defaults.get("heater_bed")
             if not context["heater_bed"].get("sensor_port") and board_defaults.get("thermistor_bed"):
                 context["heater_bed"]["sensor_port"] = board_defaults.get("thermistor_bed")
+            # Ensure sensor_type has a sensible default (common thermistor)
+            if not context["heater_bed"].get("sensor_type"):
+                context["heater_bed"]["sensor_type"] = "Generic 3950"
 
             # Part cooling fan default
             part_loc = (context["fans"]["part_cooling"].get("location") or "mainboard")

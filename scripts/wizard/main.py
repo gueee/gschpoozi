@@ -7087,12 +7087,51 @@ read -r _
                         existing_map[e["stepper"]] = motor
 
         steppers_cfg: list[dict] = []
+        chosen_motors_by_stepper: dict[str, str] = {}
+        last_nonempty_motor: str = ""
+        last_nonempty_stepper: str = ""
         for stepper in selected_steppers:
             default_motor = existing_map.get(stepper, legacy_defaults.get(stepper, ""))
-            motor = _pick_motor_id(stepper, default_motor)
+            # Convenience: allow reusing the same motor as stepper_x (or last chosen motor)
+            # to avoid repeatedly searching the database for identical motors.
+            motor: str | None
+            reuse_motor: str | None = None
+            reuse_from: str | None = None
+            if stepper != "stepper_x":
+                mx = (chosen_motors_by_stepper.get("stepper_x") or "").strip()
+                if mx:
+                    reuse_motor = mx
+                    reuse_from = "stepper_x"
+                elif last_nonempty_motor:
+                    reuse_motor = last_nonempty_motor
+                    reuse_from = last_nonempty_stepper or "previous"
+
+            if reuse_motor and reuse_from:
+                use_same = self.ui.yesno(
+                    f"Use same motor as {reuse_from}?\n\n"
+                    f"{reuse_motor}\n\n"
+                    f"For: {stepper}",
+                    title="TMC Autotune - Reuse Motor",
+                    default_no=False,
+                    height=14,
+                    width=90,
+                )
+                if use_same is None:
+                    return
+                if use_same:
+                    motor = reuse_motor
+                else:
+                    motor = _pick_motor_id(stepper, default_motor)
+            else:
+                motor = _pick_motor_id(stepper, default_motor)
             if motor is None:
                 return
-            steppers_cfg.append({"stepper": stepper, "motor": (motor or "").strip()})
+            motor = (motor or "").strip()
+            chosen_motors_by_stepper[stepper] = motor
+            if motor:
+                last_nonempty_motor = motor
+                last_nonempty_stepper = stepper
+            steppers_cfg.append({"stepper": stepper, "motor": motor})
 
         voltage_choice = self.ui.radiolist(
             "System voltage:",

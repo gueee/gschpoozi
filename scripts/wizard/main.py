@@ -5656,17 +5656,29 @@ class GschpooziWizard:
                         self.ui.msgbox("Update failed. Service restarted.", title="Update Failed")
                         continue
 
-                    ks_env = Path.home() / ".KlipperScreen-env"
-                    ks_req = ks_dir / "scripts" / "KlipperScreen-requirements.txt"
-                    if ks_env.exists() and ks_req.exists():
+                    # Check if service exists - if not, run install script
+                    service_file = Path("/etc/systemd/system/KlipperScreen.service")
+                    if not service_file.exists():
                         print("\n" + "=" * 60)
-                        print("Installing requirements...")
+                        print("Service not found - running install script...")
                         print("=" * 60 + "\n")
-                        self._run_shell_interactive(f"{ks_env}/bin/pip install -r {ks_req}")
+                        install_script = ks_dir / "scripts" / "KlipperScreen-install.sh"
+                        self._run_shell_interactive(f"bash {install_script}")
+                        self._run_shell_interactive("sudo systemctl daemon-reload")
+                    else:
+                        # Just update requirements
+                        ks_env = Path.home() / ".KlipperScreen-env"
+                        ks_req = ks_dir / "scripts" / "KlipperScreen-requirements.txt"
+                        if ks_env.exists() and ks_req.exists():
+                            print("\n" + "=" * 60)
+                            print("Installing requirements...")
+                            print("=" * 60 + "\n")
+                            self._run_shell_interactive(f"{ks_env}/bin/pip install -r {ks_req}")
 
                     print("\n" + "=" * 60)
                     print(f"Starting {svc_name}...")
                     print("=" * 60 + "\n")
+                    self._run_systemctl("enable", svc_name)
                     self._run_systemctl("start", svc_name)
 
                     self.ui.msgbox("KlipperScreen updated!", title="Update Complete")

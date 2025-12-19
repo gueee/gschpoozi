@@ -110,6 +110,41 @@ warn_msg() {
     echo -e "${YELLOW}[WARN] $1${NC}"
 }
 
+# ------------------------------------------------------------------------------
+# INSTALL STATUS HELPERS (KIAUH-style)
+#
+# The component manager + update/remove routines use these predicates. They must
+# be available whenever this file is sourced (e.g. via scripts/tools/* wrapper).
+# ------------------------------------------------------------------------------
+
+is_klipper_installed() {
+    [[ -d "${KLIPPER_DIR}" && -f "${KLIPPER_DIR}/klippy/klippy.py" ]]
+}
+
+is_moonraker_installed() {
+    [[ -d "${MOONRAKER_DIR}" && -f "${MOONRAKER_DIR}/moonraker/moonraker.py" ]]
+}
+
+is_mainsail_installed() {
+    [[ -d "${MAINSAIL_DIR}" ]]
+}
+
+is_fluidd_installed() {
+    [[ -d "${FLUIDD_DIR}" ]]
+}
+
+is_crowsnest_installed() {
+    [[ -d "${CROWSNEST_DIR}" ]]
+}
+
+is_sonar_installed() {
+    [[ -d "${SONAR_DIR}" ]]
+}
+
+is_timelapse_installed() {
+    [[ -d "${TIMELAPSE_DIR}" ]]
+}
+
 # Check if running as root (we don't want that)
 check_not_root() {
     if [[ $(id -u) -eq 0 ]]; then

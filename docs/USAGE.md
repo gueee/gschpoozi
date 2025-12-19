@@ -42,9 +42,11 @@ This project generates **hardware-critical** Klipper configuration (motors, ends
 - Keep your hand near emergency stop / power switch on the first home
 - Prefer `STEPPER_BUZZ` / identification macros before any homing or movement
 
-**Not fully tested yet:**
-- Stepper discovery (automatic identification/assignment) is not integrated/reliable yet — assume you must know your wiring/ports
-- Macro setup (START_PRINT/END_PRINT behavior and defaults) is not fully validated across printers — review and tune before relying on it
+**Found a bug?** [File an issue on GitHub](https://github.com/gm-tc-collaborators/gschpoozi/issues/new/choose) with details about your hardware and the error.
+
+**Notes:**
+- Stepper discovery is informational only — you need to know your wiring/ports
+- Macro defaults may need tuning for your specific printer setup
 
 ---
 
@@ -957,12 +959,11 @@ This forces HTTP/1.1 which resolves fetch hangs on some network configurations.
 ## Re-running the Wizard
 
 Your settings are saved in:
-- `~/gschpoozi/.wizard-state` - Wizard selections
-- `~/gschpoozi/.hardware-state.json` - Port assignments
+- `~/printer_data/config/.gschpoozi_state.json` - All wizard selections
 
 To start fresh:
 ```bash
-rm ~/gschpoozi/.wizard-state ~/gschpoozi/.hardware-state.json
+rm ~/printer_data/config/.gschpoozi_state.json
 ~/gschpoozi/scripts/configure.sh
 ```
 

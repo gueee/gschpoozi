@@ -1,21 +1,40 @@
 # gschpoozi Development Progress
 
-> Last updated: 2025-12-06
+> Last updated: 2025-12-19
 
-## Project Status: Alpha (In Development)
+## Project Status: Beta (Almost Fully Functional) 🎉
+
+The wizard is now almost fully functional and ready for real-world testing!
+
+**Found a bug?** [File an issue](https://github.com/gm-tc-collaborators/gschpoozi/issues/new/choose) using our templates.
 
 ---
 
 ## 🐛 Recent Bug Fixes
 
+### 2025-12-19: Template Whitespace Fixes
+- **Issue**: Generated config had concatenated lines (e.g., `heater_pin: PE5sensor_pin: PC1`)
+- **Root Cause**: Jinja's `trim_blocks=True` eating newlines after `{% endif %}`
+- **Fix**: Restructured templates to use proper whitespace control (`{%- ... -%}`)
+- **Affected**: `[heater_bed]`, `[autotune_tmc]` sections
+
+### 2025-12-19: Radiolist Pre-selection Fix
+- **Issue**: `sensor_type` could be empty if no option was pre-selected
+- **Root Cause**: Radiolist didn't always pre-select first item
+- **Fix**: Radiolist now always ensures at least one item is selected
+
+### 2025-12-19: Bed Heater Pin Picker
+- **Issue**: Only showed dedicated bed heater ports, not SSR/MOSFET options
+- **Fix**: Full pin picker with all output pins, pin conflict detection, "None" pullup option
+
+### 2025-12-19: TMC Autotune Motor Selection UX
+- **Issue**: Had to scroll through motor list for every stepper
+- **Fix**: "Use same as stepper_x?" shortcut for subsequent axes
+
 ### 2025-12-06: Beacon Virtual Endstop Fix
 - **Issue**: `stepper_z` was missing `homing_retract_dist: 0` in configure.sh template
 - **Root Cause**: Beacon requires `homing_retract_dist: 0` for proper virtual endstop operation
 - **Fix**: Added `homing_retract_dist: 0  # Required for probe-based Z homing` to stepper_z template
-- **Note**: The correct syntax is `probe:z_virtual_endstop` (NOT `beacon:z_virtual_endstop`)
-  - Beacon module registers as `probe` chip, not `beacon`
-  - Using `beacon:` causes "Unknown command: endstop_home" error
-- **Files**: `scripts/configure.sh`, verified `scripts/generate-config.py` already correct
 
 ---
 
@@ -186,22 +205,29 @@
 
 ## 📝 TODO / Roadmap
 
-### High Priority
-- [ ] Full wizard flow testing
-- [ ] Config generation with actual pin mappings
-- [ ] Installation script for printer deployment
+### ✅ Completed (High Priority)
+- [x] Full wizard flow (MCU, kinematics, steppers, extruder, bed, fans, probe, homing, leveling)
+- [x] Config generation with actual pin mappings
+- [x] Klipper component management (KIAUH-style install/update/remove)
+- [x] KlipperScreen integration (install, configure, remove)
 - [x] Macro templates (START_PRINT, END_PRINT, building blocks)
+- [x] TMC Autotune integration with motor database picker
+- [x] CAN bus setup automation
+- [x] More probe templates (Klicky, TAP, BLTouch, Beacon, Cartographer, BTT Eddy)
 
-### Medium Priority
-- [x] More probe templates (Klicky, TAP, BLTouch) - Done!
-- [x] CAN bus setup automation - Done!
+### 🔄 In Progress
+- [ ] Additional MCUs section (MMU/filament changers, Happy Hare, AFC integration)
 - [ ] Input shaper configuration
-- [ ] Bed mesh configuration
+- [ ] More testing across different hardware combinations
 
-### Low Priority
-- [ ] Web-based wizard (future)
+### 📋 Planned
+- [ ] Bed mesh configuration UI
 - [ ] Config validation scripts
 - [ ] Automated testing
+
+### 💭 Future Ideas
+- [ ] Web-based wizard
+- [ ] Motor discovery integration
 
 ---
 

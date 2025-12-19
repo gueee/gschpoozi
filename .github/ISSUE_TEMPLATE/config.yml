@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Klipper Documentation
+    url: https://www.klipper3d.org/
+    about: For general Klipper questions, check the official documentation
+  - name: Klipper Discord
+    url: https://discord.klipper3d.org/
+    about: For general Klipper help and community support
+

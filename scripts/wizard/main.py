@@ -5658,14 +5658,14 @@ class GschpooziWizard:
                 new_host = self.ui.inputbox(
                     "Enter Moonraker host address:",
                     title="Moonraker Host",
-                    init=host,
+                    default=host,
                 )
                 if new_host is None:
                     continue
                 new_port_str = self.ui.inputbox(
                     "Enter Moonraker port:",
                     title="Moonraker Port",
-                    init=str(port),
+                    default=str(port),
                 )
                 if new_port_str is None:
                     continue

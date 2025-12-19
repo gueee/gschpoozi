@@ -5525,62 +5525,146 @@ class GschpooziWizard:
 
         while True:
             installed, running, svc_name = _service_state()
-            enabled = self.state.get("display.klipperscreen.enabled", False)
             host = self.state.get("display.klipperscreen.moonraker_host", "127.0.0.1")
             port = int(self.state.get("display.klipperscreen.moonraker_port", 7125))
 
-            status = []
-            status.append(f"Installed: {'Yes' if installed else 'No'}")
-            status.append(f"Service: {'Running' if running else ('Stopped' if installed else 'N/A')}")
-            status.append(f"Config: {str(conf_path) if installed else str(conf_path)}")
-            status.append(f"Moonraker: {host}:{port}")
-            status.append(f"Wizard enabled: {'Yes' if enabled else 'No'}")
+            # KIAUH-style status display
+            if installed:
+                if running:
+                    status_text = "Installed (Running)"
+                else:
+                    status_text = "Installed (Stopped)"
+            else:
+                status_text = "Not installed"
+
+            # Build menu options based on installation status (KIAUH-style)
+            menu_items = []
+            if not installed:
+                menu_items.append(("1", "Install KlipperScreen"))
+            else:
+                menu_items.append(("1", "Update KlipperScreen"))
+                menu_items.append(("2", "Configure Moonraker connection"))
+                menu_items.append(("3", "Add to Moonraker update_manager"))
+                menu_items.append(("4", "Remove KlipperScreen"))
+            menu_items.append(("B", "Back"))
 
             choice = self.ui.menu(
-                "KlipperScreen\n\n"
-                + "\n".join(status)
-                + "\n\nSelect an action:",
-                [
-                    ("ENABLE", "Enable/Disable (wizard state)"),
-                    ("CONF", "Configure Moonraker connection (KlipperScreen.conf)"),
-                    ("UM", "Ensure Moonraker update_manager entry"),
-                    ("INSTALL", "Install KlipperScreen"),
-                    ("UPDATE", "Update KlipperScreen (git pull + restart)"),
-                    ("REMOVE", "Remove KlipperScreen"),
-                    ("B", "Back"),
-                ],
+                f"KlipperScreen\n\n"
+                f"Status: {status_text}\n"
+                + (f"Moonraker: {host}:{port}\n" if installed else ""),
+                menu_items,
                 title="KlipperScreen",
-                height=22,
-                width=120,
-                menu_height=10,
+                height=16,
+                width=80,
+                menu_height=8,
             )
 
             if choice is None or choice == "B":
                 return
 
-            if choice == "ENABLE":
-                new_enabled = self.ui.yesno(
-                    "Enable KlipperScreen in wizard?\n\n"
-                    "This does not install it, but marks it as desired and enables status display.",
-                    title="KlipperScreen - Enable",
-                    default_no=enabled,
-                )
-                self.state.set("display.klipperscreen.enabled", bool(new_enabled))
-                self.state.save()
+            # Handle "1" - Install (if not installed) or Update (if installed)
+            if choice == "1":
+                if not installed:
+                    # INSTALL
+                    confirm = self.ui.yesno(
+                        "Install KlipperScreen?\n\n"
+                        "This will clone the repository and run the installer.\n"
+                        "You may need to enter your sudo password.\n\n"
+                        "This may take several minutes.",
+                        title="Install KlipperScreen",
+                        default_no=False,
+                    )
+                    if not confirm:
+                        continue
+
+                    ks_repo = "https://github.com/KlipperScreen/KlipperScreen.git"
+                    print("\n" + "=" * 60)
+                    print("Cloning KlipperScreen repository...")
+                    print("=" * 60 + "\n")
+
+                    exit_code = self._run_shell_interactive(f"git clone {ks_repo} {ks_dir}")
+                    if exit_code != 0:
+                        self.ui.msgbox(
+                            "Failed to clone repository.\n\n"
+                            "Check terminal output for errors.",
+                            title="Clone Failed",
+                        )
+                        continue
+
+                    install_script = ks_dir / "scripts" / "KlipperScreen-install.sh"
+                    print("\n" + "=" * 60)
+                    print("Running install script...")
+                    print("=" * 60 + "\n")
+
+                    exit_code = self._run_shell_interactive(str(install_script))
+                    if exit_code == 0:
+                        if update_mgr:
+                            self._ensure_moonraker_update_manager_entry("KlipperScreen", update_mgr)
+                        self.ui.msgbox(
+                            "KlipperScreen installed successfully!",
+                            title="Installation Complete",
+                        )
+                    else:
+                        self.ui.msgbox(
+                            f"Installation may have failed (exit code: {exit_code}).\n\n"
+                            "Check terminal output for errors.",
+                            title="Installation Issue",
+                        )
+                else:
+                    # UPDATE
+                    confirm = self.ui.yesno(
+                        "Update KlipperScreen?\n\n"
+                        "This will stop the service, pull updates,\n"
+                        "install requirements, and restart.",
+                        title="Update KlipperScreen",
+                        default_no=False,
+                    )
+                    if not confirm:
+                        continue
+
+                    print("\n" + "=" * 60)
+                    print(f"Stopping {svc_name}...")
+                    print("=" * 60 + "\n")
+                    self._run_systemctl("stop", svc_name)
+
+                    print("\n" + "=" * 60)
+                    print("Pulling latest changes...")
+                    print("=" * 60 + "\n")
+                    exit_code = self._run_shell_interactive(f"cd {ks_dir} && git pull")
+
+                    if exit_code != 0:
+                        self._run_systemctl("start", svc_name)
+                        self.ui.msgbox("Update failed. Service restarted.", title="Update Failed")
+                        continue
+
+                    ks_env = Path.home() / ".KlipperScreen-env"
+                    ks_req = ks_dir / "scripts" / "KlipperScreen-requirements.txt"
+                    if ks_env.exists() and ks_req.exists():
+                        print("\n" + "=" * 60)
+                        print("Installing requirements...")
+                        print("=" * 60 + "\n")
+                        self._run_shell_interactive(f"{ks_env}/bin/pip install -r {ks_req}")
+
+                    print("\n" + "=" * 60)
+                    print(f"Starting {svc_name}...")
+                    print("=" * 60 + "\n")
+                    self._run_systemctl("start", svc_name)
+
+                    self.ui.msgbox("KlipperScreen updated!", title="Update Complete")
                 continue
 
-            elif choice == "CONF":
-                # Configure Moonraker connection
+            # Handle "2" - Configure Moonraker connection (only when installed)
+            elif choice == "2" and installed:
                 new_host = self.ui.inputbox(
                     "Enter Moonraker host address:",
-                    title="KlipperScreen - Moonraker Host",
+                    title="Moonraker Host",
                     init=host,
                 )
                 if new_host is None:
                     continue
                 new_port_str = self.ui.inputbox(
                     "Enter Moonraker port:",
-                    title="KlipperScreen - Moonraker Port",
+                    title="Moonraker Port",
                     init=str(port),
                 )
                 if new_port_str is None:
@@ -5591,284 +5675,86 @@ class GschpooziWizard:
                     self.ui.msgbox("Invalid port number.", title="Error")
                     continue
 
-                # Save to wizard state
                 self.state.set("display.klipperscreen.moonraker_host", new_host)
                 self.state.set("display.klipperscreen.moonraker_port", new_port)
                 self.state.save()
 
-                # Write to KlipperScreen.conf if installed
-                if installed:
-                    ok, msg = self._write_klipperscreen_conf(new_host, new_port)
-                    if ok:
-                        self.ui.msgbox(
-                            f"KlipperScreen.conf updated!\n\n"
-                            f"Host: {new_host}\nPort: {new_port}\n\n"
-                            f"Restart KlipperScreen for changes to take effect.",
-                            title="Configuration Saved",
-                        )
-                    else:
-                        self.ui.msgbox(f"Failed to write KlipperScreen.conf:\n\n{msg}", title="Error")
-                else:
+                ok, msg = self._write_klipperscreen_conf(new_host, new_port)
+                if ok:
                     self.ui.msgbox(
-                        f"Settings saved to wizard state.\n\n"
-                        f"KlipperScreen is not installed, so KlipperScreen.conf was not written.\n"
-                        f"Install KlipperScreen first, then configure.",
-                        title="Settings Saved",
+                        f"Configuration saved!\n\nHost: {new_host}\nPort: {new_port}\n\n"
+                        "Restart KlipperScreen for changes to take effect.",
+                        title="Configuration Saved",
                     )
+                else:
+                    self.ui.msgbox(f"Failed to write config:\n\n{msg}", title="Error")
                 continue
 
-            elif choice == "UM":
-                # Ensure Moonraker update_manager entry
+            # Handle "3" - Add to update_manager (only when installed)
+            elif choice == "3" and installed:
                 if not update_mgr:
-                    self.ui.msgbox(
-                        "No update_manager template found in displays.json.\n\n"
-                        "Cannot add entry.",
-                        title="Error",
-                    )
+                    self.ui.msgbox("No update_manager template found.", title="Error")
                     continue
                 ok = self._ensure_moonraker_update_manager_entry("KlipperScreen", update_mgr)
                 if ok:
                     self.ui.msgbox(
-                        "Moonraker update_manager entry added/verified!\n\n"
-                        "KlipperScreen will now appear in your update manager.",
+                        "Added to Moonraker update_manager!\n\n"
+                        "KlipperScreen will appear in your update list.",
                         title="Success",
                     )
                 else:
-                    self.ui.msgbox(
-                        "Failed to update moonraker.conf.\n\n"
-                        "You may need to add the entry manually.",
-                        title="Error",
-                    )
+                    self.ui.msgbox("Failed to update moonraker.conf.", title="Error")
                 continue
 
-            elif choice == "INSTALL":
-                if installed:
-                    self.ui.msgbox(
-                        f"KlipperScreen is already installed at:\n\n{ks_dir}\n\n"
-                        "Use 'Update' to pull latest changes, or 'Remove' first to reinstall.",
-                        title="Already Installed",
-                    )
-                    continue
-
+            # Handle "4" - Remove (only when installed)
+            elif choice == "4" and installed:
                 confirm = self.ui.yesno(
-                    f"Install KlipperScreen?\n\n"
-                    f"This will:\n"
-                    f"1. Clone KlipperScreen repository\n"
-                    f"2. Run the install script\n\n"
-                    f"You may need to enter your sudo password.\n"
-                    f"The installation may take several minutes.",
-                    title="Confirm Install",
-                    default_no=False,
-                    height=16,
-                    width=100,
-                )
-                if not confirm:
-                    continue
-
-                # Step 1: Clone the repository (KIAUH-style)
-                ks_repo = "https://github.com/KlipperScreen/KlipperScreen.git"
-                print("\n" + "=" * 60)
-                print("Cloning KlipperScreen repository...")
-                print("=" * 60 + "\n")
-                
-                clone_cmd = f"git clone {ks_repo} {ks_dir}"
-                exit_code = self._run_shell_interactive(clone_cmd)
-                
-                if exit_code != 0:
-                    self.ui.msgbox(
-                        f"Failed to clone KlipperScreen repository.\n\n"
-                        f"Check the terminal output above for errors.\n\n"
-                        f"You can try manually:\n"
-                        f"git clone {ks_repo}",
-                        title="Clone Failed",
-                        height=14,
-                        width=90,
-                    )
-                    continue
-
-                # Step 2: Run install script (KIAUH-style)
-                install_script = ks_dir / "scripts" / "KlipperScreen-install.sh"
-                print("\n" + "=" * 60)
-                print("Running KlipperScreen install script...")
-                print("=" * 60 + "\n")
-                
-                exit_code = self._run_shell_interactive(str(install_script))
-                
-                if exit_code == 0:
-                    self.ui.msgbox(
-                        "KlipperScreen installed successfully!\n\n"
-                        "The service should start automatically.\n"
-                        "Use 'Configure' to set Moonraker connection if needed.",
-                        title="Installation Complete",
-                    )
-                    # Auto-add update_manager entry
-                    if update_mgr:
-                        self._ensure_moonraker_update_manager_entry("KlipperScreen", update_mgr)
-                else:
-                    self.ui.msgbox(
-                        f"Installation may have failed (exit code: {exit_code}).\n\n"
-                        f"Check the terminal output above for errors.\n\n"
-                        f"The repository was cloned successfully.\n"
-                        f"You can retry the install script manually:\n"
-                        f"cd ~/KlipperScreen && ./scripts/KlipperScreen-install.sh",
-                        title="Installation Issue",
-                        height=16,
-                        width=100,
-                    )
-                continue
-
-            elif choice == "UPDATE":
-                if not installed:
-                    self.ui.msgbox(
-                        "KlipperScreen is not installed.\n\n"
-                        "Use 'Install' to install it first.",
-                        title="Not Installed",
-                    )
-                    continue
-
-                confirm = self.ui.yesno(
-                    "Update KlipperScreen?\n\n"
-                    "This will:\n"
-                    "1. Stop the service\n"
-                    "2. Pull latest changes (git pull)\n"
-                    "3. Install updated requirements\n"
-                    "4. Restart the service\n\n"
-                    "You may need to enter your sudo password.",
-                    title="Confirm Update",
-                    default_no=False,
-                    height=16,
-                )
-                if not confirm:
-                    continue
-
-                # Step 1: Stop service (KIAUH-style)
-                print("\n" + "=" * 60)
-                print(f"Stopping {svc_name}...")
-                print("=" * 60 + "\n")
-                self._run_systemctl("stop", svc_name)
-
-                # Step 2: Git pull
-                print("\n" + "=" * 60)
-                print("Pulling latest changes...")
-                print("=" * 60 + "\n")
-                exit_code = self._run_shell_interactive(f"cd {ks_dir} && git pull")
-
-                if exit_code != 0:
-                    print("\nGit pull failed, attempting to restart service...")
-                    self._run_systemctl("start", svc_name)
-                    self.ui.msgbox(
-                        f"Update failed during git pull.\n\n"
-                        f"Check the terminal output above for errors.\n"
-                        f"Service restart attempted.",
-                        title="Update Failed",
-                        height=12,
-                        width=80,
-                    )
-                    continue
-
-                # Step 3: Install requirements (KIAUH-style)
-                ks_env = Path.home() / ".KlipperScreen-env"
-                ks_req = ks_dir / "scripts" / "KlipperScreen-requirements.txt"
-                if ks_env.exists() and ks_req.exists():
-                    print("\n" + "=" * 60)
-                    print("Installing Python requirements...")
-                    print("=" * 60 + "\n")
-                    pip_cmd = f"{ks_env}/bin/pip install -r {ks_req}"
-                    self._run_shell_interactive(pip_cmd)
-
-                # Step 4: Start service
-                print("\n" + "=" * 60)
-                print(f"Starting {svc_name}...")
-                print("=" * 60 + "\n")
-                self._run_systemctl("start", svc_name)
-
-                self.ui.msgbox(
-                    "KlipperScreen updated successfully!",
-                    title="Update Complete",
-                )
-                continue
-
-            elif choice == "REMOVE":
-                if not installed:
-                    self.ui.msgbox(
-                        "KlipperScreen is not installed.",
-                        title="Not Installed",
-                    )
-                    continue
-
-                confirm = self.ui.yesno(
-                    f"Remove KlipperScreen?\n\n"
-                    f"This will:\n"
-                    f"1. Stop and disable the service\n"
-                    f"2. Remove the KlipperScreen directory\n"
-                    f"3. Remove the Python environment\n"
-                    f"4. Optionally remove the systemd service file\n\n"
-                    f"You may need to enter your sudo password.\n"
-                    f"This cannot be undone!",
-                    title="Confirm Remove",
+                    "Remove KlipperScreen?\n\n"
+                    "This will stop the service and remove all files.\n"
+                    "This cannot be undone!",
+                    title="Remove KlipperScreen",
                     default_no=True,
-                    height=18,
                 )
                 if not confirm:
                     continue
 
                 import shutil
 
-                # Step 1: Stop and disable service (KIAUH-style)
                 print("\n" + "=" * 60)
                 print(f"Stopping {svc_name}...")
                 print("=" * 60 + "\n")
                 self._run_systemctl("stop", svc_name)
                 self._run_systemctl("disable", svc_name)
 
-                # Step 2: Remove KlipperScreen directory
                 print("\n" + "=" * 60)
                 print(f"Removing {ks_dir}...")
                 print("=" * 60 + "\n")
                 try:
                     if ks_dir.exists():
                         shutil.rmtree(ks_dir)
-                        print("KlipperScreen directory removed.")
+                        print("Directory removed.")
                 except Exception as e:
-                    print(f"Error removing directory: {e}")
-                    self.ui.msgbox(
-                        f"Failed to remove KlipperScreen directory.\n\n{e}",
-                        title="Removal Error",
-                    )
+                    self.ui.msgbox(f"Failed to remove directory:\n\n{e}", title="Error")
                     continue
 
-                # Step 3: Remove virtualenv
                 ks_env = Path.home() / ".KlipperScreen-env"
-                print("\n" + "=" * 60)
-                print(f"Removing {ks_env}...")
-                print("=" * 60 + "\n")
                 try:
                     if ks_env.exists():
                         shutil.rmtree(ks_env)
-                        print("KlipperScreen environment removed.")
-                except Exception as e:
-                    print(f"Error removing environment: {e}")
+                        print("Environment removed.")
+                except Exception:
+                    pass
 
-                # Step 4: Ask about service file
                 remove_service = self.ui.yesno(
-                    "Remove systemd service file?\n\n"
-                    "This removes /etc/systemd/system/KlipperScreen.service\n\n"
-                    "Say No if you plan to reinstall.",
+                    "Also remove the systemd service file?",
                     title="Remove Service File",
                     default_no=True,
                 )
                 if remove_service:
-                    print("\n" + "=" * 60)
-                    print("Removing service file...")
-                    print("=" * 60 + "\n")
                     self._run_shell_interactive(f"sudo rm -f /etc/systemd/system/{svc_name}.service")
                     self._run_shell_interactive("sudo systemctl daemon-reload")
 
-                self.ui.msgbox(
-                    "KlipperScreen removed successfully!\n\n"
-                    "You can reinstall at any time using 'Install'.",
-                    title="Removal Complete",
-                )
+                self.ui.msgbox("KlipperScreen removed!", title="Removal Complete")
                 continue
 
     def _advanced_setup(self) -> None:

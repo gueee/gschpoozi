@@ -1034,13 +1034,14 @@ class GschpooziWizard:
     def _get_component_status(self, component: str) -> dict:
         """Get installation status for a Klipper ecosystem component.
         
-        Returns dict with: installed, version, service_running, service_enabled, path
+        Returns dict with: installed, version, service_running, service_enabled, has_service, path
         """
         import subprocess
         
         status = {
             "installed": False,
             "version": None,
+            "has_service": False,  # True if component has a systemd service
             "service_running": False,
             "service_enabled": False,
             "path": None,
@@ -1064,6 +1065,7 @@ class GschpooziWizard:
         
         path = info["path"]
         service = info["service"]
+        status["has_service"] = (service is not None)
         
         # Check if installed (directory exists)
         if path.exists():
@@ -1119,11 +1121,11 @@ class GschpooziWizard:
         if status["version"]:
             parts.append(status["version"][:20])
         
-        if status["service_running"]:
-            parts.append("running")
-        elif status.get("service_enabled") is not None:
-            # Has a service but not running
-            if status["service_enabled"]:
+        # Only show service status for components that have a systemd service
+        if status.get("has_service"):
+            if status["service_running"]:
+                parts.append("running")
+            elif status["service_enabled"]:
                 parts.append("stopped")
             else:
                 parts.append("disabled")
@@ -1214,10 +1216,13 @@ class GschpooziWizard:
             status_text = "INSTALLED" if status["installed"] else "NOT INSTALLED"
             version_text = f"Version: {status['version']}" if status["version"] else ""
             service_text = ""
-            if status["service_running"]:
-                service_text = "Service: running"
-            elif status.get("service_enabled") is not None:
-                service_text = f"Service: {'enabled but stopped' if status['service_enabled'] else 'disabled'}"
+            if status.get("has_service"):
+                if status["service_running"]:
+                    service_text = "Service: running"
+                elif status["service_enabled"]:
+                    service_text = "Service: enabled but stopped"
+                else:
+                    service_text = "Service: disabled"
 
             action = self.ui.menu(
                 f"{comp_name}\n\n"

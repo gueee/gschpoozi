@@ -5536,6 +5536,249 @@ class GschpooziWizard:
                 self.state.save()
                 continue
 
+            elif choice == "CONF":
+                # Configure Moonraker connection
+                new_host = self.ui.inputbox(
+                    "Enter Moonraker host address:",
+                    title="KlipperScreen - Moonraker Host",
+                    init=host,
+                )
+                if new_host is None:
+                    continue
+                new_port_str = self.ui.inputbox(
+                    "Enter Moonraker port:",
+                    title="KlipperScreen - Moonraker Port",
+                    init=str(port),
+                )
+                if new_port_str is None:
+                    continue
+                try:
+                    new_port = int(new_port_str)
+                except ValueError:
+                    self.ui.msgbox("Invalid port number.", title="Error")
+                    continue
+
+                # Save to wizard state
+                self.state.set("display.klipperscreen.moonraker_host", new_host)
+                self.state.set("display.klipperscreen.moonraker_port", new_port)
+                self.state.save()
+
+                # Write to KlipperScreen.conf if installed
+                if installed:
+                    ok, msg = self._write_klipperscreen_conf(new_host, new_port)
+                    if ok:
+                        self.ui.msgbox(
+                            f"KlipperScreen.conf updated!\n\n"
+                            f"Host: {new_host}\nPort: {new_port}\n\n"
+                            f"Restart KlipperScreen for changes to take effect.",
+                            title="Configuration Saved",
+                        )
+                    else:
+                        self.ui.msgbox(f"Failed to write KlipperScreen.conf:\n\n{msg}", title="Error")
+                else:
+                    self.ui.msgbox(
+                        f"Settings saved to wizard state.\n\n"
+                        f"KlipperScreen is not installed, so KlipperScreen.conf was not written.\n"
+                        f"Install KlipperScreen first, then configure.",
+                        title="Settings Saved",
+                    )
+                continue
+
+            elif choice == "UM":
+                # Ensure Moonraker update_manager entry
+                if not update_mgr:
+                    self.ui.msgbox(
+                        "No update_manager template found in displays.json.\n\n"
+                        "Cannot add entry.",
+                        title="Error",
+                    )
+                    continue
+                ok = self._ensure_moonraker_update_manager_entry("KlipperScreen", update_mgr)
+                if ok:
+                    self.ui.msgbox(
+                        "Moonraker update_manager entry added/verified!\n\n"
+                        "KlipperScreen will now appear in your update manager.",
+                        title="Success",
+                    )
+                else:
+                    self.ui.msgbox(
+                        "Failed to update moonraker.conf.\n\n"
+                        "You may need to add the entry manually.",
+                        title="Error",
+                    )
+                continue
+
+            elif choice == "INSTALL":
+                if installed:
+                    self.ui.msgbox(
+                        f"KlipperScreen is already installed at:\n\n{ks_dir}\n\n"
+                        "Use 'Update' to pull latest changes, or 'Remove' first to reinstall.",
+                        title="Already Installed",
+                    )
+                    continue
+
+                if not install_cmd:
+                    self.ui.msgbox(
+                        "No install command found in displays.json.\n\n"
+                        "Manual install:\n"
+                        "cd ~ && git clone https://github.com/KlipperScreen/KlipperScreen.git\n"
+                        "cd KlipperScreen && ./scripts/KlipperScreen-install.sh",
+                        title="Error",
+                        height=14,
+                        width=90,
+                    )
+                    continue
+
+                confirm = self.ui.yesno(
+                    f"Install KlipperScreen?\n\n"
+                    f"This will run:\n{install_cmd}\n\n"
+                    f"The installation may take several minutes.",
+                    title="Confirm Install",
+                    default_no=False,
+                    height=14,
+                    width=100,
+                )
+                if not confirm:
+                    continue
+
+                self.ui.msgbox(
+                    "Starting KlipperScreen installation...\n\n"
+                    "This will take a few minutes. Please wait.",
+                    title="Installing",
+                    height=10,
+                )
+
+                # Run install command
+                ok, output = self._run_shell(install_cmd)
+                if ok:
+                    self.ui.msgbox(
+                        "KlipperScreen installed successfully!\n\n"
+                        "The service should start automatically.\n"
+                        "Use 'Configure' to set Moonraker connection if needed.",
+                        title="Installation Complete",
+                    )
+                    # Auto-add update_manager entry
+                    if update_mgr:
+                        self._ensure_moonraker_update_manager_entry("KlipperScreen", update_mgr)
+                else:
+                    # Show last 500 chars of output for debugging
+                    snippet = output[-500:] if len(output) > 500 else output
+                    self.ui.msgbox(
+                        f"Installation failed.\n\n"
+                        f"Output (last 500 chars):\n{snippet}",
+                        title="Installation Failed",
+                        height=20,
+                        width=100,
+                    )
+                continue
+
+            elif choice == "UPDATE":
+                if not installed:
+                    self.ui.msgbox(
+                        "KlipperScreen is not installed.\n\n"
+                        "Use 'Install' to install it first.",
+                        title="Not Installed",
+                    )
+                    continue
+
+                confirm = self.ui.yesno(
+                    "Update KlipperScreen?\n\n"
+                    "This will:\n"
+                    "1. Stop the service\n"
+                    "2. Pull latest changes (git pull)\n"
+                    "3. Restart the service\n",
+                    title="Confirm Update",
+                    default_no=False,
+                )
+                if not confirm:
+                    continue
+
+                # Stop service
+                self._run_shell(f"sudo systemctl stop {svc_name}")
+
+                # Git pull
+                ok, output = self._run_shell(f"cd {ks_dir} && git pull")
+                if not ok:
+                    snippet = output[-300:] if len(output) > 300 else output
+                    self.ui.msgbox(
+                        f"Git pull failed:\n\n{snippet}",
+                        title="Update Failed",
+                        height=16,
+                        width=90,
+                    )
+                    # Try to restart service anyway
+                    self._run_shell(f"sudo systemctl start {svc_name}")
+                    continue
+
+                # Restart service
+                self._run_shell(f"sudo systemctl start {svc_name}")
+
+                self.ui.msgbox(
+                    "KlipperScreen updated successfully!\n\n"
+                    f"Output:\n{output[:300] if len(output) > 300 else output}",
+                    title="Update Complete",
+                    height=16,
+                    width=90,
+                )
+                continue
+
+            elif choice == "REMOVE":
+                if not installed:
+                    self.ui.msgbox(
+                        "KlipperScreen is not installed.",
+                        title="Not Installed",
+                    )
+                    continue
+
+                confirm = self.ui.yesno(
+                    f"Remove KlipperScreen?\n\n"
+                    f"This will:\n"
+                    f"1. Stop the service\n"
+                    f"2. Delete {ks_dir}\n"
+                    f"3. Optionally remove the systemd service\n\n"
+                    f"This cannot be undone!",
+                    title="Confirm Remove",
+                    default_no=True,
+                    height=16,
+                )
+                if not confirm:
+                    continue
+
+                # Stop service
+                self._run_shell(f"sudo systemctl stop {svc_name}")
+                self._run_shell(f"sudo systemctl disable {svc_name}")
+
+                # Remove directory
+                ok, output = self._run_shell(f"rm -rf {ks_dir}")
+                if not ok:
+                    self.ui.msgbox(
+                        f"Failed to remove directory:\n\n{output}",
+                        title="Removal Failed",
+                    )
+                    continue
+
+                # Ask about service file
+                remove_service = self.ui.yesno(
+                    "Remove systemd service file?\n\n"
+                    "This removes /etc/systemd/system/KlipperScreen.service\n\n"
+                    "Say No if you plan to reinstall.",
+                    title="Remove Service File",
+                    default_no=True,
+                )
+                if remove_service:
+                    self._run_shell(f"sudo rm -f /etc/systemd/system/{svc_name}.service")
+                    self._run_shell("sudo systemctl daemon-reload")
+
+                # Also remove virtualenv
+                self._run_shell("rm -rf ~/.KlipperScreen-env")
+
+                self.ui.msgbox(
+                    "KlipperScreen removed.\n\n"
+                    "You can reinstall at any time using 'Install'.",
+                    title="Removal Complete",
+                )
+                continue
+
     def _advanced_setup(self) -> None:
         """Configure advanced features (generator-backed)."""
         while True:

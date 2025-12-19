@@ -6879,14 +6879,147 @@ read -r _
         if emit is None:
             return
 
+        # Load motor database IDs (if available) so users can pick instead of typing.
+        motor_ids: list[str] = []
+        try:
+            import re
+            from pathlib import Path as _Path
+
+            def _find_motor_db() -> _Path | None:
+                candidates = [
+                    _Path.home() / "klipper_tmc_autotune" / "motor_database.cfg",
+                    _Path.home() / "klipper" / "klippy" / "plugins" / "motor_database.cfg",
+                    _Path.home() / "klipper" / "klippy" / "extras" / "motor_database.cfg",
+                ]
+                for p in candidates:
+                    if p.exists():
+                        return p
+                return None
+
+            def _parse_motor_ids(cfg_text: str) -> list[str]:
+                out: list[str] = []
+                for line in cfg_text.splitlines():
+                    line = line.strip()
+                    m = re.match(r"^\[motor_constants\s+([^\]]+)\]\s*$", line)
+                    if m:
+                        out.append(m.group(1).strip())
+                # Deduplicate while preserving sortability
+                return sorted(set([x for x in out if x]))
+
+            db_path = _find_motor_db()
+            if db_path is not None:
+                motor_ids = _parse_motor_ids(db_path.read_text(encoding="utf-8", errors="ignore"))
+        except Exception:
+            motor_ids = []
+
+        def _pick_motor_id(stepper_name: str, default_value: str) -> str | None:
+            """
+            Pick a motor database ID for a stepper.
+            Returns:
+              - string (may be empty) on success
+              - None if user cancels the whole flow
+            """
+            # If we can't load the database, fall back to manual entry.
+            if not motor_ids:
+                return self.ui.inputbox(
+                    f"Motor database ID for {stepper_name}:\n\n"
+                    "Examples:\n"
+                    "  ldo-42sth48-2004mah\n"
+                    "  ldo-36sth20-1004ahg\n\n"
+                    "Leave blank to omit.",
+                    default=default_value,
+                    title=f"TMC Autotune - motor ({stepper_name})",
+                    height=16,
+                    width=92,
+                )
+
+            # Search + pick loop (keeps the menu manageable even for large databases)
+            query_default = (default_value or "").strip()
+            while True:
+                query = self.ui.inputbox(
+                    f"Search motor database for {stepper_name}.\n\n"
+                    "Tip: type a fragment like 'ldo-42sth' or '36sth20'.\n"
+                    "Leave empty to show the first matches.\n",
+                    default=query_default,
+                    title=f"TMC Autotune - Search ({stepper_name})",
+                    height=14,
+                    width=92,
+                )
+                if query is None:
+                    return None
+                query = (query or "").strip().lower()
+
+                matches = motor_ids
+                if query:
+                    matches = [m for m in motor_ids if query in m.lower()]
+
+                if not matches:
+                    self.ui.msgbox(
+                        "No matches found.\n\n"
+                        "Try a shorter search (e.g. 'ldo', '42sth', '2004').",
+                        title="No Matches",
+                        height=12,
+                        width=80,
+                    )
+                    query_default = query
+                    continue
+
+                max_show = 200
+                shown = matches[:max_show]
+                extra = len(matches) - len(shown)
+
+                items: list[tuple[str, str]] = [(m, m) for m in shown]
+                if extra > 0:
+                    items.append(("SEARCH", f"(showing first {len(shown)} of {len(matches)} matches) Search again"))
+                else:
+                    items.append(("SEARCH", "Search again"))
+                items.append(("MANUAL", "Manual entry (type/paste)"))
+                items.append(("CLEAR", "Leave blank (omit motor)"))
+                items.append(("B", "Back/Cancel"))
+
+                choice = self.ui.menu(
+                    "Pick a motor ID:",
+                    items,
+                    title=f"TMC Autotune - Pick Motor ({stepper_name})",
+                    height=26,
+                    width=110,
+                    menu_height=18,
+                )
+                if choice is None or choice == "B":
+                    return None
+                if choice == "SEARCH":
+                    query_default = query
+                    continue
+                if choice == "CLEAR":
+                    return ""
+                if choice == "MANUAL":
+                    manual = self.ui.inputbox(
+                        f"Enter motor database ID for {stepper_name}:",
+                        default=default_value,
+                        title=f"TMC Autotune - Manual ({stepper_name})",
+                        height=10,
+                        width=92,
+                    )
+                    return None if manual is None else (manual or "").strip()
+
+                # Selected a motor ID
+                return choice.strip()
+
         # Choose which steppers to autotune (avoid free-text stepper names).
         awd_enabled = bool(self.state.get("printer.awd_enabled", False))
+        z_count = int(self.state.get("stepper_z.z_motor_count", 1) or 1)
         stepper_choices = [
             ("stepper_x", "stepper_x (X)", True),
             ("stepper_y", "stepper_y (Y)", True),
             ("stepper_z", "stepper_z (Z)", True),
             ("extruder", "extruder (E)", True),
         ]
+        if z_count >= 2:
+            stepper_choices.append(("stepper_z1", "stepper_z1 (Z1)", True))
+        if z_count >= 3:
+            stepper_choices.append(("stepper_z2", "stepper_z2 (Z2)", True))
+        if z_count >= 4:
+            stepper_choices.append(("stepper_z3", "stepper_z3 (Z3)", True))
         if awd_enabled:
             stepper_choices.extend(
                 [
@@ -6931,17 +7064,7 @@ read -r _
         steppers_cfg: list[dict] = []
         for stepper in selected_steppers:
             default_motor = existing_map.get(stepper, legacy_defaults.get(stepper, ""))
-            motor = self.ui.inputbox(
-                f"Motor database ID for {stepper}:\n\n"
-                "Examples:\n"
-                "  ldo-42sth48-2004mah\n"
-                "  ldo-36sth20-1004ahg\n\n"
-                "Leave blank to omit.",
-                default=default_motor,
-                title=f"TMC Autotune - motor ({stepper})",
-                height=16,
-                width=92,
-            )
+            motor = _pick_motor_id(stepper, default_motor)
             if motor is None:
                 return
             steppers_cfg.append({"stepper": stepper, "motor": (motor or "").strip()})

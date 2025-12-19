@@ -368,16 +368,24 @@ extruder:
 heater_bed:
   template: |
     [heater_bed]
-    heater_pin: {% if heater_bed.heater_pin in board.pins %}{{ board.pins[heater_bed.heater_pin].signal }}{% else %}{{ heater_bed.heater_pin }}{% endif %}
-    sensor_pin: {% if heater_bed.sensor_port in board.pins %}{{ board.pins[heater_bed.sensor_port].signal }}{% else %}{{ heater_bed.sensor_port }}{% endif %}
+    {% if heater_bed.heater_pin in board.pins -%}
+    heater_pin: {{ board.pins[heater_bed.heater_pin].signal }}
+    {% else -%}
+    heater_pin: {{ heater_bed.heater_pin }}
+    {% endif -%}
+    {% if heater_bed.sensor_port in board.pins -%}
+    sensor_pin: {{ board.pins[heater_bed.sensor_port].signal }}
+    {% else -%}
+    sensor_pin: {{ heater_bed.sensor_port }}
+    {% endif -%}
     sensor_type: {{ heater_bed.sensor_type | default('Generic 3950', true) }}
-    {% if heater_bed.pullup_resistor %}
+    {% if heater_bed.pullup_resistor -%}
     pullup_resistor: {{ heater_bed.pullup_resistor }}
-    {% endif %}
+    {% endif -%}
     max_power: {{ heater_bed.max_power | default(1.0) }}
-    {% if heater_bed.pwm_cycle_time is defined and heater_bed.pwm_cycle_time and heater_bed.pwm_cycle_time != 0.0166 %}
+    {% if heater_bed.pwm_cycle_time is defined and heater_bed.pwm_cycle_time and heater_bed.pwm_cycle_time != 0.0166 -%}
     pwm_cycle_time: {{ heater_bed.pwm_cycle_time }}
-    {% endif %}
+    {% endif -%}
     min_temp: {{ heater_bed.min_temp | default(0) }}
     max_temp: {{ heater_bed.max_temp | default(120) }}
     # PID values - run PID_CALIBRATE HEATER=heater_bed TARGET=60

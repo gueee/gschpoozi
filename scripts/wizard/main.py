@@ -227,26 +227,37 @@ class GschpooziWizard:
             return False, str(e)
 
     def _run_shell_interactive(self, command: str) -> int:
-        """Run a shell command interactively with TTY access.
+        """Run a shell command interactively (KIAUH-style).
         
-        Use this for commands that need user interaction (sudo, confirmations, etc.)
+        Output streams directly to terminal. For commands that need user interaction.
         Returns the exit code.
         """
         import subprocess
+        # KIAUH approach: run without capturing output, let it stream to terminal
+        # stderr=PIPE to capture errors, but stdout goes to terminal
         try:
-            with open("/dev/tty", "r+") as tty:
-                result = subprocess.run(
-                    command,
-                    shell=True,
-                    stdin=tty,
-                    stdout=tty,
-                    stderr=tty,
-                )
-                return result.returncode
-        except OSError:
-            # Fallback without TTY binding
-            result = subprocess.run(command, shell=True)
+            result = subprocess.run(command, shell=True, check=False)
             return result.returncode
+        except Exception:
+            return 1
+    
+    def _run_systemctl(self, action: str, service: str) -> bool:
+        """Run systemctl command (KIAUH-style).
+        
+        Returns True on success, False on failure.
+        """
+        import subprocess
+        try:
+            subprocess.run(
+                ["sudo", "systemctl", action, service],
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            return True
+        except subprocess.CalledProcessError:
+            return False
+        except Exception:
+            return False
 
     def _backup_file(self, path: Path) -> None:
         """Create a timestamped backup of a file if it exists."""
@@ -5639,33 +5650,49 @@ class GschpooziWizard:
                     )
                     continue
 
-                if not install_cmd:
-                    self.ui.msgbox(
-                        "No install command found in displays.json.\n\n"
-                        "Manual install:\n"
-                        "cd ~ && git clone https://github.com/KlipperScreen/KlipperScreen.git\n"
-                        "cd KlipperScreen && ./scripts/KlipperScreen-install.sh",
-                        title="Error",
-                        height=14,
-                        width=90,
-                    )
-                    continue
-
                 confirm = self.ui.yesno(
                     f"Install KlipperScreen?\n\n"
-                    f"This will run the KlipperScreen installer.\n"
-                    f"You may need to enter your sudo password.\n\n"
+                    f"This will:\n"
+                    f"1. Clone KlipperScreen repository\n"
+                    f"2. Run the install script\n\n"
+                    f"You may need to enter your sudo password.\n"
                     f"The installation may take several minutes.",
                     title="Confirm Install",
                     default_no=False,
-                    height=14,
+                    height=16,
                     width=100,
                 )
                 if not confirm:
                     continue
 
-                # Run install command interactively (needs TTY for sudo/prompts)
-                exit_code = self._run_shell_interactive(install_cmd)
+                # Step 1: Clone the repository (KIAUH-style)
+                ks_repo = "https://github.com/KlipperScreen/KlipperScreen.git"
+                print("\n" + "=" * 60)
+                print("Cloning KlipperScreen repository...")
+                print("=" * 60 + "\n")
+                
+                clone_cmd = f"git clone {ks_repo} {ks_dir}"
+                exit_code = self._run_shell_interactive(clone_cmd)
+                
+                if exit_code != 0:
+                    self.ui.msgbox(
+                        f"Failed to clone KlipperScreen repository.\n\n"
+                        f"Check the terminal output above for errors.\n\n"
+                        f"You can try manually:\n"
+                        f"git clone {ks_repo}",
+                        title="Clone Failed",
+                        height=14,
+                        width=90,
+                    )
+                    continue
+
+                # Step 2: Run install script (KIAUH-style)
+                install_script = ks_dir / "scripts" / "KlipperScreen-install.sh"
+                print("\n" + "=" * 60)
+                print("Running KlipperScreen install script...")
+                print("=" * 60 + "\n")
+                
+                exit_code = self._run_shell_interactive(str(install_script))
                 
                 if exit_code == 0:
                     self.ui.msgbox(
@@ -5680,10 +5707,10 @@ class GschpooziWizard:
                 else:
                     self.ui.msgbox(
                         f"Installation may have failed (exit code: {exit_code}).\n\n"
-                        f"Check the terminal output above for errors.\n"
-                        f"You can also try installing manually:\n\n"
-                        f"cd ~ && git clone https://github.com/KlipperScreen/KlipperScreen.git\n"
-                        f"cd KlipperScreen && ./scripts/KlipperScreen-install.sh",
+                        f"Check the terminal output above for errors.\n\n"
+                        f"The repository was cloned successfully.\n"
+                        f"You can retry the install script manually:\n"
+                        f"cd ~/KlipperScreen && ./scripts/KlipperScreen-install.sh",
                         title="Installation Issue",
                         height=16,
                         width=100,
@@ -5704,37 +5731,61 @@ class GschpooziWizard:
                     "This will:\n"
                     "1. Stop the service\n"
                     "2. Pull latest changes (git pull)\n"
-                    "3. Restart the service\n\n"
+                    "3. Install updated requirements\n"
+                    "4. Restart the service\n\n"
                     "You may need to enter your sudo password.",
                     title="Confirm Update",
                     default_no=False,
+                    height=16,
                 )
                 if not confirm:
                     continue
 
-                # Run update commands interactively (needs TTY for sudo)
-                update_script = (
-                    f"sudo systemctl stop {svc_name} && "
-                    f"cd {ks_dir} && git pull && "
-                    f"sudo systemctl start {svc_name}"
-                )
-                exit_code = self._run_shell_interactive(update_script)
+                # Step 1: Stop service (KIAUH-style)
+                print("\n" + "=" * 60)
+                print(f"Stopping {svc_name}...")
+                print("=" * 60 + "\n")
+                self._run_systemctl("stop", svc_name)
 
-                if exit_code == 0:
+                # Step 2: Git pull
+                print("\n" + "=" * 60)
+                print("Pulling latest changes...")
+                print("=" * 60 + "\n")
+                exit_code = self._run_shell_interactive(f"cd {ks_dir} && git pull")
+
+                if exit_code != 0:
+                    print("\nGit pull failed, attempting to restart service...")
+                    self._run_systemctl("start", svc_name)
                     self.ui.msgbox(
-                        "KlipperScreen updated successfully!",
-                        title="Update Complete",
-                    )
-                else:
-                    # Try to restart service in case it was stopped
-                    self._run_shell_interactive(f"sudo systemctl start {svc_name}")
-                    self.ui.msgbox(
-                        f"Update may have failed (exit code: {exit_code}).\n\n"
-                        f"Check the terminal output above for errors.",
-                        title="Update Issue",
+                        f"Update failed during git pull.\n\n"
+                        f"Check the terminal output above for errors.\n"
+                        f"Service restart attempted.",
+                        title="Update Failed",
                         height=12,
                         width=80,
                     )
+                    continue
+
+                # Step 3: Install requirements (KIAUH-style)
+                ks_env = Path.home() / ".KlipperScreen-env"
+                ks_req = ks_dir / "scripts" / "KlipperScreen-requirements.txt"
+                if ks_env.exists() and ks_req.exists():
+                    print("\n" + "=" * 60)
+                    print("Installing Python requirements...")
+                    print("=" * 60 + "\n")
+                    pip_cmd = f"{ks_env}/bin/pip install -r {ks_req}"
+                    self._run_shell_interactive(pip_cmd)
+
+                # Step 4: Start service
+                print("\n" + "=" * 60)
+                print(f"Starting {svc_name}...")
+                print("=" * 60 + "\n")
+                self._run_systemctl("start", svc_name)
+
+                self.ui.msgbox(
+                    "KlipperScreen updated successfully!",
+                    title="Update Complete",
+                )
                 continue
 
             elif choice == "REMOVE":
@@ -5748,9 +5799,10 @@ class GschpooziWizard:
                 confirm = self.ui.yesno(
                     f"Remove KlipperScreen?\n\n"
                     f"This will:\n"
-                    f"1. Stop the service\n"
-                    f"2. Delete {ks_dir}\n"
-                    f"3. Optionally remove the systemd service\n\n"
+                    f"1. Stop and disable the service\n"
+                    f"2. Remove the KlipperScreen directory\n"
+                    f"3. Remove the Python environment\n"
+                    f"4. Optionally remove the systemd service file\n\n"
                     f"You may need to enter your sudo password.\n"
                     f"This cannot be undone!",
                     title="Confirm Remove",
@@ -5760,21 +5812,44 @@ class GschpooziWizard:
                 if not confirm:
                     continue
 
-                # Stop and disable service (interactive for sudo)
-                self._run_shell_interactive(f"sudo systemctl stop {svc_name}")
-                self._run_shell_interactive(f"sudo systemctl disable {svc_name}")
+                import shutil
 
-                # Remove directory
-                exit_code = self._run_shell_interactive(f"rm -rf {ks_dir}")
-                if exit_code != 0:
+                # Step 1: Stop and disable service (KIAUH-style)
+                print("\n" + "=" * 60)
+                print(f"Stopping {svc_name}...")
+                print("=" * 60 + "\n")
+                self._run_systemctl("stop", svc_name)
+                self._run_systemctl("disable", svc_name)
+
+                # Step 2: Remove KlipperScreen directory
+                print("\n" + "=" * 60)
+                print(f"Removing {ks_dir}...")
+                print("=" * 60 + "\n")
+                try:
+                    if ks_dir.exists():
+                        shutil.rmtree(ks_dir)
+                        print("KlipperScreen directory removed.")
+                except Exception as e:
+                    print(f"Error removing directory: {e}")
                     self.ui.msgbox(
-                        f"Failed to remove directory.\n\n"
-                        f"Check terminal output for errors.",
-                        title="Removal Failed",
+                        f"Failed to remove KlipperScreen directory.\n\n{e}",
+                        title="Removal Error",
                     )
                     continue
 
-                # Ask about service file
+                # Step 3: Remove virtualenv
+                ks_env = Path.home() / ".KlipperScreen-env"
+                print("\n" + "=" * 60)
+                print(f"Removing {ks_env}...")
+                print("=" * 60 + "\n")
+                try:
+                    if ks_env.exists():
+                        shutil.rmtree(ks_env)
+                        print("KlipperScreen environment removed.")
+                except Exception as e:
+                    print(f"Error removing environment: {e}")
+
+                # Step 4: Ask about service file
                 remove_service = self.ui.yesno(
                     "Remove systemd service file?\n\n"
                     "This removes /etc/systemd/system/KlipperScreen.service\n\n"
@@ -5783,14 +5858,14 @@ class GschpooziWizard:
                     default_no=True,
                 )
                 if remove_service:
+                    print("\n" + "=" * 60)
+                    print("Removing service file...")
+                    print("=" * 60 + "\n")
                     self._run_shell_interactive(f"sudo rm -f /etc/systemd/system/{svc_name}.service")
                     self._run_shell_interactive("sudo systemctl daemon-reload")
 
-                # Also remove virtualenv
-                self._run_shell("rm -rf ~/.KlipperScreen-env")
-
                 self.ui.msgbox(
-                    "KlipperScreen removed.\n\n"
+                    "KlipperScreen removed successfully!\n\n"
                     "You can reinstall at any time using 'Install'.",
                     title="Removal Complete",
                 )

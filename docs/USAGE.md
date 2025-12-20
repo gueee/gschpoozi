@@ -317,7 +317,7 @@ Preset values for common extruders:
 
 ### Motor Port Assignment
 
-The wizard shows available motor ports on your board:
+The wizard shows available motor ports on your board with smart conflict detection:
 
 ```
 Available motor ports on BTT Octopus Pro:
@@ -328,6 +328,12 @@ Available motor ports on BTT Octopus Pro:
 
 Assign stepper_x to port: MOTOR_0
 ```
+
+**Smart Pin Management:**
+- Already-used ports are automatically hidden from selection lists
+- Heater/output ports only show output-capable pins (not sensors/inputs)
+- Thermistor ports only show ADC-capable pins
+- The wizard saves state after each selection, so conflicts are detected immediately
 
 ---
 
@@ -434,6 +440,14 @@ For dual fans on a single output, select a second port to create a `[multi_pin]`
 
 ### Lighting
 
+The LED management uses a submenu structure for easier organization:
+
+| Action | Description |
+|--------|-------------|
+| **Add LED Strip** | Create a new LED strip configuration |
+| **Edit LED Strip** | Select from configured strips to modify |
+| **Delete LED Strip** | Select and remove a configured strip |
+
 #### LED Types
 
 | Type | Section | Description |
@@ -450,12 +464,40 @@ Configure:
 ### Extras
 
 #### Filament Sensor
-Enables `[filament_switch_sensor]` with:
-- Pause on runout
-- M600 filament change macro
+
+The filament sensor management uses a submenu structure:
+
+| Action | Description |
+|--------|-------------|
+| **Add Filament Sensor** | Create a new sensor configuration |
+| **Edit Filament Sensor** | Select from configured sensors to modify |
+| **Delete Filament Sensor** | Select and remove a configured sensor |
+
+Sensor types:
+- **Switch** - Simple runout detection (filament present/absent)
+- **Motion** - Detects filament movement (better jam detection)
+- **Encoder** - Measures actual filament flow
+
+Pin modifiers available:
+- **Pull-up (^)** - Enable internal pull-up resistor (most common for switches)
+- **Pull-down (~)** - Enable internal pull-down resistor (rarely needed)
+- **Invert (!)** - Invert the signal (if sensor triggers in reverse)
 
 #### Chamber Temperature Sensor
 Adds `[temperature_sensor chamber]` for monitoring enclosure temperature.
+
+#### Probe Temperature Sensor
+
+For probes with built-in temperature sensors:
+
+| Probe Type | Temperature Sensor |
+|------------|-------------------|
+| **Beacon** | Coil temperature (eddy current) |
+| **Cartographer** | Coil temperature (eddy current) |
+| **BTT Eddy** | Coil temperature (eddy current) |
+| **PINDA v2** | Built-in NTC thermistor |
+
+Eddy current probe coil temperature helps with thermal drift compensation. The wizard automatically detects your probe type and offers the appropriate temperature sensor option.
 
 ---
 

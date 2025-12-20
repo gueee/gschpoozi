@@ -22,11 +22,14 @@ The wizard is now **almost fully functional** and ready for real-world testing. 
 
 **Current Status:**
 - ✅ Full wizard flow working (MCU, kinematics, steppers, extruder, bed, fans, probe, etc.)
+- ✅ Smart pin conflict detection — prevents assigning the same port twice
+- ✅ Pin capability filtering — heater ports show outputs, thermistors show ADC pins
 - ✅ Klipper component management (install/update/remove Klipper, Moonraker, Mainsail, etc.)
 - ✅ KlipperScreen integration (install, configure, remove)
 - ✅ CAN bus setup wizard
 - ✅ TMC Autotune integration with motor database picker
 - ✅ Config generation with proper pin mappings
+- ✅ Probe temperature sensors (Beacon/Cartographer/Eddy coil temp, PINDA)
 - ⚠️ Stepper/motor discovery is informational only — you need to know your wiring
 - ⚠️ Macro defaults may need tuning for your specific printer
 
@@ -40,6 +43,7 @@ Inspired by [Klippain](https://github.com/Frix-x/klippain), but built from the g
 
 - **Interactive Wizard** - Step-by-step setup, no config editing required
 - **Port-Based Hardware Setup** - Visual pin assignment for any board
+- **Smart Pin Management** - Prevents conflicts, filters by capability (ADC, PWM, etc.)
 - **Clean Output** - Generates readable, well-commented config files
 - **Safe Updates** - Your customizations are never overwritten
 - **Modular Design** - Only generates what you actually need

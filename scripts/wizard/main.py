@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from wizard.ui import WizardUI
 from wizard.state import get_state, WizardState
+from wizard.pins import PinManager
 
 # Find repo root (where templates/ lives)
 SCRIPT_DIR = Path(__file__).parent.resolve()
@@ -34,6 +35,16 @@ class GschpooziWizard:
             backtitle=f"gschpoozi v{self.VERSION} - Klipper Configuration Wizard"
         )
         self.state = get_state()
+
+    def _get_pin_manager(self) -> PinManager:
+        """Create a PinManager with current board data."""
+        board_id = self.state.get("mcu.main.board_type", "")
+        board_data = self._load_board_data(board_id, "boards") if board_id else {}
+        
+        toolboard_id = self.state.get("mcu.toolboard.board_type", "")
+        toolboard_data = self._load_board_data(toolboard_id, "toolboards") if toolboard_id else {}
+        
+        return PinManager(self.state, self.ui, board_data, toolboard_data)
 
     def _wizard_log_path(self) -> Path:
         # Keep logs next to the state file so users can find it easily.
@@ -3816,7 +3827,10 @@ class GschpooziWizard:
         )
 
     def _extruder_setup(self) -> None:
-        """Configure extruder motor and hotend per schema 2.6."""
+        """Configure extruder motor and hotend per schema 2.6.
+        
+        Uses PinManager for consistent pin selection with conflict detection.
+        """
         # Get current values for pre-selection (using correct state keys)
         current_type = self.state.get("extruder.extruder_type", "")
         current_location = self.state.get("extruder.location", "")
@@ -3969,37 +3983,26 @@ class GschpooziWizard:
         if heater_location is None:
             return
 
-        # Heater port selection
-        board_type = "toolboards" if heater_location == "toolboard" else "boards"
-        heater_ports = self._get_board_ports("heater_ports", board_type)
-        if heater_ports:
-            # Check both possible keys for current value
-            current_port = self.state.get(f"extruder.heater_port_{heater_location}", "") or \
-                          self.state.get("extruder.heater_port_mainboard", "") or \
-                          self.state.get("extruder.heater_port_toolboard", "")
-            # Filter to show hotend heaters, not bed heater
-            hotend_ports = [(p, l, p == current_port or (d and "Bed" not in l))
-                           for p, l, d in heater_ports if "Bed" not in l]
-            if hotend_ports:
-                heater_port = self.ui.radiolist(
-                    f"Select heater port on {heater_location}:",
-                    hotend_ports,
-                    title="Hotend - Heater Port"
-                )
-            else:
-                heater_port = self.ui.inputbox(
-                    f"Enter heater port on {heater_location}:",
-                    default=current_port or ("HE" if heater_location == "toolboard" else "HE0"),
-                    title="Hotend - Heater Port"
-                )
-        else:
-            heater_port = self.ui.inputbox(
-                f"Enter heater port on {heater_location}:",
-                default=current_port or ("HE" if heater_location == "toolboard" else "HE0"),
-                title="Hotend - Heater Port"
-            )
+        # Heater port selection using PinManager
+        pin_manager = self._get_pin_manager()
+        current_port = self.state.get(f"extruder.heater_port_{heater_location}", "") or \
+                      self.state.get("extruder.heater_port_mainboard", "") or \
+                      self.state.get("extruder.heater_port_toolboard", "")
+        # Remove current port from used set so we can reconfigure
+        pin_manager.mark_unused(heater_location, current_port)
+        
+        heater_port = pin_manager.select_output_pin(
+            location=heater_location,
+            purpose="Hotend Heater",
+            output_type="mosfet",
+            groups=["heater_ports", "misc_ports"],
+            current_port=current_port,
+            title="Hotend - Heater Port"
+        )
         if heater_port is None:
             return
+        
+        pin_manager.mark_used(heater_location, heater_port, "Hotend heater")
 
         max_power = self.ui.inputbox(
             "Heater max power (0.1-1.0):\n\n"
@@ -4025,37 +4028,25 @@ class GschpooziWizard:
         if sensor_location is None:
             return
 
-        # Thermistor port selection
-        board_type = "toolboards" if sensor_location == "toolboard" else "boards"
-        sensor_ports = self._get_board_ports("thermistor_ports", board_type)
-        if sensor_ports:
-            # Check both possible keys for current value
-            current_port = self.state.get(f"extruder.sensor_port_{sensor_location}", "") or \
-                          self.state.get("extruder.sensor_port_mainboard", "") or \
-                          self.state.get("extruder.sensor_port_toolboard", "")
-            # Filter to show hotend thermistors, not bed
-            hotend_sensors = [(p, l, p == current_port or (d and "Bed" not in l))
-                             for p, l, d in sensor_ports if "Bed" not in l]
-            if hotend_sensors:
-                sensor_port = self.ui.radiolist(
-                    f"Select thermistor port on {sensor_location}:",
-                    hotend_sensors,
-                    title="Hotend - Thermistor Port"
-                )
-            else:
-                sensor_port = self.ui.inputbox(
-                    f"Enter thermistor port on {sensor_location}:",
-                    default=current_port or ("TH0" if sensor_location == "toolboard" else "T0"),
-                    title="Hotend - Thermistor Port"
-                )
-        else:
-            sensor_port = self.ui.inputbox(
-                f"Enter thermistor port on {sensor_location}:",
-                default=current_port or ("TH0" if sensor_location == "toolboard" else "T0"),
-                title="Hotend - Thermistor Port"
-            )
+        # Thermistor port selection using PinManager
+        current_port = self.state.get(f"extruder.sensor_port_{sensor_location}", "") or \
+                      self.state.get("extruder.sensor_port_mainboard", "") or \
+                      self.state.get("extruder.sensor_port_toolboard", "")
+        # Remove current port from used set so we can reconfigure
+        pin_manager.mark_unused(sensor_location, current_port)
+        
+        sensor_port = pin_manager.select_output_pin(
+            location=sensor_location,
+            purpose="Hotend Thermistor",
+            output_type="signal",
+            groups=["thermistor_ports", "misc_ports"],
+            current_port=current_port,
+            title="Hotend - Thermistor Port"
+        )
         if sensor_port is None:
             return
+        
+        pin_manager.mark_used(sensor_location, sensor_port, "Hotend thermistor")
 
         # Sensor pin pullup (^ modifier) - many toolboards need this
         current_sensor_pullup = self.state.get("extruder.sensor_pullup", False)
@@ -4088,41 +4079,18 @@ class GschpooziWizard:
         if sensor_type is None:
             return
 
-        # Pullup resistor - needed for ALL thermistor types including PT1000
-        # (PT1000 especially needs correct value for accurate readings)
+        # Pullup resistor selection using PinManager
         # Default to 2200 for toolboards, 4700 for mainboards
         default_pullup = 2200 if sensor_location == "toolboard" else 4700
         extruder_cfg = self.state.get_section("extruder")
         has_pullup_key = isinstance(extruder_cfg, dict) and ("pullup_resistor" in extruder_cfg)
         current_pullup = extruder_cfg.get("pullup_resistor") if has_pullup_key else None
-        effective_pullup = int(current_pullup) if isinstance(current_pullup, int) else int(default_pullup)
-        pullup_resistor = self.ui.radiolist(
-            "Thermistor pullup resistor value:\n\n"
-            "(Check your board - most mainboards use 4.7kΩ, most toolboards use 2.2kΩ)\n"
-            "Wrong value = wrong temperature readings!",
-            [
-                ("2200", "2.2kΩ (most toolboards: EBB, SHT36, Nitehawk)", effective_pullup == 2200 and not (has_pullup_key and current_pullup is None)),
-                ("4700", "4.7kΩ (most mainboards)", effective_pullup == 4700 and not (has_pullup_key and current_pullup is None)),
-                ("1000", "1kΩ (some PT1000 boards)", effective_pullup == 1000 and not (has_pullup_key and current_pullup is None)),
-                ("10000", "10kΩ (rare)", effective_pullup == 10000 and not (has_pullup_key and current_pullup is None)),
-                ("none", "None (omit from config)", bool(has_pullup_key and current_pullup is None)),
-                ("custom", "Enter custom value", False),
-            ],
+        effective_pullup = int(current_pullup) if isinstance(current_pullup, (int, float, str)) and current_pullup else int(default_pullup)
+        
+        pullup_resistor = pin_manager.select_pullup_resistor(
+            default=effective_pullup if not (has_pullup_key and current_pullup is None) else None,
             title="Hotend - Pullup Resistor"
         )
-        if pullup_resistor is None:
-            return
-        if pullup_resistor == "none":
-            pullup_resistor = None
-        elif pullup_resistor == "custom":
-            pullup_resistor = self.ui.inputbox(
-                "Enter pullup resistor value (Ω):",
-                default=str(effective_pullup),
-                title="Hotend - Custom Pullup"
-            )
-            if pullup_resistor is None:
-                return
-        pullup_resistor = int(pullup_resistor) if pullup_resistor else None
 
         # Temperature settings
         min_temp = self.ui.inputbox(
@@ -4441,7 +4409,10 @@ class GschpooziWizard:
         return options
 
     def _heater_bed_setup(self) -> None:
-        """Configure heated bed per schema 2.7."""
+        """Configure heated bed per schema 2.7.
+        
+        Uses PinManager for consistent pin selection with conflict detection.
+        """
         # Get current values
         current_heater_pin = self.state.get("heater_bed.heater_pin", "")
         current_max_power = self.state.get("heater_bed.max_power", 1.0)
@@ -4453,35 +4424,43 @@ class GschpooziWizard:
         current_control = self.state.get("heater_bed.control", "pid")
         current_surface = self.state.get("heater_bed.surface_type", "")
 
-        # Load board data for pin lists
+        # Get pullup resistor current value
+        bed_cfg = self.state.get_section("heater_bed")
+        has_pullup_key = isinstance(bed_cfg, dict) and ("pullup_resistor" in bed_cfg)
+        current_pullup = bed_cfg.get("pullup_resistor") if has_pullup_key else 4700
+        if current_pullup is not None:
+            current_pullup = int(current_pullup) if isinstance(current_pullup, (int, float, str)) else 4700
+
+        # Create PinManager for this session - exclude bed pins since we're reconfiguring
+        pin_manager = self._get_pin_manager()
+        # Remove current bed pins from used set so we can reconfigure them
+        pin_manager.mark_unused("mainboard", current_heater_pin)
+        pin_manager.mark_unused("mainboard", current_sensor_port)
+
+        # Check if board is configured
         board_id = self.state.get("mcu.main.board_type", "")
-        board_data = self._load_board_data(board_id, "boards")
-
-        # Collect pins already in use (excluding bed itself, since we're reconfiguring it)
-        used_pins = self._collect_used_mainboard_pins(exclude_bed=True)
-
-        # === 2.7.1: Heater Configuration ===
-        # Build comprehensive list of output pins for bed heater (SSR/MOSFET friendly)
-        heater_options = self._build_output_pin_options(board_data, current_heater_pin, used_pins)
-        if not heater_options:
+        if not board_id:
             self.ui.msgbox(
-                "No output pins found in board definition.\n\n"
+                "No mainboard selected.\n\n"
                 "Please select a mainboard first in MCU Setup.",
                 title="Heated Bed - Error"
             )
             return
 
-        heater_pin = self.ui.radiolist(
-            "Select heated bed heater pin:\n\n"
-            "(For SSR/external MOSFET, pick any available output)",
-            heater_options,
+        # === 2.7.1: Heater Configuration ===
+        heater_pin = pin_manager.select_output_pin(
+            location="mainboard",
+            purpose="Heated Bed Heater",
+            output_type="mosfet",
+            groups=["heater_ports", "fan_ports", "misc_ports"],
+            current_port=current_heater_pin,
             title="Heated Bed - Heater Pin"
         )
         if heater_pin is None:
             return
 
-        # Add heater pin to used set before thermistor selection
-        used_pins.add(heater_pin)
+        # Mark pin as used for conflict detection
+        pin_manager.mark_used("mainboard", heater_pin, "Heated bed heater")
 
         max_power = self.ui.inputbox(
             "Heater max power (0.1-1.0):\n\n"
@@ -4502,68 +4481,31 @@ class GschpooziWizard:
             return
 
         # === 2.7.2: Thermistor ===
-        # Build comprehensive list of ADC/thermistor pins
-        sensor_options = self._build_thermistor_pin_options(board_data, current_sensor_port, used_pins)
-        if not sensor_options:
-            self.ui.msgbox(
-                "No thermistor/ADC pins found in board definition.\n\n"
-                "Please select a mainboard first in MCU Setup.",
-                title="Heated Bed - Error"
-            )
-            return
-
-        sensor_port = self.ui.radiolist(
-            "Select bed thermistor port:\n\n"
-            "(Any ADC input can be used)",
-            sensor_options,
+        # Select thermistor port
+        sensor_port = pin_manager.select_output_pin(
+            location="mainboard",
+            purpose="Bed Thermistor",
+            output_type="signal",
+            groups=["thermistor_ports", "misc_ports"],
+            current_port=current_sensor_port,
             title="Heated Bed - Thermistor Port"
         )
         if sensor_port is None:
             return
 
-        # Thermistor type
-        sensor_types = [
-            ("Generic 3950", "Generic 3950 (most common)"),
-            ("NTC 100K beta 3950", "NTC 100K beta 3950"),
-            ("ATC Semitec 104GT-2", "ATC Semitec 104GT-2"),
-            ("EPCOS 100K B57560G104F", "EPCOS 100K B57560G104F"),
-            ("Honeywell 100K 135-104LAG-J01", "Honeywell 100K"),
-            ("PT1000", "PT1000"),
-        ]
-        sensor_type = self.ui.radiolist(
-            "Bed thermistor type:",
-            [(k, v, k == current_sensor_type) for k, v in sensor_types],
+        # Sensor type selection
+        sensor_type = pin_manager.select_sensor_type(
+            current=current_sensor_type,
             title="Heated Bed - Thermistor Type"
         )
         if sensor_type is None:
             return
 
-        # Pullup resistor with None option
-        pullup_resistor = None
-        bed_cfg = self.state.get_section("heater_bed")
-        has_pullup_key = isinstance(bed_cfg, dict) and ("pullup_resistor" in bed_cfg)
-        current_pullup = bed_cfg.get("pullup_resistor") if has_pullup_key else 4700
-        effective_pullup = int(current_pullup) if isinstance(current_pullup, int) else 4700
-        is_none = has_pullup_key and current_pullup is None
-
-        pullup_resistor = self.ui.radiolist(
-            "Bed thermistor pullup resistor value:\n\n"
-            "(Most mainboards use 4.7kΩ standard)",
-            [
-                ("4700", "4.7kΩ (standard)", effective_pullup == 4700 and not is_none),
-                ("2200", "2.2kΩ", effective_pullup == 2200 and not is_none),
-                ("10000", "10kΩ", effective_pullup == 10000 and not is_none),
-                ("1000", "1kΩ (some PT1000)", effective_pullup == 1000 and not is_none),
-                ("none", "None (omit from config)", is_none),
-            ],
+        # Pullup resistor selection using PinManager
+        pullup_resistor = pin_manager.select_pullup_resistor(
+            default=current_pullup,
             title="Heated Bed - Pullup Resistor"
         )
-        if pullup_resistor is None:
-            return
-        if pullup_resistor == "none":
-            pullup_resistor = None
-        else:
-            pullup_resistor = int(pullup_resistor)
 
         # === 2.7.3: Temperature Settings ===
         min_temp = self.ui.inputbox(
@@ -4622,7 +4564,7 @@ class GschpooziWizard:
             return
 
         # Save all settings
-        self.state.set("heater_bed.heater_pin", heater_pin)  # Changed from heater_port
+        self.state.set("heater_bed.heater_pin", heater_pin)
         self.state.set("heater_bed.max_power", float(max_power or 1.0))
         self.state.set("heater_bed.pwm_cycle_time", float(pwm_cycle_time or 0.0166))
         self.state.set("heater_bed.sensor_port", sensor_port)
@@ -4653,9 +4595,15 @@ class GschpooziWizard:
         )
 
     def _fans_setup(self) -> None:
-        """Configure fans."""
+        """Configure fans.
+        
+        Uses PinManager for consistent pin selection with conflict detection.
+        """
         has_toolboard = self.state.get("mcu.toolboard.connection_type") or \
                         self.state.get("mcu.toolboard.enabled", False)
+
+        # Create PinManager for this session
+        pin_manager = self._get_pin_manager()
 
         # === PART COOLING FAN ===
         # Load saved location
@@ -4674,30 +4622,26 @@ class GschpooziWizard:
         else:
             part_location = "mainboard"
 
-        # Part cooling fan pin selection
-        board_type = "toolboards" if part_location == "toolboard" else "boards"
-        fan_ports = self._get_board_ports("fan_ports", board_type)
-        # Check both possible keys for current value
+        # Part cooling fan pin selection using PinManager
         current_pin = self.state.get(f"fans.part_cooling.pin_{part_location}", "") or \
                       self.state.get("fans.part_cooling.pin_mainboard", "") or \
                       self.state.get("fans.part_cooling.pin_toolboard", "")
-        if fan_ports:
-            # Try to find "Part Cooling" or "FAN0" as default
-            part_cooling_ports = [(p, l, p == current_pin or "Part" in l or p == "FAN0")
-                                  for p, l, d in fan_ports]
-            part_pin = self.ui.radiolist(
-                f"Select part cooling fan pin on {part_location}:",
-                part_cooling_ports,
-                title="Fans - Part Cooling Pin"
-            )
-        else:
-            part_pin = self.ui.inputbox(
-                f"Enter part cooling fan pin on {part_location}:",
-                default=current_pin or "FAN0",
-                title="Fans - Part Cooling Pin"
-            )
+        # Remove current pin from used set so we can reconfigure
+        pin_manager.mark_unused(part_location, current_pin)
+        
+        part_pin = pin_manager.select_output_pin(
+            location=part_location,
+            purpose="Part Cooling Fan",
+            output_type="pwm",
+            groups=["fan_ports", "heater_ports", "misc_ports"],
+            current_port=current_pin,
+            title="Fans - Part Cooling Pin"
+        )
         if part_pin is None:
             return
+        
+        # Mark as used for conflict detection
+        pin_manager.mark_used(part_location, part_pin, "Part cooling fan")
 
         # Part cooling fan parameters
         current_max_power = self.state.get("fans.part_cooling.max_power", 1.0)
@@ -4756,37 +4700,26 @@ class GschpooziWizard:
         else:
             hotend_location = "mainboard"
 
-        # Hotend fan pin selection
-        board_type = "toolboards" if hotend_location == "toolboard" else "boards"
-        fan_ports = self._get_board_ports("fan_ports", board_type)
-        # Check both possible keys for current value
+        # Hotend fan pin selection using PinManager
         current_pin = self.state.get(f"fans.hotend.pin_{hotend_location}", "") or \
                       self.state.get("fans.hotend.pin_mainboard", "") or \
                       self.state.get("fans.hotend.pin_toolboard", "")
-        if fan_ports:
-            # Try to find "Hotend" or "FAN1" as default, exclude already used pin
-            hotend_fan_ports = [(p, l, p == current_pin or "Hotend" in l or p == "FAN1")
-                               for p, l, d in fan_ports if p != part_pin or hotend_location != part_location]
-            if hotend_fan_ports:
-                hotend_pin = self.ui.radiolist(
-                    f"Select hotend fan pin on {hotend_location}:",
-                    hotend_fan_ports,
-                    title="Fans - Hotend Pin"
-                )
-            else:
-                hotend_pin = self.ui.inputbox(
-                    f"Enter hotend fan pin on {hotend_location}:",
-                    default=current_pin or "FAN1",
-                    title="Fans - Hotend Pin"
-                )
-        else:
-            hotend_pin = self.ui.inputbox(
-                f"Enter hotend fan pin on {hotend_location}:",
-                default=current_pin or "FAN1",
-                title="Fans - Hotend Pin"
-            )
+        # Remove current pin from used set so we can reconfigure
+        pin_manager.mark_unused(hotend_location, current_pin)
+        
+        hotend_pin = pin_manager.select_output_pin(
+            location=hotend_location,
+            purpose="Hotend Fan",
+            output_type="pwm",
+            groups=["fan_ports", "heater_ports", "misc_ports"],
+            current_port=current_pin,
+            title="Fans - Hotend Pin"
+        )
         if hotend_pin is None:
             return
+        
+        # Mark as used for conflict detection
+        pin_manager.mark_used(hotend_location, hotend_pin, "Hotend fan")
 
         # Hotend fan parameters
         current_heater = self.state.get("fans.hotend.heater", "extruder")
@@ -4823,32 +4756,24 @@ class GschpooziWizard:
 
         controller_pin = None
         if has_controller_fan:
-            # Controller fan is always on mainboard
-            fan_ports = self._get_board_ports("fan_ports", "boards")
+            # Controller fan is always on mainboard - use PinManager
             current_pin = self.state.get("fans.controller.pin", "")
-            if fan_ports:
-                # Exclude already used pins
-                used_pins = []
-                if part_location == "mainboard":
-                    used_pins.append(part_pin)
-                if hotend_location == "mainboard":
-                    used_pins.append(hotend_pin)
-                controller_ports = [(p, l, p == current_pin or p == "FAN2")
-                                   for p, l, d in fan_ports if p not in used_pins]
-                if controller_ports:
-                    controller_pin = self.ui.radiolist(
-                        "Select controller fan pin on mainboard:",
-                        controller_ports,
-                        title="Fans - Controller Pin"
-                    )
-            if not controller_pin:
-                controller_pin = self.ui.inputbox(
-                    "Enter controller fan pin on mainboard:",
-                    default=current_pin or "FAN2",
-                    title="Fans - Controller Pin"
-                )
+            # Remove current pin from used set so we can reconfigure
+            pin_manager.mark_unused("mainboard", current_pin)
+            
+            controller_pin = pin_manager.select_output_pin(
+                location="mainboard",
+                purpose="Controller Fan",
+                output_type="pwm",
+                groups=["fan_ports", "heater_ports", "misc_ports"],
+                current_port=current_pin,
+                title="Fans - Controller Pin"
+            )
             if controller_pin is None:
                 return
+            
+            # Mark as used for conflict detection
+            pin_manager.mark_used("mainboard", controller_pin, "Controller fan")
 
             # Controller fan parameters
             current_kick_start = self.state.get("fans.controller.kick_start_time", 0.5)

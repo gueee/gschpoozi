@@ -60,28 +60,13 @@ printer:
 stepper_x:
   template: |
     [stepper_x]
-    step_pin: {{ board.pins[stepper_x.motor_port].step }}
-    dir_pin: {% if stepper_x.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_x.motor_port].dir }}
-    enable_pin: !{{ board.pins[stepper_x.motor_port].enable }}
+    step_pin: {{ pins.stepper_x.step }}
+    dir_pin: {{ pins.stepper_x.dir }}
+    enable_pin: {{ pins.stepper_x.enable }}
     rotation_distance: {{ stepper_x.belt_pitch * stepper_x.pulley_teeth }}
     microsteps: {{ stepper_x.microsteps | default(16) }}
     full_steps_per_rotation: {{ stepper_x.full_steps_per_rotation | default(200) }}
-    {% if stepper_x.endstop_type == 'sensorless' %}
-    endstop_pin: {{ stepper_x.driver_type | lower }}_stepper_x:virtual_endstop
-    {% else %}
-    {% set _mods = "" %}
-    {% if (stepper_x.endstop_pullup is defined) or (stepper_x.endstop_invert is defined) %}
-    {% set _mods = ("^" if (stepper_x.endstop_pullup | default(false)) else "") ~ ("!" if (stepper_x.endstop_invert | default(false)) else "") %}
-    {% else %}
-    {% set _mods = pin_config[stepper_x.endstop_config | default('nc_gnd')] %}
-    {% endif %}
-    {% if stepper_x.endstop_port_toolboard is defined and stepper_x.endstop_port_toolboard %}
-    # Klipper pin modifiers must come before the optional MCU prefix (e.g. ^toolboard:PB0, not toolboard:^PB0)
-    endstop_pin: {{ _mods }}toolboard:{{ toolboard.pins[stepper_x.endstop_port_toolboard].signal }}
-    {% else %}
-    endstop_pin: {{ _mods }}{{ board.pins[stepper_x.endstop_port].signal }}
-    {% endif %}
-    {% endif %}
+    endstop_pin: {{ pins.stepper_x.endstop }}
     position_endstop: {{ stepper_x.position_endstop }}
     # Klipper requires position_endstop to be between position_min and position_max.
     # When position_min is missing, only default it to position_endstop if the endstop is negative
@@ -107,28 +92,13 @@ stepper_x:
 stepper_y:
   template: |
     [stepper_y]
-    step_pin: {{ board.pins[stepper_y.motor_port].step }}
-    dir_pin: {% if stepper_y.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_y.motor_port].dir }}
-    enable_pin: !{{ board.pins[stepper_y.motor_port].enable }}
+    step_pin: {{ pins.stepper_y.step }}
+    dir_pin: {{ pins.stepper_y.dir }}
+    enable_pin: {{ pins.stepper_y.enable }}
     rotation_distance: {{ stepper_y.belt_pitch * stepper_y.pulley_teeth }}
     microsteps: {{ stepper_y.microsteps | default(16) }}
     full_steps_per_rotation: {{ stepper_y.full_steps_per_rotation | default(200) }}
-    {% if stepper_y.endstop_type == 'sensorless' %}
-    endstop_pin: {{ stepper_y.driver_type | lower }}_stepper_y:virtual_endstop
-    {% else %}
-    {% set _mods = "" %}
-    {% if (stepper_y.endstop_pullup is defined) or (stepper_y.endstop_invert is defined) %}
-    {% set _mods = ("^" if (stepper_y.endstop_pullup | default(false)) else "") ~ ("!" if (stepper_y.endstop_invert | default(false)) else "") %}
-    {% else %}
-    {% set _mods = pin_config[stepper_y.endstop_config | default('nc_gnd')] %}
-    {% endif %}
-    {% if stepper_y.endstop_port_toolboard is defined and stepper_y.endstop_port_toolboard %}
-    # Klipper pin modifiers must come before the optional MCU prefix (e.g. ^toolboard:PB0, not toolboard:^PB0)
-    endstop_pin: {{ _mods }}toolboard:{{ toolboard.pins[stepper_y.endstop_port_toolboard].signal }}
-    {% else %}
-    endstop_pin: {{ _mods }}{{ board.pins[stepper_y.endstop_port].signal }}
-    {% endif %}
-    {% endif %}
+    endstop_pin: {{ pins.stepper_y.endstop }}
     position_endstop: {{ stepper_y.position_endstop }}
     # Klipper requires position_endstop to be between position_min and position_max.
     # When position_min is missing, only default it to position_endstop if the endstop is negative
@@ -151,9 +121,9 @@ stepper_y:
 stepper_z:
   template: |
     [stepper_z]
-    step_pin: {{ board.pins[stepper_z.motor_port].step }}
-    dir_pin: {% if stepper_z.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_z.motor_port].dir }}
-    enable_pin: !{{ board.pins[stepper_z.motor_port].enable }}
+    step_pin: {{ pins.stepper_z.step }}
+    dir_pin: {{ pins.stepper_z.dir }}
+    enable_pin: {{ pins.stepper_z.enable }}
     {% if stepper_z.drive_type == 'leadscrew' %}
     rotation_distance: {{ stepper_z.leadscrew_pitch }}
     {% else %}
@@ -164,14 +134,7 @@ stepper_z:
     {% endif %}
     microsteps: {{ stepper_z.microsteps | default(32) }}
     full_steps_per_rotation: {{ stepper_z.full_steps_per_rotation | default(200) }}
-    {% if stepper_z.endstop_type == 'probe' %}
-    endstop_pin: probe:z_virtual_endstop
-    {% elif stepper_z.endstop_type == 'physical_mainboard' %}
-    endstop_pin: {{ pin_config[stepper_z.switch_config] }}{{ board.pins[stepper_z.endstop_port].signal }}
-    {% elif stepper_z.endstop_type == 'physical_toolboard' %}
-    # Klipper pin modifiers must come before the optional MCU prefix (e.g. ^toolboard:PB0, not toolboard:^PB0)
-    endstop_pin: {{ pin_config[stepper_z.switch_config] }}toolboard:{{ toolboard.pins[stepper_z.toolboard_endstop_port].signal }}
-    {% endif %}
+    endstop_pin: {{ pins.stepper_z.endstop }}
     position_min: {{ stepper_z.position_min | default(-5) }}
     position_max: {{ stepper_z.position_max | default(printer.bed_size_z) }}
     homing_speed: {{ stepper_z.homing_speed | default(10) }}
@@ -182,9 +145,9 @@ stepper_x1:
   condition: "printer.awd_enabled"
   template: |
     [stepper_x1]
-    step_pin: {{ board.pins[stepper_x1.motor_port].step }}
-    dir_pin: {% if stepper_x1.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_x1.motor_port].dir }}
-    enable_pin: !{{ board.pins[stepper_x1.motor_port].enable }}
+    step_pin: {{ pins.stepper_x1.step }}
+    dir_pin: {{ pins.stepper_x1.dir }}
+    enable_pin: {{ pins.stepper_x1.enable }}
     rotation_distance: {{ (stepper_x1.belt_pitch | default(stepper_x.belt_pitch)) * (stepper_x1.pulley_teeth | default(stepper_x.pulley_teeth)) }}
     microsteps: {{ stepper_x1.microsteps | default(stepper_x.microsteps) | default(32) }}
     full_steps_per_rotation: {{ stepper_x1.full_steps_per_rotation | default(stepper_x.full_steps_per_rotation) | default(200) }}
@@ -193,9 +156,9 @@ stepper_y1:
   condition: "printer.awd_enabled"
   template: |
     [stepper_y1]
-    step_pin: {{ board.pins[stepper_y1.motor_port].step }}
-    dir_pin: {% if stepper_y1.dir_pin_inverted %}!{% endif %}{{ board.pins[stepper_y1.motor_port].dir }}
-    enable_pin: !{{ board.pins[stepper_y1.motor_port].enable }}
+    step_pin: {{ pins.stepper_y1.step }}
+    dir_pin: {{ pins.stepper_y1.dir }}
+    enable_pin: {{ pins.stepper_y1.enable }}
     rotation_distance: {{ (stepper_y1.belt_pitch | default(stepper_y.belt_pitch)) * (stepper_y1.pulley_teeth | default(stepper_y.pulley_teeth)) }}
     microsteps: {{ stepper_y1.microsteps | default(stepper_y.microsteps) | default(32) }}
     full_steps_per_rotation: {{ stepper_y1.full_steps_per_rotation | default(stepper_y.full_steps_per_rotation) | default(200) }}
@@ -207,12 +170,12 @@ tmc_stepper_x:
   template: |
     [{{ stepper_x.driver_type | lower }} stepper_x]
     {% if stepper_x.driver_protocol == 'spi' %}
-    cs_pin: {{ board.pins[stepper_x.motor_port].cs }}
+    cs_pin: {{ pins.stepper_x.cs }}
     spi_software_miso_pin: {{ board.spi.miso }}
     spi_software_mosi_pin: {{ board.spi.mosi }}
     spi_software_sclk_pin: {{ board.spi.sclk }}
     {% else %}
-    uart_pin: {{ board.pins[stepper_x.motor_port].uart }}
+    uart_pin: {{ pins.stepper_x.uart }}
     {% endif %}
     run_current: {{ stepper_x.run_current }}
     interpolate: {{ stepper_x.interpolate | default(false) | lower }}
@@ -226,7 +189,7 @@ tmc_stepper_x:
     driver_diss2vs: {{ stepper_x.driver_diss2vs | default(1) }}
     {% endif %}
     {% if stepper_x.endstop_type == 'sensorless' %}
-    diag_pin: ^{{ board.pins[stepper_x.motor_port].diag }}
+    diag_pin: {{ pins.stepper_x.diag }}
     driver_SGTHRS: {{ stepper_x.driver_SGTHRS | default(70) }}
     {% endif %}
 
@@ -234,12 +197,12 @@ tmc_stepper_y:
   template: |
     [{{ stepper_y.driver_type | lower }} stepper_y]
     {% if stepper_y.driver_protocol == 'spi' %}
-    cs_pin: {{ board.pins[stepper_y.motor_port].cs }}
+    cs_pin: {{ pins.stepper_y.cs }}
     spi_software_miso_pin: {{ board.spi.miso }}
     spi_software_mosi_pin: {{ board.spi.mosi }}
     spi_software_sclk_pin: {{ board.spi.sclk }}
     {% else %}
-    uart_pin: {{ board.pins[stepper_y.motor_port].uart }}
+    uart_pin: {{ pins.stepper_y.uart }}
     {% endif %}
     run_current: {{ stepper_y.run_current }}
     interpolate: {{ stepper_y.interpolate | default(false) | lower }}
@@ -253,14 +216,14 @@ tmc_stepper_y:
     driver_diss2vs: {{ stepper_y.driver_diss2vs | default(1) }}
     {% endif %}
     {% if stepper_y.endstop_type == 'sensorless' %}
-    diag_pin: ^{{ board.pins[stepper_y.motor_port].diag }}
+    diag_pin: {{ pins.stepper_y.diag }}
     driver_SGTHRS: {{ stepper_y.driver_SGTHRS | default(70) }}
     {% endif %}
 
 tmc_stepper_z:
   template: |
     [{{ stepper_z.driver_type | default('TMC2209') | lower }} stepper_z]
-    uart_pin: {{ board.pins[stepper_z.motor_port].uart }}
+    uart_pin: {{ pins.stepper_z.uart }}
     run_current: {{ stepper_z.run_current | default(0.8) }}
     interpolate: {{ stepper_z.interpolate | default(false) | lower }}
 
@@ -270,12 +233,12 @@ tmc_stepper_x1:
   template: |
     [{{ stepper_x1.driver_type | lower }} stepper_x1]
     {% if stepper_x1.driver_protocol == 'spi' %}
-    cs_pin: {{ board.pins[stepper_x1.motor_port].cs }}
+    cs_pin: {{ pins.stepper_x1.cs }}
     spi_software_miso_pin: {{ board.spi.miso }}
     spi_software_mosi_pin: {{ board.spi.mosi }}
     spi_software_sclk_pin: {{ board.spi.sclk }}
     {% else %}
-    uart_pin: {{ board.pins[stepper_x1.motor_port].uart }}
+    uart_pin: {{ pins.stepper_x1.uart }}
     {% endif %}
     run_current: {{ stepper_x1.run_current }}
     interpolate: {{ stepper_x1.interpolate | default(false) | lower }}
@@ -294,12 +257,12 @@ tmc_stepper_y1:
   template: |
     [{{ stepper_y1.driver_type | lower }} stepper_y1]
     {% if stepper_y1.driver_protocol == 'spi' %}
-    cs_pin: {{ board.pins[stepper_y1.motor_port].cs }}
+    cs_pin: {{ pins.stepper_y1.cs }}
     spi_software_miso_pin: {{ board.spi.miso }}
     spi_software_mosi_pin: {{ board.spi.mosi }}
     spi_software_sclk_pin: {{ board.spi.sclk }}
     {% else %}
-    uart_pin: {{ board.pins[stepper_y1.motor_port].uart }}
+    uart_pin: {{ pins.stepper_y1.uart }}
     {% endif %}
     run_current: {{ stepper_y1.run_current }}
     interpolate: {{ stepper_y1.interpolate | default(false) | lower }}
@@ -319,32 +282,18 @@ tmc_stepper_y1:
 extruder:
   template: |
     [extruder]
-    {% if extruder.location == 'toolboard' %}
-    step_pin: toolboard:{{ toolboard.pins[extruder.motor_port_toolboard].step }}
-    dir_pin: {% if extruder.dir_pin_inverted %}!{% endif %}toolboard:{{ toolboard.pins[extruder.motor_port_toolboard].dir }}
-    enable_pin: !toolboard:{{ toolboard.pins[extruder.motor_port_toolboard].enable }}
-    {% else %}
-    step_pin: {{ board.pins[extruder.motor_port_mainboard].step }}
-    dir_pin: {% if extruder.dir_pin_inverted %}!{% endif %}{{ board.pins[extruder.motor_port_mainboard].dir }}
-    enable_pin: !{{ board.pins[extruder.motor_port_mainboard].enable }}
-    {% endif %}
+    step_pin: {{ pins.extruder.step }}
+    dir_pin: {{ pins.extruder.dir }}
+    enable_pin: {{ pins.extruder.enable }}
     rotation_distance: {{ extruder_presets[extruder.extruder_type].rotation_distance }}
     gear_ratio: {{ extruder_presets[extruder.extruder_type].gear_ratio }}
     microsteps: {{ extruder.microsteps | default(16) }}
     full_steps_per_rotation: {{ extruder.full_steps_per_rotation | default(200) }}
     nozzle_diameter: {{ extruder.nozzle_diameter | default(0.4) }}
     filament_diameter: {{ extruder.filament_diameter | default(1.75) }}
-    {% if extruder.heater_location == 'toolboard' %}
-    heater_pin: toolboard:{{ toolboard.pins[extruder.heater_port_toolboard].signal }}
-    {% else %}
-    heater_pin: {{ board.pins[extruder.heater_port_mainboard].signal }}
-    {% endif %}
+    heater_pin: {{ pins.extruder.heater }}
     max_power: {{ extruder.max_power | default(1.0) }}
-    {% if extruder.sensor_location == 'toolboard' %}
-    sensor_pin: {{ "^" if extruder.sensor_pullup | default(false) else "" }}toolboard:{{ toolboard.pins[extruder.sensor_port_toolboard].signal }}
-    {% else %}
-    sensor_pin: {{ "^" if extruder.sensor_pullup | default(false) else "" }}{{ board.pins[extruder.sensor_port_mainboard].signal }}
-    {% endif %}
+    sensor_pin: {{ pins.extruder.sensor }}
     sensor_type: {{ extruder.sensor_type | default('Generic 3950', true) }}
     {% if extruder.pullup_resistor is defined and extruder.pullup_resistor %}
     pullup_resistor: {{ extruder.pullup_resistor }}
@@ -368,16 +317,8 @@ extruder:
 heater_bed:
   template: |
     [heater_bed]
-    {% if heater_bed.heater_pin in board.pins -%}
-    heater_pin: {{ board.pins[heater_bed.heater_pin].signal }}
-    {% else -%}
-    heater_pin: {{ heater_bed.heater_pin }}
-    {% endif -%}
-    {% if heater_bed.sensor_port in board.pins -%}
-    sensor_pin: {{ board.pins[heater_bed.sensor_port].signal }}
-    {% else -%}
-    sensor_pin: {{ heater_bed.sensor_port }}
-    {% endif -%}
+    heater_pin: {{ pins.heater_bed.heater }}
+    sensor_pin: {{ pins.heater_bed.sensor }}
     sensor_type: {{ heater_bed.sensor_type | default('Generic 3950', true) }}
     {% if heater_bed.pullup_resistor -%}
     pullup_resistor: {{ heater_bed.pullup_resistor }}
@@ -400,11 +341,7 @@ heater_bed:
 fan:
   template: |
     [fan]
-    {% if fans.part_cooling.location == 'toolboard' %}
-    pin: toolboard:{{ toolboard.pins[fans.part_cooling.pin_toolboard].signal }}
-    {% else %}
-    pin: {{ board.pins[fans.part_cooling.pin_mainboard].signal }}
-    {% endif %}
+    pin: {{ pins.fans.part_cooling }}
     max_power: {{ fans.part_cooling.max_power | default(1.0) }}
     kick_start_time: {{ fans.part_cooling.kick_start_time | default(0.5) }}
     off_below: {{ fans.part_cooling.off_below | default(0.1) }}
@@ -413,29 +350,19 @@ fan:
 heater_fan:
   template: |
     [heater_fan hotend_fan]
-    {% if fans.hotend.location == 'toolboard' %}
-    pin: toolboard:{{ toolboard.pins[fans.hotend.pin_toolboard].signal }}
-    {% else %}
-    pin: {{ board.pins[fans.hotend.pin_mainboard].signal }}
-    {% endif %}
+    pin: {{ pins.fans.hotend }}
     heater: {{ fans.hotend.heater | default('extruder') }}
     heater_temp: {{ fans.hotend.heater_temp | default(50) }}
     fan_speed: {{ fans.hotend.fan_speed | default(1.0) }}
 
     # Additional heater-controlled fans (Radiator, hotend_pump, etc.)
-    {% if fans.additional_fans %}
-    {% for fan in fans.additional_fans %}
+    {% if fans.additional_fans and pins.fans.additional %}
+    {% for i in range(fans.additional_fans | length) %}
+    {% set fan = fans.additional_fans[i] %}
+    {% set fan_pin = pins.fans.additional[i] %}
     {% if fan.control_mode | default('manual') == 'heater' %}
     [heater_fan {{ fan.name }}]
-    {% if fan.pin_type == 'multi_pin' %}
-    pin: multi_pin:{{ fan.multi_pin_name }}
-    {% else %}
-    {% if fan.location | default('mainboard') == 'toolboard' %}
-    pin: toolboard:{{ toolboard.pins[fan.pin].signal }}
-    {% else %}
-    pin: {{ board.pins[fan.pin].signal }}
-    {% endif %}
-    {% endif %}
+    pin: {{ fan_pin.pin }}
     heater: {{ fan.heater | default('extruder') }}
     heater_temp: {{ fan.heater_temp | default(50) }}
     fan_speed: {{ fan.fan_speed | default(1.0) }}
@@ -448,7 +375,7 @@ controller_fan:
   condition: "fans.controller.enabled"
   template: |
     [controller_fan controller_fan]
-    pin: {{ board.pins[fans.controller.pin].signal }}
+    pin: {{ pins.fans.controller }}
     kick_start_time: {{ fans.controller.kick_start_time | default(0.5) }}
     stepper: {{ fans.controller.stepper | default('stepper_x') }}
     idle_timeout: {{ fans.controller.idle_timeout | default(60) }}
@@ -459,18 +386,13 @@ fan_generic:
   condition: "fans.additional_fans"
   type: "list"
   template: |
-    {% for fan in fans.additional_fans %}
+    {% if pins.fans.additional %}
+    {% for i in range(fans.additional_fans | length) %}
+    {% set fan = fans.additional_fans[i] %}
+    {% set fan_pin = pins.fans.additional[i] %}
     {% if fan.control_mode | default('manual') != 'heater' %}
     [fan_generic {{ fan.name }}]
-    {% if fan.pin_type == 'multi_pin' %}
-    pin: multi_pin:{{ fan.multi_pin_name }}
-    {% else %}
-    {% if fan.location | default('mainboard') == 'toolboard' %}
-    pin: toolboard:{{ toolboard.pins[fan.pin].signal }}
-    {% else %}
-    pin: {{ board.pins[fan.pin].signal }}
-    {% endif %}
-    {% endif %}
+    pin: {{ fan_pin.pin }}
     max_power: {{ fan.max_power | default(1.0) }}
     shutdown_speed: {{ fan.shutdown_speed | default(0) }}
     kick_start_time: {{ fan.kick_start_time | default(0.1) }}
@@ -478,6 +400,7 @@ fan_generic:
 
     {% endif %}
     {% endfor %}
+    {% endif %}
 
 # -----------------------------------------------------------------------------
 # Probe
@@ -486,11 +409,7 @@ probe:
   condition: "probe.probe_type in ['inductive', 'klicky', 'tap']"
   template: |
     [probe]
-    {% if probe.location == 'toolboard' %}
-    pin: toolboard:{{ pin_config[probe.pin_config] }}{{ toolboard.pins[probe.probe_pin_toolboard].signal }}
-    {% else %}
-    pin: {{ pin_config[probe.pin_config] }}{{ board.pins[probe.probe_pin_mainboard].signal }}
-    {% endif %}
+    pin: {{ pins.probe.pin }}
     x_offset: {{ probe.x_offset | default(0) }}
     y_offset: {{ probe.y_offset | default(0) }}
     #z_offset: 0  # Calibrate with PROBE_CALIBRATE
@@ -505,8 +424,8 @@ bltouch:
   condition: "probe.probe_type == 'bltouch'"
   template: |
     [bltouch]
-    sensor_pin: {{ probe.sensor_pin }}
-    control_pin: {{ probe.control_pin }}
+    sensor_pin: {{ pins.probe.sensor }}
+    control_pin: {{ pins.probe.control }}
     x_offset: {{ probe.x_offset | default(0) }}
     y_offset: {{ probe.y_offset | default(0) }}
     #z_offset: 0  # Calibrate with PROBE_CALIBRATE
@@ -1245,11 +1164,11 @@ filament_switch_sensor:
     {% endfor %}
 
 # -----------------------------------------------------------------------------
-# Pin Configuration Mappings
+# Pin Configuration Mappings (DEPRECATED - now handled in Python by _resolve_pins())
+# Kept for backward compatibility with custom templates
 # -----------------------------------------------------------------------------
 pin_config:
   nc_gnd: "^"      # NC switch to GND (pull-up)
   no_gnd: "^!"     # NO switch to GND (pull-up + invert)
   nc_vcc: "!"      # NC switch to VCC (invert)
   no_vcc: ""       # NO switch to VCC (no modifiers)
-

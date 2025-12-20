@@ -198,6 +198,19 @@ class GschpooziWizard:
         except Exception:
             return {}
 
+    def _load_mmu_template(self, filename: str) -> dict:
+        """Load a JSON template from templates/mmu/ (e.g. mmu-types.json)."""
+        try:
+            mmu_dir = REPO_ROOT / "templates" / "mmu"
+            path = mmu_dir / filename
+            if not path.exists():
+                return {}
+            with open(path) as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
     def _has_passwordless_sudo(self) -> bool:
         """Return True if sudo can run non-interactively (no password prompt)."""
         try:
@@ -225,6 +238,29 @@ class GschpooziWizard:
             return result.returncode == 0, out.strip()
         except Exception as e:
             return False, str(e)
+
+    def _run_shell_interactive(self, command: str) -> int:
+        """Run a shell command interactively (KIAUH-style).
+
+        Output streams directly to terminal. For commands that need user interaction.
+        Returns the exit code.
+        """
+        import subprocess
+        # KIAUH approach: run without capturing output, let it stream to terminal
+        # stderr=PIPE to capture errors, but stdout goes to terminal
+        try:
+            result = subprocess.run(command, shell=True, check=False)
+            return result.returncode
+        except Exception:
+            return 1
+
+    def _run_systemctl(self, action: str, service: str) -> bool:
+        """Run systemctl command interactively (allows sudo password prompt).
+
+        Returns True on success, False on failure.
+        """
+        exit_code = self._run_shell_interactive(f"sudo systemctl {action} {service}")
+        return exit_code == 0
 
     def _backup_file(self, path: Path) -> None:
         """Create a timestamped backup of a file if it exists."""
@@ -502,6 +538,179 @@ class GschpooziWizard:
         if choice == "manual":
             return self.ui.inputbox(prompt, default=default_pin or "", title=title)
         return tag_to_pin.get(choice, default_pin or "")
+
+    def _looks_like_raw_pin(self, value: str) -> bool:
+        """
+        Best-effort heuristic to decide if a string is already a raw MCU pin (vs a port-id like 'FAN0').
+
+        Keep this conservative: if we can't tell, we prefer resolving via board templates.
+        """
+        s = (value or "").strip()
+        if not s:
+            return False
+        if ":" in s:
+            # e.g. "toolboard:PA4" / "mcu:PA4" -> don't treat as a raw mainboard pin
+            return False
+        if re.match(r"^P[A-Z]\d+$", s):
+            # e.g. PA1, PF13, PC0
+            return True
+        if re.match(r"^gpio\d+$", s, flags=re.IGNORECASE):
+            # e.g. gpio26
+            return True
+        return False
+
+    def _collect_mainboard_used_pins(self, *, exclude_pins: set[str] | None = None) -> dict[str, str]:
+        """
+        Collect a mapping of raw mainboard pins -> description for conflict detection.
+
+        This intentionally focuses on pins the wizard assigns (steppers/fans/heaters/sensors), not a full parser.
+        """
+        exclude = set()
+        for p in (exclude_pins or set()):
+            if isinstance(p, str) and p.strip():
+                exclude.add(p.strip())
+
+        board_id = self.state.get("mcu.main.board_type", "")
+        board_data = self._load_board_data(board_id, "boards")
+        if not isinstance(board_data, dict) or not board_data:
+            return {}
+
+        used: dict[str, str] = {}
+
+        def _add(pin: str, desc: str) -> None:
+            pin = (pin or "").strip()
+            if not pin or ":" in pin:
+                return
+            if pin in exclude:
+                return
+            used.setdefault(pin, desc)
+
+        def _resolve_from_group(value: str, group: str) -> str:
+            v = (value or "").strip()
+            if not v:
+                return ""
+            group_data = board_data.get(group, {})
+            if isinstance(group_data, dict) and v in group_data:
+                info = group_data.get(v)
+                if isinstance(info, dict):
+                    pin = info.get("pin") or info.get("signal_pin")
+                    if isinstance(pin, str) and pin:
+                        return pin
+                if isinstance(info, str) and info:
+                    return info
+            return v if self._looks_like_raw_pin(v) else ""
+
+        def _add_motor_port(port_id: str, desc: str) -> None:
+            port_id = (port_id or "").strip()
+            if not port_id:
+                return
+            mp = board_data.get("motor_ports", {})
+            info = mp.get(port_id) if isinstance(mp, dict) else None
+            if not isinstance(info, dict):
+                if self._looks_like_raw_pin(port_id):
+                    _add(port_id, desc)
+                return
+            for k in ("step_pin", "dir_pin", "enable_pin", "uart_pin", "cs_pin", "diag_pin"):
+                v = info.get(k)
+                if isinstance(v, str) and v:
+                    _add(v, f"{desc} ({k})")
+
+        # Steppers / motors (mainboard motor ports)
+        for stepper in ("stepper_x", "stepper_y", "stepper_z", "stepper_x1", "stepper_y1", "stepper_z1", "stepper_z2", "stepper_z3"):
+            _add_motor_port(self.state.get(f"{stepper}.motor_port", ""), f"Stepper {stepper} motor")
+
+        # Extruder motor (only if on mainboard)
+        motor_location = self.state.get("extruder.location", "mainboard") or "mainboard"
+        if motor_location == "mainboard":
+            _add_motor_port(self.state.get("extruder.motor_port_mainboard", ""), "Extruder motor")
+
+        # Endstops (mainboard)
+        for stepper in ("stepper_x", "stepper_y", "stepper_z"):
+            port = self.state.get(f"{stepper}.endstop_port", "")
+            pin = _resolve_from_group(port, "endstop_ports") if port else ""
+            if pin:
+                _add(pin, f"{stepper} endstop")
+
+        # Heaters (mainboard)
+        extruder_heater = self.state.get("extruder.heater_port_mainboard", "")
+        if extruder_heater:
+            _add(_resolve_from_group(extruder_heater, "heater_ports"), "Extruder heater")
+        bed_heater = self.state.get("heater_bed.heater_pin", "")
+        if bed_heater:
+            _add(_resolve_from_group(bed_heater, "heater_ports"), "Heated bed heater")
+
+        # Thermistors (mainboard)
+        extruder_sensor = self.state.get("extruder.sensor_port_mainboard", "")
+        if extruder_sensor:
+            _add(_resolve_from_group(extruder_sensor, "thermistor_ports"), "Extruder thermistor")
+        bed_sensor = self.state.get("heater_bed.sensor_port", "")
+        if bed_sensor:
+            _add(_resolve_from_group(bed_sensor, "thermistor_ports"), "Bed thermistor")
+
+        # Fans (mainboard)
+        part_pin = self.state.get("fans.part_cooling.pin_mainboard", "")
+        if part_pin:
+            _add(_resolve_from_group(part_pin, "fan_ports"), "Part cooling fan")
+        hotend_pin = self.state.get("fans.hotend.pin_mainboard", "")
+        if hotend_pin:
+            _add(_resolve_from_group(hotend_pin, "fan_ports"), "Hotend fan")
+        controller_pin = self.state.get("fans.controller.pin", "")
+        if controller_pin:
+            _add(_resolve_from_group(controller_pin, "fan_ports"), "Controller fan")
+
+        additional_fans = self.state.get("fans.additional_fans", [])
+        if isinstance(additional_fans, list):
+            for idx, fan in enumerate(additional_fans, start=1):
+                if not isinstance(fan, dict):
+                    continue
+                loc = (fan.get("location") or "mainboard").strip()
+                if loc != "mainboard":
+                    continue
+                pin = (fan.get("pin") or "").strip()
+                if pin:
+                    _add(_resolve_from_group(pin, "fan_ports"), f"Additional fan #{idx}")
+                pins = fan.get("pins")
+                if isinstance(pins, list):
+                    for p in pins:
+                        if isinstance(p, str) and p.strip():
+                            _add(_resolve_from_group(p, "fan_ports"), f"Additional fan #{idx} (multi_pin)")
+
+        # Raw pins already (only if they look like raw mainboard pins)
+        probe_sensor_pin = self.state.get("probe.sensor_pin", "")
+        if isinstance(probe_sensor_pin, str) and self._looks_like_raw_pin(probe_sensor_pin):
+            _add(probe_sensor_pin, "Probe sensor_pin")
+
+        temp_sensors = self.state.get("temperature_sensors.additional", [])
+        if isinstance(temp_sensors, list):
+            for s in temp_sensors:
+                if not isinstance(s, dict):
+                    continue
+                pin = s.get("sensor_pin")
+                name = (s.get("name") or "additional").strip()
+                if isinstance(pin, str) and self._looks_like_raw_pin(pin):
+                    _add(pin, f"Temp sensor ({name})")
+
+        filament_sensors = self.state.get("filament_sensors", [])
+        if isinstance(filament_sensors, list):
+            for s in filament_sensors:
+                if not isinstance(s, dict):
+                    continue
+                pin = s.get("pin")
+                name = (s.get("name") or "filament").strip()
+                if isinstance(pin, str) and self._looks_like_raw_pin(pin):
+                    _add(pin, f"Filament sensor ({name})")
+
+        leds = self.state.get("leds", [])
+        if isinstance(leds, list):
+            for s in leds:
+                if not isinstance(s, dict):
+                    continue
+                pin = s.get("pin")
+                name = (s.get("name") or "led").strip()
+                if isinstance(pin, str) and self._looks_like_raw_pin(pin):
+                    _add(pin, f"LED ({name})")
+
+        return used
 
     # -------------------------------------------------------------------------
     # Heater discovery / picker helpers
@@ -1670,8 +1879,526 @@ class GschpooziWizard:
                 self._configure_toolboard()
             elif choice == "2.1.3":
                 self._configure_host_mcu()
+            elif choice == "2.1.4":
+                self._additional_mcus_setup()
             else:
                 self.ui.msgbox("Coming soon!", title=choice)
+
+    def _additional_mcus_setup(self) -> None:
+        """Configure additional MCUs (MMU/filament changers, buffers, expansion boards)."""
+        mmu_types_tpl = self._load_mmu_template("mmu-types.json") or {}
+        mmu_types = mmu_types_tpl.get("types", {}) if isinstance(mmu_types_tpl.get("types", {}), dict) else {}
+        software_defs = mmu_types_tpl.get("software", {}) if isinstance(mmu_types_tpl.get("software", {}), dict) else {}
+
+        boards_tpl = self._load_mmu_template("mmu-boards.json") or {}
+        boards = boards_tpl.get("boards", {}) if isinstance(boards_tpl.get("boards", {}), dict) else {}
+
+        buffers_tpl = self._load_mmu_template("buffers.json") or {}
+        buffers = buffers_tpl.get("buffers", {}) if isinstance(buffers_tpl.get("buffers", {}), dict) else {}
+
+        def _get_entries() -> list:
+            entries = self.state.get("mcu.additional", [])
+            if not isinstance(entries, list):
+                return []
+            return [e for e in entries if isinstance(e, dict)]
+
+        def _save_entries(entries: list) -> None:
+            self.state.set("mcu.additional", entries)
+            self.state.save()
+
+        def _entry_label(entry: dict) -> str:
+            etype = entry.get("type", "unknown")
+            hw = entry.get("hardware", "")
+            board = entry.get("board", "")
+            conn = entry.get("connection", "")
+            sw = entry.get("software", "")
+            parts = []
+            if etype:
+                parts.append(str(etype))
+            if hw:
+                parts.append(str(hw))
+            if board:
+                parts.append(str(board))
+            if conn:
+                parts.append(str(conn))
+            if sw:
+                parts.append(str(sw))
+            return " / ".join(parts) if parts else "Unknown entry"
+
+        def _select_software(allowed: list) -> str | None:
+            allowed = [a for a in allowed if a in ("happy_hare", "afc")]
+            if not allowed:
+                return None
+            if len(allowed) == 1:
+                return allowed[0]
+            # Use template names when available
+            options = []
+            for key in allowed:
+                name = key
+                if isinstance(software_defs.get(key), dict):
+                    name = software_defs[key].get("name", key)
+                options.append((key, name))
+            chosen = self.ui.radiolist(
+                "Select the software ecosystem to install/use:",
+                [(k, v, i == 0) for i, (k, v) in enumerate(options)],
+                title="Software",
+            )
+            return chosen
+
+        def _select_board() -> str | None:
+            if not boards:
+                self.ui.msgbox(
+                    "No MMU board definitions found.\n\n"
+                    "Expected: templates/mmu/mmu-boards.json",
+                    title="Error",
+                )
+                return None
+
+            items = []
+            for board_id, b in boards.items():
+                if not isinstance(b, dict):
+                    continue
+                items.append((board_id, b.get("name", board_id)))
+            items.sort(key=lambda x: x[1].lower())
+            items.append(("other_unknown", "Other / Unknown"))
+
+            choice = self.ui.menu(
+                "Select controller board:",
+                items,
+                title="MMU Controller Board",
+                height=20,
+                width=100,
+                menu_height=12,
+            )
+            return choice if choice and choice != "B" else None
+
+        def _select_connection(default_conn: str | None = None) -> tuple[str | None, dict]:
+            default_conn = default_conn if default_conn in ("usb", "can") else "usb"
+            conn = self.ui.radiolist(
+                "How is this additional MCU connected?",
+                [
+                    ("usb", "USB serial", default_conn == "usb"),
+                    ("can", "CAN bus", default_conn == "can"),
+                ],
+                title="Connection Type",
+            )
+            if not conn:
+                return None, {}
+
+            data: dict = {"connection": conn}
+            if conn == "usb":
+                serial = self.ui.inputbox(
+                    "Enter the MCU serial path (usually /dev/serial/by-id/...):",
+                    title="USB Serial",
+                    default="/dev/serial/by-id/usb-Klipper_",
+                    width=100,
+                )
+                if not serial:
+                    return None, {}
+                data["serial"] = serial
+            else:
+                uuid = self.ui.inputbox(
+                    "Enter the CAN UUID (from `ls /dev/serial/by-id` or `ip -details link show can0` tooling):",
+                    title="CAN UUID",
+                    default="",
+                    width=100,
+                )
+                if not uuid:
+                    return None, {}
+                data["can_uuid"] = uuid
+
+            return conn, data
+
+        while True:
+            entries = _get_entries()
+            status = f"{len(entries)} configured" if entries else "none configured"
+
+            choice = self.ui.menu(
+                "Additional MCUs\n\n"
+                f"Current: {status}\n\n"
+                "Use this section for add-on controller MCUs and related systems like:\n"
+                "- MMU/filament changers (ERCF, Tradrack, BoxTurtle, ...)\n"
+                "- Smart buffers (LLL Plus) and feedback systems\n\n"
+                "Note: Firmware flashing/pin mapping is still hardware-specific; this wizard focuses on recording\n"
+                "the topology and offering software installers.\n",
+                [
+                    ("ADD_MMU", "Add MMU / Filament Changer"),
+                    ("ADD_BUF", "Add Filament Buffer"),
+                    ("VIEW", "View configured entries"),
+                    ("REMOVE", "Remove an entry"),
+                    ("B", "Back"),
+                ],
+                title="2.1.4 Additional MCUs",
+                height=24,
+                width=120,
+                menu_height=10,
+            )
+
+            if choice is None or choice == "B":
+                return
+
+            if choice == "VIEW":
+                if not entries:
+                    self.ui.msgbox("No additional MCUs configured yet.", title="Additional MCUs")
+                    continue
+                lines = ["Configured entries:\n"]
+                for i, e in enumerate(entries, start=1):
+                    lines.append(f"{i}. {_entry_label(e)}")
+                self.ui.msgbox("\n".join(lines), title="Additional MCUs", height=20, width=110)
+                continue
+
+            if choice == "REMOVE":
+                if not entries:
+                    self.ui.msgbox("No entries to remove.", title="Remove")
+                    continue
+                items = [(str(i), _entry_label(e)) for i, e in enumerate(entries)]
+                pick = self.ui.menu(
+                    "Select entry to remove:",
+                    items + [("B", "Back")],
+                    title="Remove Entry",
+                    height=20,
+                    width=120,
+                    menu_height=12,
+                )
+                if pick is None or pick == "B":
+                    continue
+                try:
+                    idx = int(pick)
+                except ValueError:
+                    continue
+                if idx < 0 or idx >= len(entries):
+                    continue
+                if not self.ui.yesno(f"Remove:\n\n{_entry_label(entries[idx])}\n\nAre you sure?", title="Confirm Remove"):
+                    continue
+                entries.pop(idx)
+                _save_entries(entries)
+                self.ui.msgbox("Entry removed.", title="Removed")
+                continue
+
+            if choice == "ADD_MMU":
+                if not mmu_types:
+                    self.ui.msgbox(
+                        "No MMU type definitions found.\n\n"
+                        "Expected: templates/mmu/mmu-types.json",
+                        title="Error",
+                    )
+                    continue
+
+                type_items = []
+                for mmu_id, info in mmu_types.items():
+                    if not isinstance(info, dict):
+                        continue
+                    type_items.append((mmu_id, info.get("name", mmu_id)))
+                type_items.sort(key=lambda x: x[1].lower())
+                mmu_choice = self.ui.menu(
+                    "Select your MMU/filament changer type:",
+                    type_items + [("B", "Back")],
+                    title="MMU Type",
+                    height=22,
+                    width=120,
+                    menu_height=14,
+                )
+                if mmu_choice is None or mmu_choice == "B":
+                    continue
+
+                mmu_info = mmu_types.get(mmu_choice, {}) if isinstance(mmu_types.get(mmu_choice), dict) else {}
+                versions = mmu_info.get("versions", [])
+                version = None
+                if isinstance(versions, list) and versions:
+                    if len(versions) == 1:
+                        version = versions[0]
+                    else:
+                        version = self.ui.radiolist(
+                            "Select hardware version:",
+                            [(v, v, i == 0) for i, v in enumerate(versions)],
+                            title="MMU Version",
+                        )
+                        if version is None:
+                            continue
+
+                gates = self.ui.inputbox(
+                    "How many gates/lanes does your MMU have?",
+                    title="Gate Count",
+                    default=str(
+                        (mmu_info.get("typical_num_gates") or [4])[0]
+                        if isinstance(mmu_info.get("typical_num_gates"), list)
+                        else 4
+                    ),
+                )
+                if gates is None:
+                    continue
+                try:
+                    num_gates = int(str(gates).strip())
+                except ValueError:
+                    self.ui.msgbox("Gate count must be a number.", title="Error")
+                    continue
+                if num_gates < 1:
+                    self.ui.msgbox("Gate count must be >= 1.", title="Error")
+                    continue
+
+                board_id = _select_board()
+                if board_id is None:
+                    continue
+                board_info = boards.get(board_id, {}) if isinstance(boards.get(board_id), dict) else {}
+                default_conn = board_info.get("connection") if isinstance(board_info.get("connection"), str) else "usb"
+                conn, conn_data = _select_connection(default_conn=default_conn)
+                if conn is None:
+                    continue
+
+                allowed_sw = mmu_info.get("recommended_software", ["happy_hare", "afc"])
+                if not isinstance(allowed_sw, list):
+                    allowed_sw = ["happy_hare", "afc"]
+                sw = _select_software(allowed_sw)
+                if sw is None:
+                    self.ui.msgbox("No software option available for this MMU type.", title="Error")
+                    continue
+
+                entry = {
+                    "type": "mmu",
+                    "hardware": mmu_choice,
+                    "version": version,
+                    "num_gates": num_gates,
+                    "board": board_id,
+                    "software": sw,
+                    **conn_data,
+                }
+                entries.append(entry)
+                _save_entries(entries)
+
+                install_now = self.ui.yesno(
+                    "Saved configuration.\n\n"
+                    "Do you want to run the software installer now?\n\n"
+                    "This will open an interactive terminal step.",
+                    title="Install Software Now?",
+                    default_no=True,
+                )
+                if install_now:
+                    if sw == "happy_hare":
+                        if hasattr(self, "_install_happy_hare"):
+                            self._install_happy_hare()
+                        else:
+                            self.ui.msgbox("Happy Hare installer not implemented yet.", title="Not Implemented")
+                    else:
+                        if hasattr(self, "_install_afc"):
+                            self._install_afc()
+                        else:
+                            self.ui.msgbox("AFC installer not implemented yet.", title="Not Implemented")
+
+                continue
+
+            if choice == "ADD_BUF":
+                if not buffers:
+                    self.ui.msgbox(
+                        "No buffer definitions found.\n\n"
+                        "Expected: templates/mmu/buffers.json",
+                        title="Error",
+                    )
+                    continue
+
+                buf_items = []
+                for buf_id, info in buffers.items():
+                    if not isinstance(info, dict):
+                        continue
+                    buf_items.append((buf_id, info.get("name", buf_id)))
+                buf_items.sort(key=lambda x: x[1].lower())
+                buf_choice = self.ui.menu(
+                    "Select buffer type:",
+                    buf_items + [("B", "Back")],
+                    title="Filament Buffer",
+                    height=22,
+                    width=120,
+                    menu_height=14,
+                )
+                if buf_choice is None or buf_choice == "B":
+                    continue
+
+                buf_info = buffers.get(buf_choice, {}) if isinstance(buffers.get(buf_choice), dict) else {}
+                requires_mcu = bool(buf_info.get("requires_additional_mcu", False))
+
+                entry: dict = {"type": "buffer", "hardware": buf_choice}
+
+                if requires_mcu:
+                    board_id = _select_board()
+                    if board_id is None:
+                        continue
+                    board_info = boards.get(board_id, {}) if isinstance(boards.get(board_id), dict) else {}
+                    default_conn = board_info.get("connection") if isinstance(board_info.get("connection"), str) else "usb"
+                    conn, conn_data = _select_connection(default_conn=default_conn)
+                    if conn is None:
+                        continue
+                    entry.update({"board": board_id, **conn_data})
+
+                # Optional: record a signal pin for smart buffers (runout/break)
+                wants_signal = self.ui.yesno(
+                    "Does this buffer provide a runout/break detection signal you want to wire into Klipper?",
+                    title="Buffer Signal",
+                    default_no=True,
+                )
+                if wants_signal:
+                    pin = self.ui.inputbox(
+                        "Enter the MCU pin for the buffer signal (optional):",
+                        title="Signal Pin",
+                        default="",
+                        width=80,
+                    )
+                    if pin:
+                        entry["signal_pin"] = pin
+
+                entries.append(entry)
+                _save_entries(entries)
+                self.ui.msgbox("Buffer saved.", title="Saved")
+                continue
+
+    def _install_happy_hare(self) -> None:
+        """Install Happy Hare MMU stack (interactive installer)."""
+        from pathlib import Path
+
+        repo = "https://github.com/moggieuk/Happy-Hare.git"
+        target_dir = Path.home() / "Happy-Hare"
+        installer = target_dir / "install.sh"
+
+        if not self.ui.yesno(
+            "Install/Update Happy Hare?\n\n"
+            "This will:\n"
+            "- Clone (or update) Happy-Hare in your home directory\n"
+            "- Run the interactive installer (it will ask you questions)\n\n"
+            "You may be prompted for your sudo password.\n\n"
+            "Continue?",
+            title="Happy Hare",
+            default_no=False,
+        ):
+            return
+
+        print("\n" + "=" * 60)
+        print("Happy Hare (MMU) installer")
+        print("=" * 60 + "\n")
+
+        # Clone or update repo
+        if target_dir.exists():
+            print(f"Updating {target_dir} ...\n")
+            self._run_tty_command(["bash", "-lc", f"cd {target_dir} && git pull"])
+        else:
+            print(f"Cloning {repo} -> {target_dir} ...\n")
+            rc = self._run_tty_command(["bash", "-lc", f"cd ~ && git clone {repo} {target_dir}"])
+            if rc != 0:
+                self.ui.msgbox(
+                    "Failed to clone Happy-Hare repository.\n\n"
+                    "Check the terminal output for details.",
+                    title="Happy Hare",
+                )
+                return
+
+        if not installer.exists():
+            self.ui.msgbox(
+                f"Happy Hare installer not found at:\n{installer}\n\n"
+                "Clone/update may have failed.",
+                title="Happy Hare",
+            )
+            return
+
+        print("\n" + "=" * 60)
+        print("Running Happy Hare interactive installer (./install.sh -i)...")
+        print("=" * 60 + "\n")
+        rc = self._run_tty_command(["bash", "-lc", f"cd {target_dir} && chmod +x ./install.sh && ./install.sh -i"])
+
+        if rc == 0:
+            self.ui.msgbox(
+                "Happy Hare installer finished.\n\n"
+                "Next steps are typically:\n"
+                "- Validate the generated mmu config files\n"
+                "- Finish pin mapping/tuning per your hardware\n"
+                "- Restart Klipper/Moonraker if needed",
+                title="Happy Hare",
+                height=16,
+                width=90,
+            )
+        else:
+            self.ui.msgbox(
+                f"Happy Hare installer exited with code {rc}.\n\n"
+                "Check the terminal output above for the error details.",
+                title="Happy Hare",
+            )
+
+    def _install_afc(self) -> None:
+        """Install AFC-Klipper-Add-On stack (interactive installer)."""
+        from pathlib import Path
+
+        repo = "https://github.com/ArmoredTurtle/AFC-Klipper-Add-On.git"
+        target_dir = Path.home() / "AFC-Klipper-Add-On"
+        installer = target_dir / "install-afc.sh"
+
+        if not self.ui.yesno(
+            "Install/Update AFC-Klipper-Add-On?\n\n"
+            "This will:\n"
+            "- Clone (or update) AFC-Klipper-Add-On in your home directory\n"
+            "- (Optionally) install dependencies: jq + crudini\n"
+            "- Run the installer script\n\n"
+            "You may be prompted for your sudo password.\n\n"
+            "Continue?",
+            title="AFC",
+            default_no=False,
+        ):
+            return
+
+        print("\n" + "=" * 60)
+        print("AFC-Klipper-Add-On installer")
+        print("=" * 60 + "\n")
+
+        # Clone or update repo
+        if target_dir.exists():
+            print(f"Updating {target_dir} ...\n")
+            self._run_tty_command(["bash", "-lc", f"cd {target_dir} && git pull"])
+        else:
+            print(f"Cloning {repo} -> {target_dir} ...\n")
+            rc = self._run_tty_command(["bash", "-lc", f"cd ~ && git clone {repo} {target_dir}"])
+            if rc != 0:
+                self.ui.msgbox(
+                    "Failed to clone AFC-Klipper-Add-On repository.\n\n"
+                    "Check the terminal output for details.",
+                    title="AFC",
+                )
+                return
+
+        if not installer.exists():
+            self.ui.msgbox(
+                f"AFC installer not found at:\n{installer}\n\n"
+                "Clone/update may have failed.",
+                title="AFC",
+            )
+            return
+
+        install_deps = self.ui.yesno(
+            "Install/update dependencies first?\n\n"
+            "AFC recommends: jq and crudini\n\n"
+            "Install via apt-get now?",
+            title="AFC Dependencies",
+            default_no=False,
+        )
+        if install_deps:
+            print("\n" + "=" * 60)
+            print("Installing dependencies: jq crudini")
+            print("=" * 60 + "\n")
+            self._run_tty_command(["bash", "-lc", "sudo apt-get update && sudo apt-get install -y jq crudini"])
+
+        print("\n" + "=" * 60)
+        print("Running AFC installer (./install-afc.sh)...")
+        print("=" * 60 + "\n")
+        rc = self._run_tty_command(["bash", "-lc", f"cd {target_dir} && chmod +x ./install-afc.sh && ./install-afc.sh"])
+
+        if rc == 0:
+            self.ui.msgbox(
+                "AFC installer finished.\n\n"
+                "If it asked you to add includes to printer.cfg, do that next and restart Klipper.",
+                title="AFC",
+                height=14,
+                width=90,
+            )
+        else:
+            self.ui.msgbox(
+                f"AFC installer exited with code {rc}.\n\n"
+                "Check the terminal output above for the error details.",
+                title="AFC",
+            )
 
     def _load_boards(self, board_type: str = "boards") -> list:
         """Load board definitions from templates directory.
@@ -3365,31 +4092,37 @@ class GschpooziWizard:
         # (PT1000 especially needs correct value for accurate readings)
         # Default to 2200 for toolboards, 4700 for mainboards
         default_pullup = 2200 if sensor_location == "toolboard" else 4700
-        current_pullup = self.state.get("extruder.pullup_resistor", default_pullup)
+        extruder_cfg = self.state.get_section("extruder")
+        has_pullup_key = isinstance(extruder_cfg, dict) and ("pullup_resistor" in extruder_cfg)
+        current_pullup = extruder_cfg.get("pullup_resistor") if has_pullup_key else None
+        effective_pullup = int(current_pullup) if isinstance(current_pullup, int) else int(default_pullup)
         pullup_resistor = self.ui.radiolist(
             "Thermistor pullup resistor value:\n\n"
             "(Check your board - most mainboards use 4.7kΩ, most toolboards use 2.2kΩ)\n"
             "Wrong value = wrong temperature readings!",
             [
-                ("2200", "2.2kΩ (most toolboards: EBB, SHT36, Nitehawk)", current_pullup == 2200),
-                ("4700", "4.7kΩ (most mainboards)", current_pullup == 4700),
-                ("1000", "1kΩ (some PT1000 boards)", current_pullup == 1000),
-                ("10000", "10kΩ (rare)", current_pullup == 10000),
+                ("2200", "2.2kΩ (most toolboards: EBB, SHT36, Nitehawk)", effective_pullup == 2200 and not (has_pullup_key and current_pullup is None)),
+                ("4700", "4.7kΩ (most mainboards)", effective_pullup == 4700 and not (has_pullup_key and current_pullup is None)),
+                ("1000", "1kΩ (some PT1000 boards)", effective_pullup == 1000 and not (has_pullup_key and current_pullup is None)),
+                ("10000", "10kΩ (rare)", effective_pullup == 10000 and not (has_pullup_key and current_pullup is None)),
+                ("none", "None (omit from config)", bool(has_pullup_key and current_pullup is None)),
                 ("custom", "Enter custom value", False),
             ],
             title="Hotend - Pullup Resistor"
         )
         if pullup_resistor is None:
             return
-        if pullup_resistor == "custom":
+        if pullup_resistor == "none":
+            pullup_resistor = None
+        elif pullup_resistor == "custom":
             pullup_resistor = self.ui.inputbox(
                 "Enter pullup resistor value (Ω):",
-                default=str(current_pullup),
+                default=str(effective_pullup),
                 title="Hotend - Custom Pullup"
             )
             if pullup_resistor is None:
                 return
-        pullup_resistor = int(pullup_resistor)
+        pullup_resistor = int(pullup_resistor) if pullup_resistor else None
 
         # Temperature settings
         min_temp = self.ui.inputbox(
@@ -3528,6 +4261,185 @@ class GschpooziWizard:
             title="Configuration Saved"
         )
 
+    def _collect_used_mainboard_pins(self, exclude_bed: bool = False) -> set:
+        """Collect mainboard pins already assigned in wizard state.
+
+        Args:
+            exclude_bed: If True, don't include heater_bed pins (useful when re-configuring bed).
+
+        Returns:
+            Set of port IDs that are already in use.
+        """
+        used = set()
+
+        # Steppers (mainboard motor ports)
+        for axis in ["stepper_x", "stepper_y", "stepper_z", "stepper_x1", "stepper_y1"]:
+            port = self.state.get(f"{axis}.motor_port")
+            if port:
+                used.add(port)
+            endstop = self.state.get(f"{axis}.endstop_port")
+            if endstop:
+                used.add(endstop)
+
+        # Z motors (if multiple)
+        z_count = self.state.get("stepper_z.z_motor_count", 1) or 1
+        for i in range(1, int(z_count)):
+            port = self.state.get(f"stepper_z{i}.motor_port")
+            if port:
+                used.add(port)
+
+        # Extruder (mainboard)
+        if self.state.get("extruder.location") == "mainboard":
+            port = self.state.get("extruder.motor_port_mainboard")
+            if port:
+                used.add(port)
+        if self.state.get("extruder.heater_location") == "mainboard":
+            port = self.state.get("extruder.heater_port_mainboard")
+            if port:
+                used.add(port)
+        if self.state.get("extruder.sensor_location") == "mainboard":
+            port = self.state.get("extruder.sensor_port_mainboard")
+            if port:
+                used.add(port)
+
+        # Heater bed
+        if not exclude_bed:
+            bed_heater = self.state.get("heater_bed.heater_pin")
+            if bed_heater:
+                used.add(bed_heater)
+            bed_sensor = self.state.get("heater_bed.sensor_port")
+            if bed_sensor:
+                used.add(bed_sensor)
+
+        # Fans (mainboard)
+        if self.state.get("fans.part_cooling.location") == "mainboard":
+            pin = self.state.get("fans.part_cooling.pin_mainboard")
+            if pin:
+                used.add(pin)
+        if self.state.get("fans.hotend.location") == "mainboard":
+            pin = self.state.get("fans.hotend.pin_mainboard")
+            if pin:
+                used.add(pin)
+        controller_pin = self.state.get("fans.controller.pin")
+        if controller_pin:
+            used.add(controller_pin)
+
+        # Additional fans
+        for fan in self.state.get("fans.additional_fans", []) or []:
+            if isinstance(fan, dict) and fan.get("location") == "mainboard":
+                pin = fan.get("pin")
+                if pin:
+                    used.add(pin)
+
+        # Probe
+        probe_pin = self.state.get("probe.probe_pin_mainboard")
+        if probe_pin:
+            used.add(probe_pin)
+
+        return used
+
+    def _build_output_pin_options(self, board_data: dict, current_value: str, used_pins: set) -> list:
+        """Build radiolist options for output pins (heaters, fans, misc outputs).
+
+        Returns list of (tag, label, is_selected) tuples.
+        """
+        options = []
+        seen_tags = set()
+
+        # Priority groups for output pins
+        groups = ["heater_ports", "fan_ports", "misc_ports", "endstop_ports"]
+
+        for group in groups:
+            group_data = board_data.get(group, {})
+            if not isinstance(group_data, dict):
+                continue
+
+            for port_id, port_info in group_data.items():
+                if port_id in used_pins:
+                    continue  # Skip already used
+
+                if isinstance(port_info, dict):
+                    pin = port_info.get("pin") or port_info.get("signal_pin") or ""
+                    label = port_info.get("label", port_id)
+                    if pin:
+                        label = f"{label} ({pin})"
+                else:
+                    label = port_id
+                    pin = str(port_info) if port_info else ""
+
+                tag = port_id
+                if tag in seen_tags:
+                    continue
+                seen_tags.add(tag)
+
+                is_selected = (port_id == current_value)
+                options.append((tag, f"{label} [{group}]", is_selected))
+
+        # Sort: bed-related first, then alphabetically
+        def sort_key(item):
+            tag, label, _ = item
+            is_bed = "bed" in tag.lower() or "hb" == tag.lower() or "tb" == tag.lower()
+            return (0 if is_bed else 1, tag.lower())
+
+        options.sort(key=sort_key)
+
+        # Ensure something is selected
+        if options and not any(x[2] for x in options):
+            options[0] = (options[0][0], options[0][1], True)
+
+        return options
+
+    def _build_thermistor_pin_options(self, board_data: dict, current_value: str, used_pins: set) -> list:
+        """Build radiolist options for thermistor/ADC pins.
+
+        Returns list of (tag, label, is_selected) tuples.
+        """
+        options = []
+        seen_tags = set()
+
+        # Priority: thermistor ports first, then misc
+        groups = ["thermistor_ports", "misc_ports"]
+
+        for group in groups:
+            group_data = board_data.get(group, {})
+            if not isinstance(group_data, dict):
+                continue
+
+            for port_id, port_info in group_data.items():
+                if port_id in used_pins:
+                    continue  # Skip already used
+
+                if isinstance(port_info, dict):
+                    pin = port_info.get("pin") or port_info.get("signal_pin") or ""
+                    label = port_info.get("label", port_id)
+                    if pin:
+                        label = f"{label} ({pin})"
+                else:
+                    label = port_id
+                    pin = str(port_info) if port_info else ""
+
+                tag = port_id
+                if tag in seen_tags:
+                    continue
+                seen_tags.add(tag)
+
+                is_selected = (port_id == current_value)
+                options.append((tag, f"{label} [{group}]", is_selected))
+
+        # Sort: bed-related first, then alphabetically
+        def sort_key(item):
+            tag, label, _ = item
+            is_bed = "bed" in tag.lower() or "tb" == tag.lower()
+            return (0 if is_bed else 1, tag.lower())
+
+        options.sort(key=sort_key)
+
+        # Ensure something is selected
+        if options and not any(x[2] for x in options):
+            options[0] = (options[0][0], options[0][1], True)
+
+        return options
+
     def _heater_bed_setup(self) -> None:
         """Configure heated bed per schema 2.7."""
         # Get current values
@@ -3541,34 +4453,35 @@ class GschpooziWizard:
         current_control = self.state.get("heater_bed.control", "pid")
         current_surface = self.state.get("heater_bed.surface_type", "")
 
+        # Load board data for pin lists
+        board_id = self.state.get("mcu.main.board_type", "")
+        board_data = self._load_board_data(board_id, "boards")
+
+        # Collect pins already in use (excluding bed itself, since we're reconfiguring it)
+        used_pins = self._collect_used_mainboard_pins(exclude_bed=True)
+
         # === 2.7.1: Heater Configuration ===
-        # Heater pin selection (bed heater is always on mainboard)
-        heater_ports = self._get_board_ports("heater_ports", "boards")
-        if heater_ports:
-            # Filter to show bed heater
-            bed_ports = [(p, l, p == current_heater_pin or "Bed" in l or p == "HB")
-                        for p, l, d in heater_ports if "Bed" in l or p == "HB"]
-            if bed_ports:
-                heater_pin = self.ui.radiolist(
-                    "Select heated bed heater pin:",
-                    bed_ports,
-                    title="Heated Bed - Heater Pin"
-                )
-            else:
-                # No specific bed port found, show all heater ports
-                heater_pin = self.ui.radiolist(
-                    "Select heated bed heater pin:",
-                    [(p, l, p == current_heater_pin or d) for p, l, d in heater_ports],
-                    title="Heated Bed - Heater Pin"
-                )
-        else:
-            heater_pin = self.ui.inputbox(
-                "Enter heated bed heater pin:",
-                default=current_heater_pin or "HB",
-                title="Heated Bed - Heater Pin"
+        # Build comprehensive list of output pins for bed heater (SSR/MOSFET friendly)
+        heater_options = self._build_output_pin_options(board_data, current_heater_pin, used_pins)
+        if not heater_options:
+            self.ui.msgbox(
+                "No output pins found in board definition.\n\n"
+                "Please select a mainboard first in MCU Setup.",
+                title="Heated Bed - Error"
             )
+            return
+
+        heater_pin = self.ui.radiolist(
+            "Select heated bed heater pin:\n\n"
+            "(For SSR/external MOSFET, pick any available output)",
+            heater_options,
+            title="Heated Bed - Heater Pin"
+        )
         if heater_pin is None:
             return
+
+        # Add heater pin to used set before thermistor selection
+        used_pins.add(heater_pin)
 
         max_power = self.ui.inputbox(
             "Heater max power (0.1-1.0):\n\n"
@@ -3589,31 +4502,22 @@ class GschpooziWizard:
             return
 
         # === 2.7.2: Thermistor ===
-        # Thermistor port selection (bed thermistor is always on mainboard)
-        sensor_ports = self._get_board_ports("thermistor_ports", "boards")
-        if sensor_ports:
-            # Filter to show bed thermistor
-            bed_sensors = [(p, l, p == current_sensor_port or "Bed" in l or p == "TB")
-                          for p, l, d in sensor_ports if "Bed" in l or p == "TB"]
-            if bed_sensors:
-                sensor_port = self.ui.radiolist(
-                    "Select bed thermistor port:",
-                    bed_sensors,
-                    title="Heated Bed - Thermistor Port"
-                )
-            else:
-                # No specific bed port found, show all thermistor ports
-                sensor_port = self.ui.radiolist(
-                    "Select bed thermistor port:",
-                    [(p, l, p == current_sensor_port or d) for p, l, d in sensor_ports],
-                    title="Heated Bed - Thermistor Port"
-                )
-        else:
-            sensor_port = self.ui.inputbox(
-                "Enter bed thermistor port:",
-                default=current_sensor_port or "TB",
-                title="Heated Bed - Thermistor Port"
+        # Build comprehensive list of ADC/thermistor pins
+        sensor_options = self._build_thermistor_pin_options(board_data, current_sensor_port, used_pins)
+        if not sensor_options:
+            self.ui.msgbox(
+                "No thermistor/ADC pins found in board definition.\n\n"
+                "Please select a mainboard first in MCU Setup.",
+                title="Heated Bed - Error"
             )
+            return
+
+        sensor_port = self.ui.radiolist(
+            "Select bed thermistor port:\n\n"
+            "(Any ADC input can be used)",
+            sensor_options,
+            title="Heated Bed - Thermistor Port"
+        )
         if sensor_port is None:
             return
 
@@ -3634,29 +4538,32 @@ class GschpooziWizard:
         if sensor_type is None:
             return
 
-        # Pullup resistor (only for NTC thermistors)
+        # Pullup resistor with None option
         pullup_resistor = None
-        if sensor_type != "PT1000":
-            current_pullup = self.state.get("heater_bed.pullup_resistor", 4700)
-            pullup_resistor = self.ui.radiolist(
-                "Bed thermistor pullup resistor value:\n\n"
-                "(Most mainboards use 4.7kΩ standard)",
-                [
-                    ("4700", "4.7kΩ (standard)", current_pullup == 4700),
-                    ("2200", "2.2kΩ", current_pullup == 2200),
-                    ("10000", "10kΩ", current_pullup == 10000),
-                    ("custom", "Enter custom value", False),
-                ],
-                title="Heated Bed - Pullup Resistor"
-            )
-            if pullup_resistor == "custom":
-                pullup_resistor = self.ui.inputbox(
-                    "Enter pullup resistor value (Ω):",
-                    default=str(current_pullup),
-                    title="Heated Bed - Custom Pullup"
-                )
-            if pullup_resistor:
-                pullup_resistor = int(pullup_resistor)
+        bed_cfg = self.state.get_section("heater_bed")
+        has_pullup_key = isinstance(bed_cfg, dict) and ("pullup_resistor" in bed_cfg)
+        current_pullup = bed_cfg.get("pullup_resistor") if has_pullup_key else 4700
+        effective_pullup = int(current_pullup) if isinstance(current_pullup, int) else 4700
+        is_none = has_pullup_key and current_pullup is None
+
+        pullup_resistor = self.ui.radiolist(
+            "Bed thermistor pullup resistor value:\n\n"
+            "(Most mainboards use 4.7kΩ standard)",
+            [
+                ("4700", "4.7kΩ (standard)", effective_pullup == 4700 and not is_none),
+                ("2200", "2.2kΩ", effective_pullup == 2200 and not is_none),
+                ("10000", "10kΩ", effective_pullup == 10000 and not is_none),
+                ("1000", "1kΩ (some PT1000)", effective_pullup == 1000 and not is_none),
+                ("none", "None (omit from config)", is_none),
+            ],
+            title="Heated Bed - Pullup Resistor"
+        )
+        if pullup_resistor is None:
+            return
+        if pullup_resistor == "none":
+            pullup_resistor = None
+        else:
+            pullup_resistor = int(pullup_resistor)
 
         # === 2.7.3: Temperature Settings ===
         min_temp = self.ui.inputbox(
@@ -3720,8 +4627,8 @@ class GschpooziWizard:
         self.state.set("heater_bed.pwm_cycle_time", float(pwm_cycle_time or 0.0166))
         self.state.set("heater_bed.sensor_port", sensor_port)
         self.state.set("heater_bed.sensor_type", sensor_type or "Generic 3950")
-        if pullup_resistor:
-            self.state.set("heater_bed.pullup_resistor", pullup_resistor)
+        # Store pullup_resistor explicitly (None means "omit from config")
+        self.state.set("heater_bed.pullup_resistor", pullup_resistor)
         self.state.set("heater_bed.min_temp", int(min_temp or 0))
         self.state.set("heater_bed.max_temp", int(max_temp or 120))
         self.state.set("heater_bed.control", control or "pid")
@@ -5492,48 +6399,282 @@ class GschpooziWizard:
 
         while True:
             installed, running, svc_name = _service_state()
-            enabled = self.state.get("display.klipperscreen.enabled", False)
             host = self.state.get("display.klipperscreen.moonraker_host", "127.0.0.1")
             port = int(self.state.get("display.klipperscreen.moonraker_port", 7125))
 
-            status = []
-            status.append(f"Installed: {'Yes' if installed else 'No'}")
-            status.append(f"Service: {'Running' if running else ('Stopped' if installed else 'N/A')}")
-            status.append(f"Config: {str(conf_path) if installed else str(conf_path)}")
-            status.append(f"Moonraker: {host}:{port}")
-            status.append(f"Wizard enabled: {'Yes' if enabled else 'No'}")
+            # KIAUH-style status display
+            if installed:
+                if running:
+                    status_text = "Installed (Running)"
+                else:
+                    status_text = "Installed (Stopped)"
+            else:
+                status_text = "Not installed"
+
+            # Build menu options based on installation status (KIAUH-style)
+            menu_items = []
+            if not installed:
+                menu_items.append(("1", "Install KlipperScreen"))
+            else:
+                menu_items.append(("1", "Update KlipperScreen"))
+                menu_items.append(("2", "Configure Moonraker connection"))
+                menu_items.append(("3", "Add to Moonraker update_manager"))
+                menu_items.append(("4", "Remove KlipperScreen"))
+            menu_items.append(("B", "Back"))
 
             choice = self.ui.menu(
-                "KlipperScreen\n\n"
-                + "\n".join(status)
-                + "\n\nSelect an action:",
-                [
-                    ("ENABLE", "Enable/Disable (wizard state)"),
-                    ("CONF", "Configure Moonraker connection (KlipperScreen.conf)"),
-                    ("UM", "Ensure Moonraker update_manager entry"),
-                    ("INSTALL", "Install KlipperScreen"),
-                    ("UPDATE", "Update KlipperScreen (git pull + restart)"),
-                    ("REMOVE", "Remove KlipperScreen"),
-                    ("B", "Back"),
-                ],
+                f"KlipperScreen\n\n"
+                f"Status: {status_text}\n"
+                + (f"Moonraker: {host}:{port}\n" if installed else ""),
+                menu_items,
                 title="KlipperScreen",
-                height=22,
-                width=120,
-                menu_height=10,
+                height=16,
+                width=80,
+                menu_height=8,
             )
 
             if choice is None or choice == "B":
                 return
 
-            if choice == "ENABLE":
-                new_enabled = self.ui.yesno(
-                    "Enable KlipperScreen in wizard?\n\n"
-                    "This does not install it, but marks it as desired and enables status display.",
-                    title="KlipperScreen - Enable",
-                    default_no=enabled,
+            # Handle "1" - Install (if not installed) or Update (if installed)
+            if choice == "1":
+                if not installed:
+                    # INSTALL
+                    confirm = self.ui.yesno(
+                        "Install KlipperScreen?\n\n"
+                        "This will clone the repository and run the installer.\n"
+                        "You may need to enter your sudo password.\n\n"
+                        "This may take several minutes.",
+                        title="Install KlipperScreen",
+                        default_no=False,
+                    )
+                    if not confirm:
+                        continue
+
+                    ks_repo = "https://github.com/KlipperScreen/KlipperScreen.git"
+                    print("\n" + "=" * 60)
+                    print("Cloning KlipperScreen repository...")
+                    print("=" * 60 + "\n")
+
+                    exit_code = self._run_shell_interactive(f"git clone {ks_repo} {ks_dir}")
+                    if exit_code != 0:
+                        self.ui.msgbox(
+                            "Failed to clone repository.\n\n"
+                            "Check terminal output for errors.",
+                            title="Clone Failed",
+                        )
+                        continue
+
+                    install_script = ks_dir / "scripts" / "KlipperScreen-install.sh"
+                    print("\n" + "=" * 60)
+                    print("Running install script...")
+                    print("=" * 60 + "\n")
+
+                    exit_code = self._run_shell_interactive(f"bash {install_script}")
+
+                    # Check if service file was created
+                    service_file = Path("/etc/systemd/system/KlipperScreen.service")
+                    if not service_file.exists():
+                        # Try lowercase
+                        service_file = Path("/etc/systemd/system/klipperscreen.service")
+
+                    if exit_code == 0 and service_file.exists():
+                        # Ensure service is enabled and started
+                        print("\n" + "=" * 60)
+                        print("Enabling and starting KlipperScreen service...")
+                        print("=" * 60 + "\n")
+
+                        svc = "KlipperScreen" if "KlipperScreen" in str(service_file) else "klipperscreen"
+                        self._run_shell_interactive("sudo systemctl daemon-reload")
+                        self._run_systemctl("enable", svc)
+                        self._run_systemctl("start", svc)
+
+                        if update_mgr:
+                            self._ensure_moonraker_update_manager_entry("KlipperScreen", update_mgr)
+                        self.ui.msgbox(
+                            "KlipperScreen installed successfully!\n\n"
+                            "Service has been enabled and started.",
+                            title="Installation Complete",
+                        )
+                    else:
+                        # Installation failed or service not created
+                        error_msg = f"Exit code: {exit_code}\n\n"
+                        if not service_file.exists():
+                            error_msg += "Service file was NOT created.\n"
+                            error_msg += "The install script may have failed.\n\n"
+                            error_msg += "Check terminal output above for errors.\n"
+                            error_msg += "Common issues:\n"
+                            error_msg += "- Missing dependencies\n"
+                            error_msg += "- Permission denied\n"
+                            error_msg += "- Python version too old"
+                        self.ui.msgbox(
+                            f"Installation failed!\n\n{error_msg}",
+                            title="Installation Failed",
+                            height=18,
+                            width=80,
+                        )
+                else:
+                    # UPDATE
+                    confirm = self.ui.yesno(
+                        "Update KlipperScreen?\n\n"
+                        "This will stop the service, pull updates,\n"
+                        "install requirements, and restart.",
+                        title="Update KlipperScreen",
+                        default_no=False,
+                    )
+                    if not confirm:
+                        continue
+
+                    print("\n" + "=" * 60)
+                    print(f"Stopping {svc_name}...")
+                    print("=" * 60 + "\n")
+                    self._run_systemctl("stop", svc_name)
+
+                    print("\n" + "=" * 60)
+                    print("Pulling latest changes...")
+                    print("=" * 60 + "\n")
+                    exit_code = self._run_shell_interactive(f"cd {ks_dir} && git pull")
+
+                    if exit_code != 0:
+                        self._run_systemctl("start", svc_name)
+                        self.ui.msgbox("Update failed. Service restarted.", title="Update Failed")
+                        continue
+
+                    # Check if service exists - if not, run install script
+                    service_file = Path("/etc/systemd/system/KlipperScreen.service")
+                    if not service_file.exists():
+                        print("\n" + "=" * 60)
+                        print("Service not found - running install script...")
+                        print("=" * 60 + "\n")
+                        install_script = ks_dir / "scripts" / "KlipperScreen-install.sh"
+                        self._run_shell_interactive(f"bash {install_script}")
+                        self._run_shell_interactive("sudo systemctl daemon-reload")
+                    else:
+                        # Just update requirements
+                        ks_env = Path.home() / ".KlipperScreen-env"
+                        ks_req = ks_dir / "scripts" / "KlipperScreen-requirements.txt"
+                        if ks_env.exists() and ks_req.exists():
+                            print("\n" + "=" * 60)
+                            print("Installing requirements...")
+                            print("=" * 60 + "\n")
+                            self._run_shell_interactive(f"{ks_env}/bin/pip install -r {ks_req}")
+
+                    print("\n" + "=" * 60)
+                    print(f"Starting {svc_name}...")
+                    print("=" * 60 + "\n")
+                    self._run_systemctl("enable", svc_name)
+                    self._run_systemctl("start", svc_name)
+
+                    self.ui.msgbox("KlipperScreen updated!", title="Update Complete")
+                continue
+
+            # Handle "2" - Configure Moonraker connection (only when installed)
+            elif choice == "2" and installed:
+                new_host = self.ui.inputbox(
+                    "Enter Moonraker host address:",
+                    title="Moonraker Host",
+                    default=host,
                 )
-                self.state.set("display.klipperscreen.enabled", bool(new_enabled))
+                if new_host is None:
+                    continue
+                new_port_str = self.ui.inputbox(
+                    "Enter Moonraker port:",
+                    title="Moonraker Port",
+                    default=str(port),
+                )
+                if new_port_str is None:
+                    continue
+                try:
+                    new_port = int(new_port_str)
+                except ValueError:
+                    self.ui.msgbox("Invalid port number.", title="Error")
+                    continue
+
+                self.state.set("display.klipperscreen.moonraker_host", new_host)
+                self.state.set("display.klipperscreen.moonraker_port", new_port)
                 self.state.save()
+
+                ok, msg = self._write_klipperscreen_conf(new_host, new_port)
+                if ok:
+                    # Restart service for changes to take effect
+                    restart = self.ui.yesno(
+                        f"Configuration saved!\n\nHost: {new_host}\nPort: {new_port}\n\n"
+                        "Restart KlipperScreen now?",
+                        title="Configuration Saved",
+                        default_no=False,
+                    )
+                    if restart:
+                        self._run_systemctl("restart", "KlipperScreen")
+                        self.ui.msgbox("KlipperScreen restarted!", title="Done")
+                else:
+                    self.ui.msgbox(f"Failed to write config:\n\n{msg}", title="Error")
+                continue
+
+            # Handle "3" - Add to update_manager (only when installed)
+            elif choice == "3" and installed:
+                if not update_mgr:
+                    self.ui.msgbox("No update_manager template found.", title="Error")
+                    continue
+                ok = self._ensure_moonraker_update_manager_entry("KlipperScreen", update_mgr)
+                if ok:
+                    self.ui.msgbox(
+                        "Added to Moonraker update_manager!\n\n"
+                        "KlipperScreen will appear in your update list.",
+                        title="Success",
+                    )
+                else:
+                    self.ui.msgbox("Failed to update moonraker.conf.", title="Error")
+                continue
+
+            # Handle "4" - Remove (only when installed)
+            elif choice == "4" and installed:
+                confirm = self.ui.yesno(
+                    "Remove KlipperScreen?\n\n"
+                    "This will stop the service and remove all files.\n"
+                    "This cannot be undone!",
+                    title="Remove KlipperScreen",
+                    default_no=True,
+                )
+                if not confirm:
+                    continue
+
+                import shutil
+
+                print("\n" + "=" * 60)
+                print(f"Stopping {svc_name}...")
+                print("=" * 60 + "\n")
+                self._run_systemctl("stop", svc_name)
+                self._run_systemctl("disable", svc_name)
+
+                print("\n" + "=" * 60)
+                print(f"Removing {ks_dir}...")
+                print("=" * 60 + "\n")
+                try:
+                    if ks_dir.exists():
+                        shutil.rmtree(ks_dir)
+                        print("Directory removed.")
+                except Exception as e:
+                    self.ui.msgbox(f"Failed to remove directory:\n\n{e}", title="Error")
+                    continue
+
+                ks_env = Path.home() / ".KlipperScreen-env"
+                try:
+                    if ks_env.exists():
+                        shutil.rmtree(ks_env)
+                        print("Environment removed.")
+                except Exception:
+                    pass
+
+                remove_service = self.ui.yesno(
+                    "Also remove the systemd service file?",
+                    title="Remove Service File",
+                    default_no=True,
+                )
+                if remove_service:
+                    self._run_shell_interactive(f"sudo rm -f /etc/systemd/system/{svc_name}.service")
+                    self._run_shell_interactive("sudo systemctl daemon-reload")
+
+                self.ui.msgbox("KlipperScreen removed!", title="Removal Complete")
                 continue
 
     def _advanced_setup(self) -> None:
@@ -5915,23 +7056,169 @@ class GschpooziWizard:
         Safety: by default we only generate a commented example block unless the user
         explicitly chooses to emit the live [autotune_tmc] section.
         """
-        def _has_klipper_tmc_autotune() -> bool:
-            """Best-effort detection of klipper_tmc_autotune in Klipper extras."""
+        def _tmc_autotune_install_status() -> tuple[bool, list[str], str]:
+            """
+            Detect whether klipper_tmc_autotune is installed and COMPLETE.
+
+            The upstream installer links 3 files into Klipper:
+              - autotune_tmc.py
+              - motor_constants.py
+              - motor_database.cfg
+
+            Returns: (is_complete, missing_files, target_dir)
+            """
             try:
                 from pathlib import Path as _Path
-                extras = _Path.home() / "klipper" / "klippy" / "extras"
-                return any(
-                    p.exists()
-                    for p in (
-                        extras / "autotune_tmc.py",
-                        extras / "autotune_tmc.pyc",
-                        extras / "tmc_autotune.py",
-                    )
-                )
-            except Exception:
-                return False
+                base = _Path.home() / "klipper" / "klippy"
+                target = base / "plugins" if (base / "plugins").exists() else (base / "extras")
 
-        plugin_installed = _has_klipper_tmc_autotune()
+                required = {
+                    "autotune_tmc.py": target / "autotune_tmc.py",
+                    "motor_constants.py": target / "motor_constants.py",
+                    "motor_database.cfg": target / "motor_database.cfg",
+                }
+                missing = [name for name, p in required.items() if not p.exists()]
+                return (len(missing) == 0), missing, str(target)
+            except Exception:
+                return False, ["autotune_tmc.py", "motor_constants.py", "motor_database.cfg"], str(Path.home() / "klipper" / "klippy" / "extras")
+
+        plugin_installed, missing_files, target_dir = _tmc_autotune_install_status()
+
+        if (not plugin_installed) and missing_files and ("autotune_tmc.py" not in missing_files):
+            # Partial install: module exists but DB/constants are missing (causes Klipper load errors).
+            if self.ui.yesno(
+                "TMC Autotune plugin appears PARTIALLY installed.\n\n"
+                f"Target: {target_dir}\n"
+                f"Missing: {', '.join(missing_files)}\n\n"
+                "Repair by re-linking the plugin files now?",
+                title="TMC Autotune - Repair",
+                default_no=False,
+                height=16,
+                width=88,
+            ):
+                # Force the install/update flow below to run.
+                plugin_installed = False
+
+        if not plugin_installed:
+            if self.ui.yesno(
+                "klipper_tmc_autotune plugin not detected.\n\n"
+                "Would you like to install/update it now?\n\n"
+                "This will:\n"
+                "- clone/pull the plugin repo into ~/klipper_tmc_autotune\n"
+                "- link plugin files into ~/klipper/klippy/extras/ (or plugins/)\n"
+                "- optionally restart the Klipper service\n\n"
+                "Note: This is system-changing and may prompt for sudo.",
+                title="TMC Autotune - Install Plugin",
+                default_no=False,
+                height=20,
+                width=88,
+            ):
+                if not (Path.home() / "klipper" / "klippy" / "extras").exists():
+                    self.ui.msgbox(
+                        "Klipper source tree not found at:\n\n"
+                        "~/klipper/klippy/extras\n\n"
+                        "Install Klipper first (Klipper Setup → Manage Components → install klipper),\n"
+                        "then retry this install.",
+                        title="Cannot Install",
+                        height=14,
+                        width=80,
+                    )
+                else:
+                    restart = self.ui.yesno(
+                        "Restart Klipper after installing the plugin?\n\n"
+                        "Recommended: Yes (required for Klipper to load new extras).",
+                        title="Restart Klipper",
+                        default_no=False,
+                        height=12,
+                        width=70,
+                    )
+                    if restart is None:
+                        restart = True
+
+                    script = r"""
+set -euo pipefail
+REPO_URL="https://github.com/andrewmcgr/klipper_tmc_autotune.git"
+PLUGIN_DIR="$HOME/klipper_tmc_autotune"
+KLIPPER_BASE="$HOME/klipper/klippy"
+if [ -d "$KLIPPER_BASE/plugins" ]; then
+  KLIPPER_TARGET="$KLIPPER_BASE/plugins"
+else
+  KLIPPER_TARGET="$KLIPPER_BASE/extras"
+fi
+
+echo "== klipper_tmc_autotune install/update =="
+echo "Repo: $REPO_URL"
+echo "Plugin dir: $PLUGIN_DIR"
+echo "Klipper target dir: $KLIPPER_TARGET"
+echo ""
+
+if [ ! -d "$KLIPPER_TARGET" ]; then
+  echo "ERROR: Klipper target directory not found: $KLIPPER_TARGET"
+  exit 1
+fi
+
+if [ -d "$PLUGIN_DIR/.git" ]; then
+  echo "Updating existing repo..."
+  git -C "$PLUGIN_DIR" fetch --prune --tags
+  git -C "$PLUGIN_DIR" pull --ff-only
+else
+  echo "Cloning repo..."
+  rm -rf "$PLUGIN_DIR"
+  git clone "$REPO_URL" "$PLUGIN_DIR"
+fi
+
+SRC="$(find "$PLUGIN_DIR" -maxdepth 2 -name 'autotune_tmc.py' | head -n 1 || true)"
+if [ -z "$SRC" ]; then
+  echo "ERROR: Could not find autotune_tmc.py in $PLUGIN_DIR"
+  exit 1
+fi
+
+echo "Linking plugin files into Klipper..."
+ln -srfn "$PLUGIN_DIR/autotune_tmc.py" "$KLIPPER_TARGET/autotune_tmc.py"
+ln -srfn "$PLUGIN_DIR/motor_constants.py" "$KLIPPER_TARGET/motor_constants.py"
+ln -srfn "$PLUGIN_DIR/motor_database.cfg" "$KLIPPER_TARGET/motor_database.cfg"
+echo "Linked."
+"""
+                    if restart:
+                        script += r"""
+echo ""
+echo "Restarting klipper service..."
+sudo systemctl restart klipper
+echo "Restarted."
+"""
+                    script += r"""
+echo ""
+echo "Done. Press Enter to return to wizard."
+read -r _
+"""
+                    rc = self._run_tty_command(["bash", "-lc", script])
+                    plugin_installed, missing_files, target_dir = _tmc_autotune_install_status()
+                    if rc == 0 and plugin_installed:
+                        self.ui.msgbox(
+                            "Plugin installed and detected!\n\n"
+                            "You can now safely enable 'Emit active config'.",
+                            title="Installed",
+                            height=12,
+                            width=70,
+                        )
+                    elif rc != 0:
+                        self.ui.msgbox(
+                            f"Install/update command failed (exit code {rc}).\n\n"
+                            "Check the console output for details.",
+                            title="Install Failed",
+                            height=12,
+                            width=70,
+                        )
+                    else:
+                        self.ui.msgbox(
+                            "Install/update finished, but plugin still not detected.\n\n"
+                            f"Target: {target_dir}\n"
+                            f"Missing: {', '.join(missing_files) if missing_files else 'unknown'}\n\n"
+                            "Check the console output for details.",
+                            title="Not Detected",
+                            height=14,
+                            width=80,
+                        )
 
         enabled = self.ui.yesno(
             "Enable TMC Autotune config generation?\n\n"
@@ -5970,47 +7257,234 @@ class GschpooziWizard:
         if emit is None:
             return
 
-        # These fields are plugin-specific; we store them as strings so users can match plugin docs.
-        motor_x = self.ui.inputbox(
-            "Motor preset for X (plugin-specific string):\n\n"
-            "Leave blank to omit.",
-            default=str(self.state.get("tuning.tmc_autotune.motor_x", "")),
-            title="TMC Autotune - motor_x",
-            height=14,
-            width=88,
+        # Load motor database IDs (if available) so users can pick instead of typing.
+        motor_ids: list[str] = []
+        try:
+            import re
+            from pathlib import Path as _Path
+
+            def _find_motor_db() -> _Path | None:
+                candidates = [
+                    _Path.home() / "klipper_tmc_autotune" / "motor_database.cfg",
+                    _Path.home() / "klipper" / "klippy" / "plugins" / "motor_database.cfg",
+                    _Path.home() / "klipper" / "klippy" / "extras" / "motor_database.cfg",
+                ]
+                for p in candidates:
+                    if p.exists():
+                        return p
+                return None
+
+            def _parse_motor_ids(cfg_text: str) -> list[str]:
+                out: list[str] = []
+                for line in cfg_text.splitlines():
+                    line = line.strip()
+                    m = re.match(r"^\[motor_constants\s+([^\]]+)\]\s*$", line)
+                    if m:
+                        out.append(m.group(1).strip())
+                # Deduplicate while preserving sortability
+                return sorted(set([x for x in out if x]))
+
+            db_path = _find_motor_db()
+            if db_path is not None:
+                motor_ids = _parse_motor_ids(db_path.read_text(encoding="utf-8", errors="ignore"))
+        except Exception:
+            motor_ids = []
+
+        def _pick_motor_id(stepper_name: str, default_value: str) -> str | None:
+            """
+            Pick a motor database ID for a stepper.
+            Returns:
+              - string (may be empty) on success
+              - None if user cancels the whole flow
+            """
+            # If we can't load the database, fall back to manual entry.
+            if not motor_ids:
+                return self.ui.inputbox(
+                    f"Motor database ID for {stepper_name}:\n\n"
+                    "Examples:\n"
+                    "  ldo-42sth48-2004mah\n"
+                    "  ldo-36sth20-1004ahg\n\n"
+                    "Leave blank to omit.",
+                    default=default_value,
+                    title=f"TMC Autotune - motor ({stepper_name})",
+                    height=16,
+                    width=92,
+                )
+
+            # Search + pick loop (keeps the menu manageable even for large databases)
+            query_default = (default_value or "").strip()
+            while True:
+                query = self.ui.inputbox(
+                    f"Search motor database for {stepper_name}.\n\n"
+                    "Tip: type a fragment like 'ldo-42sth' or '36sth20'.\n"
+                    "Leave empty to show the first matches.\n",
+                    default=query_default,
+                    title=f"TMC Autotune - Search ({stepper_name})",
+                    height=14,
+                    width=92,
+                )
+                if query is None:
+                    return None
+                query = (query or "").strip().lower()
+
+                matches = motor_ids
+                if query:
+                    matches = [m for m in motor_ids if query in m.lower()]
+
+                if not matches:
+                    self.ui.msgbox(
+                        "No matches found.\n\n"
+                        "Try a shorter search (e.g. 'ldo', '42sth', '2004').",
+                        title="No Matches",
+                        height=12,
+                        width=80,
+                    )
+                    query_default = query
+                    continue
+
+                max_show = 200
+                shown = matches[:max_show]
+                extra = len(matches) - len(shown)
+
+                items: list[tuple[str, str]] = [(m, m) for m in shown]
+                if extra > 0:
+                    items.append(("SEARCH", f"(showing first {len(shown)} of {len(matches)} matches) Search again"))
+                else:
+                    items.append(("SEARCH", "Search again"))
+                items.append(("MANUAL", "Manual entry (type/paste)"))
+                items.append(("CLEAR", "Leave blank (omit motor)"))
+                items.append(("B", "Back/Cancel"))
+
+                choice = self.ui.menu(
+                    "Pick a motor ID:",
+                    items,
+                    title=f"TMC Autotune - Pick Motor ({stepper_name})",
+                    height=26,
+                    width=110,
+                    menu_height=18,
+                )
+                if choice is None or choice == "B":
+                    return None
+                if choice == "SEARCH":
+                    query_default = query
+                    continue
+                if choice == "CLEAR":
+                    return ""
+                if choice == "MANUAL":
+                    manual = self.ui.inputbox(
+                        f"Enter motor database ID for {stepper_name}:",
+                        default=default_value,
+                        title=f"TMC Autotune - Manual ({stepper_name})",
+                        height=10,
+                        width=92,
+                    )
+                    return None if manual is None else (manual or "").strip()
+
+                # Selected a motor ID
+                return choice.strip()
+
+        # Choose which steppers to autotune (avoid free-text stepper names).
+        awd_enabled = bool(self.state.get("printer.awd_enabled", False))
+        z_count = int(self.state.get("stepper_z.z_motor_count", 1) or 1)
+        stepper_choices = [
+            ("stepper_x", "stepper_x (X)", True),
+            ("stepper_y", "stepper_y (Y)", True),
+            ("stepper_z", "stepper_z (Z)", True),
+            ("extruder", "extruder (E)", True),
+        ]
+        if z_count >= 2:
+            stepper_choices.append(("stepper_z1", "stepper_z1 (Z1)", True))
+        if z_count >= 3:
+            stepper_choices.append(("stepper_z2", "stepper_z2 (Z2)", True))
+        if z_count >= 4:
+            stepper_choices.append(("stepper_z3", "stepper_z3 (Z3)", True))
+        if awd_enabled:
+            stepper_choices.extend(
+                [
+                    ("stepper_x1", "stepper_x1 (AWD X1)", True),
+                    ("stepper_y1", "stepper_y1 (AWD Y1)", True),
+                ]
+            )
+
+        selected_steppers = self.ui.checklist(
+            "Select which steppers/extruder to autotune:\n\n"
+            "This will generate config sections like:\n"
+            "  [autotune_tmc stepper_x]\n\n"
+            "Pick only steppers that actually use TMC drivers.",
+            stepper_choices,
+            title="TMC Autotune - Select Steppers",
+            height=22,
+            width=92,
+            list_height=10,
         )
-        if motor_x is None:
+        if selected_steppers is None:
             return
-        motor_y = self.ui.inputbox(
-            "Motor preset for Y (plugin-specific string):\n\n"
-            "Leave blank to omit.",
-            default=str(self.state.get("tuning.tmc_autotune.motor_y", "")),
-            title="TMC Autotune - motor_y",
-            height=14,
-            width=88,
-        )
-        if motor_y is None:
+        if not selected_steppers:
+            self.ui.msgbox("No steppers selected. Nothing to configure.", title="TMC Autotune")
             return
-        motor_z = self.ui.inputbox(
-            "Motor preset for Z (plugin-specific string):\n\n"
-            "Leave blank to omit.",
-            default=str(self.state.get("tuning.tmc_autotune.motor_z", "")),
-            title="TMC Autotune - motor_z",
-            height=14,
-            width=88,
-        )
-        if motor_z is None:
-            return
-        motor_e = self.ui.inputbox(
-            "Motor preset for Extruder (plugin-specific string):\n\n"
-            "Leave blank to omit.",
-            default=str(self.state.get("tuning.tmc_autotune.motor_extruder", "")),
-            title="TMC Autotune - motor_extruder",
-            height=14,
-            width=88,
-        )
-        if motor_e is None:
-            return
+
+        # Legacy defaults (older wizard versions stored motor_x/motor_y/...)
+        legacy_defaults = {
+            "stepper_x": str(self.state.get("tuning.tmc_autotune.motor_x", "") or ""),
+            "stepper_y": str(self.state.get("tuning.tmc_autotune.motor_y", "") or ""),
+            "stepper_z": str(self.state.get("tuning.tmc_autotune.motor_z", "") or ""),
+            "extruder": str(self.state.get("tuning.tmc_autotune.motor_extruder", "") or ""),
+        }
+        existing_list = self.state.get("tuning.tmc_autotune.steppers", [])
+        existing_map: dict[str, str] = {}
+        if isinstance(existing_list, list):
+            for e in existing_list:
+                if isinstance(e, dict) and isinstance(e.get("stepper"), str):
+                    motor = e.get("motor")
+                    if isinstance(motor, str):
+                        existing_map[e["stepper"]] = motor
+
+        steppers_cfg: list[dict] = []
+        chosen_motors_by_stepper: dict[str, str] = {}
+        last_nonempty_motor: str = ""
+        last_nonempty_stepper: str = ""
+        for stepper in selected_steppers:
+            default_motor = existing_map.get(stepper, legacy_defaults.get(stepper, ""))
+            # Convenience: allow reusing the same motor as stepper_x (or last chosen motor)
+            # to avoid repeatedly searching the database for identical motors.
+            motor: str | None
+            reuse_motor: str | None = None
+            reuse_from: str | None = None
+            if stepper != "stepper_x":
+                mx = (chosen_motors_by_stepper.get("stepper_x") or "").strip()
+                if mx:
+                    reuse_motor = mx
+                    reuse_from = "stepper_x"
+                elif last_nonempty_motor:
+                    reuse_motor = last_nonempty_motor
+                    reuse_from = last_nonempty_stepper or "previous"
+
+            if reuse_motor and reuse_from:
+                use_same = self.ui.yesno(
+                    f"Use same motor as {reuse_from}?\n\n"
+                    f"{reuse_motor}\n\n"
+                    f"For: {stepper}",
+                    title="TMC Autotune - Reuse Motor",
+                    default_no=False,
+                    height=14,
+                    width=90,
+                )
+                if use_same is None:
+                    return
+                if use_same:
+                    motor = reuse_motor
+                else:
+                    motor = _pick_motor_id(stepper, default_motor)
+            else:
+                motor = _pick_motor_id(stepper, default_motor)
+            if motor is None:
+                return
+            motor = (motor or "").strip()
+            chosen_motors_by_stepper[stepper] = motor
+            if motor:
+                last_nonempty_motor = motor
+                last_nonempty_stepper = stepper
+            steppers_cfg.append({"stepper": stepper, "motor": motor})
 
         voltage_choice = self.ui.radiolist(
             "System voltage:",
@@ -6044,10 +7518,7 @@ class GschpooziWizard:
 
         self.state.set("tuning.tmc_autotune.enabled", True)
         self.state.set("tuning.tmc_autotune.emit_config", bool(emit))
-        self.state.set("tuning.tmc_autotune.motor_x", (motor_x or "").strip())
-        self.state.set("tuning.tmc_autotune.motor_y", (motor_y or "").strip())
-        self.state.set("tuning.tmc_autotune.motor_z", (motor_z or "").strip())
-        self.state.set("tuning.tmc_autotune.motor_extruder", (motor_e or "").strip())
+        self.state.set("tuning.tmc_autotune.steppers", steppers_cfg)
         try:
             self.state.set("tuning.tmc_autotune.voltage", int(voltage_choice))
         except Exception:

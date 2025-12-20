@@ -4,9 +4,15 @@
 
 ---
 
-## Beta Software
+## 🎉 Almost Fully Functional!
 
-This software is in beta. While core functionality is stable, some hardware combinations may require manual adjustments.
+The wizard is now **almost fully functional** and ready for real-world testing. Most features work as intended, and we're actively fixing bugs as they're reported.
+
+**Found a bug?** Please [file an issue](https://github.com/gm-tc-collaborators/gschpoozi/issues/new/choose) using our issue templates. Include:
+- What you were trying to do
+- What happened instead
+- Your board/hardware setup
+- Any error messages
 
 **Before using generated configs:**
 - Review generated files and verify pin assignments match your wiring
@@ -14,10 +20,15 @@ This software is in beta. While core functionality is stable, some hardware comb
 - Test with `STEPPER_BUZZ` before homing
 - Be ready to hit emergency stop on first home
 
-**Known Limitations:**
-- Stepper/motor discovery is not integrated/reliable yet — assume you must already know which motor is on which driver/port
-- Macro setup (START_PRINT / END_PRINT / macro defaults) is not fully tested across printers yet — review generated macros before relying on them
-- Manual verification of motor directions is required (do this before homing)
+**Current Status:**
+- ✅ Full wizard flow working (MCU, kinematics, steppers, extruder, bed, fans, probe, etc.)
+- ✅ Klipper component management (install/update/remove Klipper, Moonraker, Mainsail, etc.)
+- ✅ KlipperScreen integration (install, configure, remove)
+- ✅ CAN bus setup wizard
+- ✅ TMC Autotune integration with motor database picker
+- ✅ Config generation with proper pin mappings
+- ⚠️ Stepper/motor discovery is informational only — you need to know your wiring
+- ⚠️ Macro defaults may need tuning for your specific printer
 
 ---
 
@@ -149,6 +160,14 @@ variable_my_var: 100       # Add your own variables
 **Kinematics**: CoreXY, CoreXY AWD, Cartesian, CoreXZ
 
 See [Usage Manual](docs/USAGE.md) for complete hardware list.
+
+## Reporting Issues
+
+Found a bug or have a feature request? Please use our issue templates:
+
+- **🐛 [Bug Report](https://github.com/gm-tc-collaborators/gschpoozi/issues/new?template=bug_report.md)** - Something isn't working
+- **✨ [Feature Request](https://github.com/gm-tc-collaborators/gschpoozi/issues/new?template=feature_request.md)** - Suggest an improvement
+- **🔧 [Hardware Request](https://github.com/gm-tc-collaborators/gschpoozi/issues/new?template=hardware_request.md)** - Request support for a new board/probe/extruder
 
 ## Contributing
 

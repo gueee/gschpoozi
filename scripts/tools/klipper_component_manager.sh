@@ -33,23 +33,23 @@ fi
 # ------------------------------------------------------------------------------
 
 # Colors (ANSI)
-RED="${RED:-'\033[0;31m'}"
-GREEN="${GREEN:-'\033[0;32m'}"
-YELLOW="${YELLOW:-'\033[0;33m'}"
-BLUE="${BLUE:-'\033[0;34m'}"
-MAGENTA="${MAGENTA:-'\033[0;35m'}"
-CYAN="${CYAN:-'\033[0;36m'}"
-WHITE="${WHITE:-'\033[0;37m'}"
+RED="${RED:-$'\033[0;31m'}"
+GREEN="${GREEN:-$'\033[0;32m'}"
+YELLOW="${YELLOW:-$'\033[0;33m'}"
+BLUE="${BLUE:-$'\033[0;34m'}"
+MAGENTA="${MAGENTA:-$'\033[0;35m'}"
+CYAN="${CYAN:-$'\033[0;36m'}"
+WHITE="${WHITE:-$'\033[0;37m'}"
 
-BRED="${BRED:-'\033[1;31m'}"
-BGREEN="${BGREEN:-'\033[1;32m'}"
-BYELLOW="${BYELLOW:-'\033[1;33m'}"
-BBLUE="${BBLUE:-'\033[1;34m'}"
-BMAGENTA="${BMAGENTA:-'\033[1;35m'}"
-BCYAN="${BCYAN:-'\033[1;36m'}"
-BWHITE="${BWHITE:-'\033[1;37m'}"
+BRED="${BRED:-$'\033[1;31m'}"
+BGREEN="${BGREEN:-$'\033[1;32m'}"
+BYELLOW="${BYELLOW:-$'\033[1;33m'}"
+BBLUE="${BBLUE:-$'\033[1;34m'}"
+BMAGENTA="${BMAGENTA:-$'\033[1;35m'}"
+BCYAN="${BCYAN:-$'\033[1;36m'}"
+BWHITE="${BWHITE:-$'\033[1;37m'}"
 
-NC="${NC:-'\033[0m'}"
+NC="${NC:-$'\033[0m'}"
 
 # Box drawing
 BOX_TL="${BOX_TL:-"╔"}"

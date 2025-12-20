@@ -345,8 +345,10 @@ extruder:
     {% else %}
     sensor_pin: {{ "^" if extruder.sensor_pullup | default(false) else "" }}{{ board.pins[extruder.sensor_port_mainboard].signal }}
     {% endif %}
-    sensor_type: {{ extruder.sensor_type }}
-    pullup_resistor: {{ extruder.pullup_resistor | default(4700) }}
+    sensor_type: {{ extruder.sensor_type | default('Generic 3950', true) }}
+    {% if extruder.pullup_resistor is defined and extruder.pullup_resistor %}
+    pullup_resistor: {{ extruder.pullup_resistor }}
+    {% endif %}
     min_temp: {{ extruder.min_temp | default(0) }}
     max_temp: {{ extruder.max_temp | default(300) }}
     min_extrude_temp: {{ extruder.min_extrude_temp | default(170) }}
@@ -366,16 +368,24 @@ extruder:
 heater_bed:
   template: |
     [heater_bed]
+    {% if heater_bed.heater_pin in board.pins -%}
     heater_pin: {{ board.pins[heater_bed.heater_pin].signal }}
+    {% else -%}
+    heater_pin: {{ heater_bed.heater_pin }}
+    {% endif -%}
+    {% if heater_bed.sensor_port in board.pins -%}
     sensor_pin: {{ board.pins[heater_bed.sensor_port].signal }}
-    sensor_type: {{ heater_bed.sensor_type }}
-    {% if heater_bed.pullup_resistor %}
+    {% else -%}
+    sensor_pin: {{ heater_bed.sensor_port }}
+    {% endif -%}
+    sensor_type: {{ heater_bed.sensor_type | default('Generic 3950', true) }}
+    {% if heater_bed.pullup_resistor -%}
     pullup_resistor: {{ heater_bed.pullup_resistor }}
-    {% endif %}
+    {% endif -%}
     max_power: {{ heater_bed.max_power | default(1.0) }}
-    {% if heater_bed.pwm_cycle_time is defined and heater_bed.pwm_cycle_time and heater_bed.pwm_cycle_time != 0.0166 %}
+    {% if heater_bed.pwm_cycle_time is defined and heater_bed.pwm_cycle_time and heater_bed.pwm_cycle_time != 0.0166 -%}
     pwm_cycle_time: {{ heater_bed.pwm_cycle_time }}
-    {% endif %}
+    {% endif -%}
     min_temp: {{ heater_bed.min_temp | default(0) }}
     max_temp: {{ heater_bed.max_temp | default(120) }}
     # PID values - run PID_CALIBRATE HEATER=heater_bed TARGET=60
@@ -670,19 +680,26 @@ common:
       # in the wizard.
       # ─────────────────────────────────────────────────────────────────────────────
       {% if tuning.tmc_autotune.emit_config | default(false) %}
-      [autotune_tmc]
-      {% if tuning.tmc_autotune.motor_x %}motor_x: {{ tuning.tmc_autotune.motor_x }}{% endif %}
-      {% if tuning.tmc_autotune.motor_y %}motor_y: {{ tuning.tmc_autotune.motor_y }}{% endif %}
-      {% if tuning.tmc_autotune.motor_z %}motor_z: {{ tuning.tmc_autotune.motor_z }}{% endif %}
-      {% if tuning.tmc_autotune.motor_extruder %}motor_extruder: {{ tuning.tmc_autotune.motor_extruder }}{% endif %}
-      {% if tuning.tmc_autotune.voltage %}voltage: {{ tuning.tmc_autotune.voltage }}{% endif %}
-      {% if tuning.tmc_autotune.tuning_goal %}tuning_goal: {{ tuning.tmc_autotune.tuning_goal }}{% endif %}
+      # One section per tuned stepper/extruder.
+      # See: https://github.com/andrewmcgr/klipper_tmc_autotune#autotune-configuration
+      {% for s in (tuning.tmc_autotune.steppers | default([])) %}
+      [autotune_tmc {{ s.stepper }}]
+      {% if s.motor -%}
+      motor: {{ s.motor }}
+      {% endif -%}
+      {% if tuning.tmc_autotune.voltage -%}
+      voltage: {{ tuning.tmc_autotune.voltage }}
+      {% endif -%}
+      {% if tuning.tmc_autotune.tuning_goal -%}
+      tuning_goal: {{ tuning.tmc_autotune.tuning_goal }}
+      {% endif %}
+
+      {% endfor %}
       {% else %}
-      # [autotune_tmc]
-      # motor_x: <select in wizard>
-      # motor_y: <select in wizard>
-      # motor_z: <select in wizard>
-      # motor_extruder: <select in wizard>
+      # [autotune_tmc stepper_x]
+      # motor: <select in wizard>
+      # [autotune_tmc stepper_y]
+      # motor: <select in wizard>
       # voltage: 24
       # tuning_goal: auto
       {% endif %}

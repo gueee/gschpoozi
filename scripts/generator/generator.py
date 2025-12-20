@@ -275,6 +275,10 @@ class ConfigGenerator:
             # Best-effort defaults only; never block generation here.
             pass
 
+        # Pre-resolve all pins with modifiers for simpler templates
+        # Templates can use {{ pins.stepper_x.endstop }} instead of inline modifier logic
+        context['pins'] = self._resolve_pins(context)
+
         return context
 
     def _load_board_definition(self, board_type: str) -> Dict[str, Any]:
@@ -415,6 +419,297 @@ class ConfigGenerator:
             'thermistor_ports': [],
             'endstop_ports': [],
         }
+
+    def _resolve_pins(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Pre-resolve all pin references with modifiers for simpler templates.
+        
+        This method transforms state + board definitions into ready-to-use pin strings.
+        Templates can then use `{{ pins.stepper_x.endstop }}` instead of complex
+        modifier logic inline.
+        
+        Returns a nested dict structure like:
+        {
+            'stepper_x': {
+                'step': 'PF13',
+                'dir': '!PF12',  # with invert modifier
+                'enable': '!PF14',  # always inverted
+                'uart': 'PC4',
+                'cs': 'PC4',
+                'diag': '^PG6',  # sensorless
+                'endstop': '^PG6',  # with pullup
+            },
+            'extruder': {
+                'step': 'toolboard:PA9',
+                'heater': 'toolboard:PB4',
+                'sensor': '^toolboard:PA0',  # with pullup
+            },
+            'heater_bed': {
+                'heater': 'PA2',
+                'sensor': 'PF3',
+            },
+            'fans': {
+                'part_cooling': 'toolboard:PA0',
+                'hotend': 'toolboard:PA1',
+                'controller': 'PE5',
+            },
+            ...
+        }
+        """
+        pins: Dict[str, Any] = {}
+        
+        board = context.get('board', {})
+        toolboard = context.get('toolboard', {})
+        board_pins = board.get('pins', {}) if isinstance(board, dict) else {}
+        toolboard_pins = toolboard.get('pins', {}) if isinstance(toolboard, dict) else {}
+        
+        # Helper to get a pin with optional modifiers
+        def _get_pin(pin_dict: dict, port_id: str, pin_type: str = 'signal', 
+                     mcu_prefix: str = '', pullup: bool = False, invert: bool = False) -> Optional[str]:
+            """Resolve a port ID to a pin string with modifiers."""
+            if not port_id or not pin_dict:
+                return None
+            port_data = pin_dict.get(port_id)
+            if not isinstance(port_data, dict):
+                return None
+            raw_pin = port_data.get(pin_type)
+            if not raw_pin:
+                return None
+            
+            # Build modifier prefix: ^ for pullup, ! for invert
+            # Klipper syntax: modifiers come BEFORE mcu prefix (e.g., ^toolboard:PB0)
+            mods = ''
+            if pullup:
+                mods += '^'
+            if invert:
+                mods += '!'
+            
+            if mcu_prefix:
+                return f"{mods}{mcu_prefix}:{raw_pin}"
+            return f"{mods}{raw_pin}"
+        
+        # Legacy pin_config lookup for backward compatibility
+        pin_config_map = {
+            'nc_gnd': (True, False),   # pullup, no invert
+            'no_gnd': (True, True),    # pullup + invert
+            'nc_vcc': (False, True),   # no pullup, invert
+            'no_vcc': (False, False),  # no modifiers
+        }
+        
+        # --- Steppers (X, Y, Z, X1, Y1, Z1, Z2, Z3) ---
+        for stepper_name in ['stepper_x', 'stepper_y', 'stepper_z', 
+                             'stepper_x1', 'stepper_y1', 'stepper_z1', 'stepper_z2', 'stepper_z3']:
+            stepper = context.get(stepper_name, {})
+            if not isinstance(stepper, dict):
+                continue
+            
+            motor_port = stepper.get('motor_port')
+            if not motor_port:
+                continue
+            
+            pins[stepper_name] = {}
+            
+            # Motor pins (always mainboard)
+            pins[stepper_name]['step'] = _get_pin(board_pins, motor_port, 'step')
+            
+            # Dir pin: may be inverted
+            dir_invert = stepper.get('dir_pin_inverted', False)
+            pins[stepper_name]['dir'] = _get_pin(board_pins, motor_port, 'dir', invert=dir_invert)
+            
+            # Enable pin: always inverted in Klipper
+            pins[stepper_name]['enable'] = _get_pin(board_pins, motor_port, 'enable', invert=True)
+            
+            # UART/CS for TMC drivers
+            pins[stepper_name]['uart'] = _get_pin(board_pins, motor_port, 'uart')
+            pins[stepper_name]['cs'] = _get_pin(board_pins, motor_port, 'cs')
+            
+            # Diag pin for sensorless homing (pullup)
+            pins[stepper_name]['diag'] = _get_pin(board_pins, motor_port, 'diag', pullup=True)
+            
+            # Endstop pin handling
+            endstop_type = stepper.get('endstop_type', '')
+            
+            if endstop_type == 'sensorless':
+                # Virtual endstop - handled in template
+                driver_type = stepper.get('driver_type', 'tmc2209').lower()
+                pins[stepper_name]['endstop'] = f"{driver_type}_{stepper_name}:virtual_endstop"
+            elif endstop_type == 'probe':
+                pins[stepper_name]['endstop'] = 'probe:z_virtual_endstop'
+            else:
+                # Physical endstop
+                # Check for new-style pullup/invert flags first
+                if 'endstop_pullup' in stepper or 'endstop_invert' in stepper:
+                    pullup = stepper.get('endstop_pullup', False)
+                    invert = stepper.get('endstop_invert', False)
+                else:
+                    # Fall back to legacy pin_config
+                    config_key = stepper.get('endstop_config') or stepper.get('switch_config') or 'nc_gnd'
+                    pullup, invert = pin_config_map.get(config_key, (True, False))
+                
+                # Check for toolboard endstop
+                tb_port = stepper.get('endstop_port_toolboard')
+                if tb_port and toolboard_pins:
+                    pins[stepper_name]['endstop'] = _get_pin(
+                        toolboard_pins, tb_port, 'signal', 
+                        mcu_prefix='toolboard', pullup=pullup, invert=invert
+                    )
+                else:
+                    # Mainboard endstop
+                    mb_port = stepper.get('endstop_port') or stepper.get('toolboard_endstop_port')
+                    if mb_port:
+                        pins[stepper_name]['endstop'] = _get_pin(
+                            board_pins, mb_port, 'signal',
+                            pullup=pullup, invert=invert
+                        )
+        
+        # --- Extruder ---
+        extruder = context.get('extruder', {})
+        if isinstance(extruder, dict):
+            pins['extruder'] = {}
+            location = extruder.get('location', 'mainboard')
+            
+            if location == 'toolboard':
+                motor_port = extruder.get('motor_port_toolboard')
+                if motor_port:
+                    pins['extruder']['step'] = _get_pin(toolboard_pins, motor_port, 'step', mcu_prefix='toolboard')
+                    dir_invert = extruder.get('dir_pin_inverted', False)
+                    pins['extruder']['dir'] = _get_pin(toolboard_pins, motor_port, 'dir', mcu_prefix='toolboard', invert=dir_invert)
+                    pins['extruder']['enable'] = _get_pin(toolboard_pins, motor_port, 'enable', mcu_prefix='toolboard', invert=True)
+                    pins['extruder']['uart'] = _get_pin(toolboard_pins, motor_port, 'uart', mcu_prefix='toolboard')
+            else:
+                motor_port = extruder.get('motor_port_mainboard')
+                if motor_port:
+                    pins['extruder']['step'] = _get_pin(board_pins, motor_port, 'step')
+                    dir_invert = extruder.get('dir_pin_inverted', False)
+                    pins['extruder']['dir'] = _get_pin(board_pins, motor_port, 'dir', invert=dir_invert)
+                    pins['extruder']['enable'] = _get_pin(board_pins, motor_port, 'enable', invert=True)
+                    pins['extruder']['uart'] = _get_pin(board_pins, motor_port, 'uart')
+            
+            # Heater pin
+            heater_loc = extruder.get('heater_location', 'mainboard')
+            if heater_loc == 'toolboard':
+                heater_port = extruder.get('heater_port_toolboard')
+                pins['extruder']['heater'] = _get_pin(toolboard_pins, heater_port, 'signal', mcu_prefix='toolboard')
+            else:
+                heater_port = extruder.get('heater_port_mainboard')
+                pins['extruder']['heater'] = _get_pin(board_pins, heater_port, 'signal')
+            
+            # Sensor pin (may have pullup)
+            sensor_loc = extruder.get('sensor_location', 'mainboard')
+            sensor_pullup = extruder.get('sensor_pullup', False)
+            if sensor_loc == 'toolboard':
+                sensor_port = extruder.get('sensor_port_toolboard')
+                pins['extruder']['sensor'] = _get_pin(
+                    toolboard_pins, sensor_port, 'signal',
+                    mcu_prefix='toolboard', pullup=sensor_pullup
+                )
+            else:
+                sensor_port = extruder.get('sensor_port_mainboard')
+                pins['extruder']['sensor'] = _get_pin(board_pins, sensor_port, 'signal', pullup=sensor_pullup)
+        
+        # --- Heater Bed ---
+        heater_bed = context.get('heater_bed', {})
+        if isinstance(heater_bed, dict):
+            pins['heater_bed'] = {}
+            
+            # Heater pin - check if it's a port ID or raw pin
+            heater_pin = heater_bed.get('heater_pin')
+            if heater_pin:
+                if heater_pin in board_pins:
+                    pins['heater_bed']['heater'] = _get_pin(board_pins, heater_pin, 'signal')
+                else:
+                    pins['heater_bed']['heater'] = heater_pin  # Raw pin
+            
+            # Sensor pin - check if it's a port ID or raw pin
+            sensor_port = heater_bed.get('sensor_port')
+            if sensor_port:
+                if sensor_port in board_pins:
+                    pins['heater_bed']['sensor'] = _get_pin(board_pins, sensor_port, 'signal')
+                else:
+                    pins['heater_bed']['sensor'] = sensor_port  # Raw pin
+        
+        # --- Fans ---
+        fans = context.get('fans', {})
+        if isinstance(fans, dict):
+            pins['fans'] = {}
+            
+            # Part cooling fan
+            part_cooling = fans.get('part_cooling', {})
+            if isinstance(part_cooling, dict):
+                loc = part_cooling.get('location', 'mainboard')
+                if loc == 'toolboard':
+                    pin_port = part_cooling.get('pin_toolboard')
+                    pins['fans']['part_cooling'] = _get_pin(toolboard_pins, pin_port, 'signal', mcu_prefix='toolboard')
+                else:
+                    pin_port = part_cooling.get('pin_mainboard')
+                    pins['fans']['part_cooling'] = _get_pin(board_pins, pin_port, 'signal')
+            
+            # Hotend fan
+            hotend = fans.get('hotend', {})
+            if isinstance(hotend, dict):
+                loc = hotend.get('location', 'mainboard')
+                if loc == 'toolboard':
+                    pin_port = hotend.get('pin_toolboard')
+                    pins['fans']['hotend'] = _get_pin(toolboard_pins, pin_port, 'signal', mcu_prefix='toolboard')
+                else:
+                    pin_port = hotend.get('pin_mainboard')
+                    pins['fans']['hotend'] = _get_pin(board_pins, pin_port, 'signal')
+            
+            # Controller fan
+            controller = fans.get('controller', {})
+            if isinstance(controller, dict) and controller.get('enabled'):
+                pin_port = controller.get('pin')
+                pins['fans']['controller'] = _get_pin(board_pins, pin_port, 'signal')
+            
+            # Additional fans
+            additional = fans.get('additional_fans', [])
+            if isinstance(additional, list):
+                pins['fans']['additional'] = []
+                for fan in additional:
+                    if not isinstance(fan, dict):
+                        continue
+                    fan_pins = {'name': fan.get('name', '')}
+                    
+                    if fan.get('pin_type') == 'multi_pin':
+                        # Multi-pin: use the multi_pin name reference
+                        fan_pins['pin'] = f"multi_pin:{fan.get('multi_pin_name', '')}"
+                    else:
+                        loc = fan.get('location', 'mainboard')
+                        pin_port = fan.get('pin')
+                        if loc == 'toolboard':
+                            fan_pins['pin'] = _get_pin(toolboard_pins, pin_port, 'signal', mcu_prefix='toolboard')
+                        else:
+                            fan_pins['pin'] = _get_pin(board_pins, pin_port, 'signal')
+                    
+                    pins['fans']['additional'].append(fan_pins)
+        
+        # --- Probe ---
+        probe = context.get('probe', {})
+        if isinstance(probe, dict):
+            pins['probe'] = {}
+            probe_type = probe.get('probe_type', '')
+            
+            if probe_type == 'bltouch':
+                # BLTouch uses raw pins from state
+                pins['probe']['sensor'] = probe.get('sensor_pin', '')
+                pins['probe']['control'] = probe.get('control_pin', '')
+            elif probe_type in ['inductive', 'klicky', 'tap']:
+                # Standard probe with pin_config
+                config_key = probe.get('pin_config', 'nc_gnd')
+                pullup, invert = pin_config_map.get(config_key, (True, False))
+                
+                loc = probe.get('location', 'mainboard')
+                if loc == 'toolboard':
+                    pin_port = probe.get('probe_pin_toolboard')
+                    pins['probe']['pin'] = _get_pin(
+                        toolboard_pins, pin_port, 'signal',
+                        mcu_prefix='toolboard', pullup=pullup, invert=invert
+                    )
+                else:
+                    pin_port = probe.get('probe_pin_mainboard')
+                    pins['probe']['pin'] = _get_pin(board_pins, pin_port, 'signal', pullup=pullup, invert=invert)
+        
+        return pins
 
     def _get_extruder_presets(self) -> Dict[str, Any]:
         """Get extruder preset values."""

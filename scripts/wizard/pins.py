@@ -196,6 +196,10 @@ class PinManager:
                 if isinstance(pin, str) and pin.strip():
                     self._used_pins["mainboard"][pin.strip()] = f"Temp sensor ({name})"
 
+    def refresh(self) -> None:
+        """Reload used pins from current state. Call after state.save()."""
+        self.load_used_from_state()
+
     def mark_used(self, location: str, port_id: str, purpose: str) -> None:
         """Mark a pin/port as used."""
         if location not in self._used_pins:
@@ -234,11 +238,46 @@ class PinManager:
             return self.toolboard_data
         return self.board_data
 
+    # Keywords that indicate a misc_port is an INPUT (not suitable for heater/output control)
+    INPUT_PORT_KEYWORDS = {'sensor', 'input', 'button', 'switch', 'detect', 'runout', 'unload'}
+
+    # Keywords that indicate a misc_port is an OUTPUT (suitable for output control)
+    OUTPUT_PORT_KEYWORDS = {'led', 'light', 'rgb', 'neopixel', 'servo', 'pwm', 'signal'}
+
+    def _is_input_port(self, port_id: str, port_info: Dict[str, Any]) -> bool:
+        """
+        Determine if a misc_port is likely an INPUT pin.
+
+        Uses naming conventions to classify pins since misc_ports
+        can contain both inputs (sensors, buttons) and outputs (LEDs, servos).
+        """
+        # Check port ID and label for input keywords
+        port_id_lower = port_id.lower()
+        label_lower = (port_info.get("label", "") if isinstance(port_info, dict) else "").lower()
+
+        for keyword in self.INPUT_PORT_KEYWORDS:
+            if keyword in port_id_lower or keyword in label_lower:
+                return True
+        return False
+
+    def _is_output_port(self, port_id: str, port_info: Dict[str, Any]) -> bool:
+        """
+        Determine if a misc_port is likely an OUTPUT pin.
+        """
+        port_id_lower = port_id.lower()
+        label_lower = (port_info.get("label", "") if isinstance(port_info, dict) else "").lower()
+
+        for keyword in self.OUTPUT_PORT_KEYWORDS:
+            if keyword in port_id_lower or keyword in label_lower:
+                return True
+        return False
+
     def get_available_pins(
         self,
         location: str,
         groups: List[str],
-        exclude_ports: Set[str] = None
+        exclude_ports: Set[str] = None,
+        filter_direction: str = None
     ) -> List[Tuple[str, str, Dict[str, Any]]]:
         """
         Get available pins from specified groups.
@@ -247,6 +286,7 @@ class PinManager:
             location: "mainboard" or "toolboard"
             groups: List of port group names (e.g., ["fan_ports", "heater_ports"])
             exclude_ports: Additional ports to exclude
+            filter_direction: "output" to exclude input pins, "input" to exclude output pins, None for no filter
 
         Returns:
             List of (port_id, label, port_info) tuples for available pins
@@ -268,6 +308,13 @@ class PinManager:
                 # Skip if already used or explicitly excluded
                 if port_id in used or port_id in exclude:
                     continue
+
+                # Apply direction filtering for misc_ports
+                if group == "misc_ports" and filter_direction:
+                    if filter_direction == "output" and self._is_input_port(port_id, port_info):
+                        continue  # Skip input pins when looking for outputs
+                    if filter_direction == "input" and self._is_output_port(port_id, port_info):
+                        continue  # Skip output pins when looking for inputs
 
                 # Build label
                 if isinstance(port_info, dict):
@@ -568,8 +615,9 @@ class PinManager:
         """
         title = title or f"Select {purpose}"
 
-        # Get available thermistor pins
-        available = self.get_available_pins(location, ["thermistor_ports", "misc_ports"])
+        # Get available thermistor pins - only thermistor_ports have ADC capability
+        # Do NOT include misc_ports for analog inputs (they are not ADC-capable)
+        available = self.get_available_pins(location, ["thermistor_ports"])
 
         if not available:
             # Manual entry fallback
@@ -677,7 +725,8 @@ class PinManager:
 
         title = title or f"Select {purpose} Pin"
 
-        available = self.get_available_pins(location, groups, exclude_ports)
+        # Filter out input pins when selecting outputs
+        available = self.get_available_pins(location, groups, exclude_ports, filter_direction="output")
 
         if not available:
             return self.ui.inputbox(

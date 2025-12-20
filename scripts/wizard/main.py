@@ -40,10 +40,10 @@ class GschpooziWizard:
         """Create a PinManager with current board data."""
         board_id = self.state.get("mcu.main.board_type", "")
         board_data = self._load_board_data(board_id, "boards") if board_id else {}
-        
+
         toolboard_id = self.state.get("mcu.toolboard.board_type", "")
         toolboard_data = self._load_board_data(toolboard_id, "toolboards") if toolboard_id else {}
-        
+
         return PinManager(self.state, self.ui, board_data, toolboard_data)
 
     def _wizard_log_path(self) -> Path:
@@ -575,7 +575,7 @@ class GschpooziWizard:
         Collect a mapping of raw mainboard pins -> description for conflict detection.
 
         This intentionally focuses on pins the wizard assigns (steppers/fans/heaters/sensors), not a full parser.
-        
+
         .. deprecated:: 2.1
             Use PinManager.load_used_from_state() and PinManager.get_all_used() instead.
             See scripts/wizard/pins.py for the new unified pin management approach.
@@ -1756,9 +1756,6 @@ class GschpooziWizard:
             # Advanced
             advanced_status = None
             adv_parts = []
-            multi_pins = self.state.get("advanced.multi_pins", [])
-            if isinstance(multi_pins, list) and len(multi_pins) > 0:
-                adv_parts.append("Multi-pin")
             if self.state.get("advanced.force_move.enable_force_move", False):
                 adv_parts.append("ForceMove")
             if self.state.get("advanced.firmware_retraction.enabled", False):
@@ -2918,28 +2915,19 @@ class GschpooziWizard:
 
                 use_inherited = self.ui.yesno(prompt, title=f"Stepper {axis_upper} - Inheritance")
 
-        # Motor port selection
-        motor_ports = self._get_board_ports("motor_ports", "boards")
-        if motor_ports:
-            current_port = self.state.get(f"{state_key}.motor_port", "")
-            motor_port = self.ui.radiolist(
-                f"Select motor port for {axis_upper} axis:",
-                [
-                    (
-                        p,
-                        l,
-                        (p == current_port) if current_port else (p == default_port),
-                    )
-                    for p, l, d in motor_ports
-                ],
-                title=f"Stepper {axis_upper} - Motor Port"
-            )
-        else:
-            motor_port = self.ui.inputbox(
-                f"Motor port for {axis_upper} axis:",
-                default=default_port,
-                title=f"Stepper {axis_upper} - Motor Port"
-            )
+        # Motor port selection using PinManager (filters used ports)
+        pin_manager = self._get_pin_manager()
+        current_port = self.state.get(f"{state_key}.motor_port", "")
+        # Mark current port as available for reselection
+        if current_port:
+            pin_manager.mark_unused("mainboard", current_port)
+
+        motor_port = pin_manager.select_motor_port(
+            location="mainboard",
+            purpose=f"{axis_upper} Axis",
+            current_port=current_port or default_port,
+            title=f"Stepper {axis_upper} - Motor Port"
+        )
         if motor_port is None:
             return
 
@@ -3760,6 +3748,8 @@ class GschpooziWizard:
             ],
             title="Z Axis - Motor Count"
         )
+        if z_count is None:
+            return
 
         # Drive type
         drive_type = self.ui.radiolist(
@@ -3770,6 +3760,8 @@ class GschpooziWizard:
             ],
             title="Z Axis - Drive"
         )
+        if drive_type is None:
+            return
 
         if drive_type == "leadscrew":
             pitch = self.ui.radiolist(
@@ -3781,6 +3773,8 @@ class GschpooziWizard:
                 ],
                 title="Z Axis - Leadscrew"
             )
+            if pitch is None:
+                return
         else:
             pitch = "2"  # Belt driven uses belt pitch
 
@@ -3794,6 +3788,8 @@ class GschpooziWizard:
             ],
             title="Z Axis - Endstop"
         )
+        if endstop_type is None:
+            return
 
         # Position - use saved value or bed_z
         bed_z = self.state.get("printer.bed_size_z", 350)
@@ -3803,6 +3799,8 @@ class GschpooziWizard:
             default=str(position_default),
             title="Z Axis - Position"
         )
+        if position_max is None:
+            return
 
         # Current
         run_current = self.ui.inputbox(
@@ -3810,12 +3808,14 @@ class GschpooziWizard:
             default=str(current_run_current),
             title="Z Axis - Driver"
         )
+        if run_current is None:
+            return
 
         # Save
         self.state.set("stepper_z.z_motor_count", int(z_count or 4))
-        self.state.set("stepper_z.drive_type", drive_type or "leadscrew")
+        self.state.set("stepper_z.drive_type", drive_type)
         self.state.set("stepper_z.leadscrew_pitch", int(pitch or 8))
-        self.state.set("stepper_z.endstop_type", endstop_type or "probe")
+        self.state.set("stepper_z.endstop_type", endstop_type)
         self.state.set("stepper_z.position_max", int(position_max or bed_z))
         self.state.set("stepper_z.run_current", float(run_current or 0.8))
         self.state.save()
@@ -3832,7 +3832,7 @@ class GschpooziWizard:
 
     def _extruder_setup(self) -> None:
         """Configure extruder motor and hotend per schema 2.6.
-        
+
         Uses PinManager for consistent pin selection with conflict detection.
         """
         # Get current values for pre-selection (using correct state keys)
@@ -3870,25 +3870,22 @@ class GschpooziWizard:
         if motor_location is None:
             return
 
-        # Motor port selection
-        board_type = "toolboards" if motor_location == "toolboard" else "boards"
-        motor_ports = self._get_board_ports("motor_ports", board_type)
-        if motor_ports:
-            # Check both possible keys for current value
-            current_port = self.state.get(f"extruder.motor_port_{motor_location}", "") or \
-                          self.state.get("extruder.motor_port_mainboard", "") or \
-                          self.state.get("extruder.motor_port_toolboard", "")
-            motor_port = self.ui.radiolist(
-                f"Select motor port on {motor_location}:",
-                [(p, l, p == current_port or d) for p, l, d in motor_ports],
-                title="Extruder Motor - Port"
-            )
-        else:
-            motor_port = self.ui.inputbox(
-                f"Enter motor port on {motor_location}:",
-                default=current_port or ("EXTRUDER" if motor_location == "toolboard" else "MOTOR_5"),
-                title="Extruder Motor - Port"
-            )
+        # Motor port selection using PinManager (filters used ports)
+        pin_manager = self._get_pin_manager()
+        # Check both possible keys for current value
+        current_port = self.state.get(f"extruder.motor_port_{motor_location}", "") or \
+                      self.state.get("extruder.motor_port_mainboard", "") or \
+                      self.state.get("extruder.motor_port_toolboard", "")
+        # Mark current port as available for reselection
+        if current_port:
+            pin_manager.mark_unused(motor_location, current_port)
+
+        motor_port = pin_manager.select_motor_port(
+            location=motor_location,
+            purpose="Extruder",
+            current_port=current_port or ("EXTRUDER" if motor_location == "toolboard" else "MOTOR_5"),
+            title="Extruder Motor - Port"
+        )
         if motor_port is None:
             return
 
@@ -3994,7 +3991,7 @@ class GschpooziWizard:
                       self.state.get("extruder.heater_port_toolboard", "")
         # Remove current port from used set so we can reconfigure
         pin_manager.mark_unused(heater_location, current_port)
-        
+
         heater_port = pin_manager.select_output_pin(
             location=heater_location,
             purpose="Hotend Heater",
@@ -4005,7 +4002,7 @@ class GschpooziWizard:
         )
         if heater_port is None:
             return
-        
+
         pin_manager.mark_used(heater_location, heater_port, "Hotend heater")
 
         max_power = self.ui.inputbox(
@@ -4038,7 +4035,7 @@ class GschpooziWizard:
                       self.state.get("extruder.sensor_port_toolboard", "")
         # Remove current port from used set so we can reconfigure
         pin_manager.mark_unused(sensor_location, current_port)
-        
+
         sensor_port = pin_manager.select_output_pin(
             location=sensor_location,
             purpose="Hotend Thermistor",
@@ -4049,7 +4046,7 @@ class GschpooziWizard:
         )
         if sensor_port is None:
             return
-        
+
         pin_manager.mark_used(sensor_location, sensor_port, "Hotend thermistor")
 
         # Sensor pin pullup (^ modifier) - many toolboards need this
@@ -4090,7 +4087,7 @@ class GschpooziWizard:
         has_pullup_key = isinstance(extruder_cfg, dict) and ("pullup_resistor" in extruder_cfg)
         current_pullup = extruder_cfg.get("pullup_resistor") if has_pullup_key else None
         effective_pullup = int(current_pullup) if isinstance(current_pullup, (int, float, str)) and current_pullup else int(default_pullup)
-        
+
         pullup_resistor = pin_manager.select_pullup_resistor(
             default=effective_pullup if not (has_pullup_key and current_pullup is None) else None,
             title="Hotend - Pullup Resistor"
@@ -4315,7 +4312,7 @@ class GschpooziWizard:
         """Build radiolist options for output pins (heaters, fans, misc outputs).
 
         Returns list of (tag, label, is_selected) tuples.
-        
+
         .. deprecated:: 2.1
             Use PinManager.select_output_pin() instead.
             See scripts/wizard/pins.py for the new unified pin selection approach.
@@ -4370,7 +4367,7 @@ class GschpooziWizard:
         """Build radiolist options for thermistor/ADC pins.
 
         Returns list of (tag, label, is_selected) tuples.
-        
+
         .. deprecated:: 2.1
             Use PinManager.select_output_pin() with groups=["thermistor_ports"] instead.
             See scripts/wizard/pins.py for the new unified pin selection approach.
@@ -4423,7 +4420,7 @@ class GschpooziWizard:
 
     def _heater_bed_setup(self) -> None:
         """Configure heated bed per schema 2.7.
-        
+
         Uses PinManager for consistent pin selection with conflict detection.
         """
         # Get current values
@@ -4609,7 +4606,7 @@ class GschpooziWizard:
 
     def _fans_setup(self) -> None:
         """Configure fans.
-        
+
         Uses PinManager for consistent pin selection with conflict detection.
         """
         has_toolboard = self.state.get("mcu.toolboard.connection_type") or \
@@ -4641,7 +4638,7 @@ class GschpooziWizard:
                       self.state.get("fans.part_cooling.pin_toolboard", "")
         # Remove current pin from used set so we can reconfigure
         pin_manager.mark_unused(part_location, current_pin)
-        
+
         part_pin = pin_manager.select_output_pin(
             location=part_location,
             purpose="Part Cooling Fan",
@@ -4652,7 +4649,7 @@ class GschpooziWizard:
         )
         if part_pin is None:
             return
-        
+
         # Mark as used for conflict detection
         pin_manager.mark_used(part_location, part_pin, "Part cooling fan")
 
@@ -4719,7 +4716,7 @@ class GschpooziWizard:
                       self.state.get("fans.hotend.pin_toolboard", "")
         # Remove current pin from used set so we can reconfigure
         pin_manager.mark_unused(hotend_location, current_pin)
-        
+
         hotend_pin = pin_manager.select_output_pin(
             location=hotend_location,
             purpose="Hotend Fan",
@@ -4730,7 +4727,7 @@ class GschpooziWizard:
         )
         if hotend_pin is None:
             return
-        
+
         # Mark as used for conflict detection
         pin_manager.mark_used(hotend_location, hotend_pin, "Hotend fan")
 
@@ -4773,7 +4770,7 @@ class GschpooziWizard:
             current_pin = self.state.get("fans.controller.pin", "")
             # Remove current pin from used set so we can reconfigure
             pin_manager.mark_unused("mainboard", current_pin)
-            
+
             controller_pin = pin_manager.select_output_pin(
                 location="mainboard",
                 purpose="Controller Fan",
@@ -4784,7 +4781,7 @@ class GschpooziWizard:
             )
             if controller_pin is None:
                 return
-            
+
             # Mark as used for conflict detection
             pin_manager.mark_used("mainboard", controller_pin, "Controller fan")
 
@@ -5876,6 +5873,83 @@ class GschpooziWizard:
             self.state.delete("temperature_sensors.chamber")
             self.state.save()
 
+        # Probe temperature sensor (Beacon/Cartographer/Eddy/PINDA)
+        probe_type = self.state.get("probe.probe_type", "")
+        eddy_probes = ["beacon", "cartographer", "btt_eddy"]
+        inductive_probes = ["inductive"]  # PINDA
+        
+        current_probe_temp_enabled = self.state.get("temperature_sensors.probe.enabled", False)
+        
+        if probe_type in eddy_probes:
+            # Eddy current probes (Beacon/Cartographer/BTT Eddy) have coil temperature
+            probe_name_map = {"beacon": "Beacon", "cartographer": "Cartographer", "btt_eddy": "BTT Eddy"}
+            probe_display_name = probe_name_map.get(probe_type, "Probe")
+            
+            if self.ui.yesno(
+                f"Enable {probe_display_name} coil temperature sensor?\n\n"
+                f"This monitors the eddy current coil temperature,\n"
+                f"which can help with thermal drift compensation.",
+                title="Probe Temperature Sensor",
+                default_no=not current_probe_temp_enabled
+            ):
+                sensors.append({
+                    "name": f"{probe_type}_coil_temp",
+                    "type": "temperature_probe",
+                    "probe": probe_type
+                })
+                self.state.set("temperature_sensors.probe.enabled", True)
+                self.state.set("temperature_sensors.probe.sensor_type", "eddy_coil")
+            else:
+                self.state.set("temperature_sensors.probe.enabled", False)
+                self.state.delete("temperature_sensors.probe.sensor_type")
+            self.state.save()
+            
+        elif probe_type in inductive_probes:
+            # PINDA probes can have built-in NTC temperature sensor
+            if self.ui.yesno(
+                "Does your PINDA probe have a temperature sensor?\n\n"
+                "Some PINDA probes (v2) include a built-in NTC\n"
+                "thermistor for temperature compensation.",
+                title="Probe Temperature Sensor",
+                default_no=not current_probe_temp_enabled
+            ):
+                # Ask for pin
+                current_probe_pin = self.state.get("temperature_sensors.probe.sensor_pin", "")
+                sensor_ports = self._get_board_ports("thermistor_ports", "boards")
+                if sensor_ports:
+                    probe_pin = self.ui.radiolist(
+                        "Select PINDA thermistor port:",
+                        [(p, l, p == current_probe_pin or d) for p, l, d in sensor_ports],
+                        title="PINDA Thermistor Port"
+                    )
+                else:
+                    probe_pin = self.ui.inputbox(
+                        "Enter PINDA thermistor pin:",
+                        default=current_probe_pin,
+                        title="PINDA Thermistor Port"
+                    )
+                
+                if probe_pin:
+                    sensors.append({
+                        "name": "pinda_temp",
+                        "type": "temperature_sensor",
+                        "sensor_type": "Generic 3950",
+                        "sensor_pin": probe_pin
+                    })
+                    self.state.set("temperature_sensors.probe.enabled", True)
+                    self.state.set("temperature_sensors.probe.sensor_type", "pinda")
+                    self.state.set("temperature_sensors.probe.sensor_pin", probe_pin)
+            else:
+                self.state.set("temperature_sensors.probe.enabled", False)
+                self.state.delete("temperature_sensors.probe.sensor_type")
+                self.state.delete("temperature_sensors.probe.sensor_pin")
+            self.state.save()
+        else:
+            # Clear probe temperature state if probe type doesn't support it
+            if self.state.get("temperature_sensors.probe.enabled"):
+                self.state.delete("temperature_sensors.probe")
+                self.state.save()
+
         # Additional sensors - load existing and filter out built-in ones
         existing_sensors = self.state.get("temperature_sensors.additional", [])
         if not isinstance(existing_sensors, list):
@@ -6075,20 +6149,22 @@ class GschpooziWizard:
                 "color_order": color_order
             }
 
-        # Management loop
+        # Management loop with submenu structure
         while True:
-            menu_items = [("ADD", "Add new LED strip")]
-            for i, led in enumerate(leds):
-                menu_items.append((f"EDIT_{i}", f"Edit: {led.get('name', 'Unknown')}"))
-            for i, led in enumerate(leds):
-                menu_items.append((f"DELETE_{i}", f"Delete: {led.get('name', 'Unknown')}"))
-            menu_items.append(("DONE", "Done (save and exit)"))
+            led_summary = f"Currently configured: {len(leds)} LED strip(s)"
+            if leds:
+                led_summary += f"\n{', '.join(l.get('name', 'Unknown') for l in leds)}"
+            
+            main_menu_items = [
+                ("ADD", "Add LED Strip"),
+                ("EDIT", f"Edit LED Strip ({len(leds)} configured)"),
+                ("DELETE", f"Delete LED Strip ({len(leds)} configured)"),
+                ("DONE", "Done (save and exit)"),
+            ]
 
             choice = self.ui.menu(
-                f"LED Configuration\n\n"
-                f"Currently configured: {len(leds)} LED strip(s)\n"
-                f"{', '.join(l.get('name', 'Unknown') for l in leds) if leds else 'None'}",
-                menu_items,
+                f"LED Configuration\n\n{led_summary}",
+                main_menu_items,
                 title="LED Management"
             )
 
@@ -6098,17 +6174,41 @@ class GschpooziWizard:
                 new_led = _edit_led()
                 if new_led:
                     leds.append(new_led)
-            elif choice.startswith("EDIT_"):
-                idx = int(choice.split("_")[1])
-                if 0 <= idx < len(leds):
-                    edited = _edit_led(leds[idx])
-                    if edited:
-                        leds[idx] = edited
-            elif choice.startswith("DELETE_"):
-                idx = int(choice.split("_")[1])
-                if 0 <= idx < len(leds):
-                    if self.ui.yesno(f"Delete LED '{leds[idx].get('name', 'Unknown')}'?", title="Confirm Delete"):
-                        leds.pop(idx)
+            elif choice == "EDIT":
+                if not leds:
+                    self.ui.msgbox("No LEDs configured yet. Add one first.", title="No LEDs")
+                    continue
+                # Submenu for editing
+                edit_items = [(str(i), led.get('name', 'Unknown')) for i, led in enumerate(leds)]
+                edit_items.append(("B", "Back"))
+                edit_choice = self.ui.menu(
+                    "Select LED strip to edit:",
+                    edit_items,
+                    title="Edit LED"
+                )
+                if edit_choice and edit_choice != "B":
+                    idx = int(edit_choice)
+                    if 0 <= idx < len(leds):
+                        edited = _edit_led(leds[idx])
+                        if edited:
+                            leds[idx] = edited
+            elif choice == "DELETE":
+                if not leds:
+                    self.ui.msgbox("No LEDs configured yet.", title="No LEDs")
+                    continue
+                # Submenu for deletion
+                delete_items = [(str(i), led.get('name', 'Unknown')) for i, led in enumerate(leds)]
+                delete_items.append(("B", "Back"))
+                delete_choice = self.ui.menu(
+                    "Select LED strip to delete:",
+                    delete_items,
+                    title="Delete LED"
+                )
+                if delete_choice and delete_choice != "B":
+                    idx = int(delete_choice)
+                    if 0 <= idx < len(leds):
+                        if self.ui.yesno(f"Delete LED '{leds[idx].get('name', 'Unknown')}'?", title="Confirm Delete"):
+                            leds.pop(idx)
 
         # Save
         self.state.set("leds", leds)
@@ -6236,20 +6336,22 @@ class GschpooziWizard:
                 "pause_on_runout": sensor.get("pause_on_runout", True) if sensor else True
             }
 
-        # Management loop
+        # Management loop with submenu structure
         while True:
-            menu_items = [("ADD", "Add new filament sensor")]
-            for i, sensor in enumerate(sensors):
-                menu_items.append((f"EDIT_{i}", f"Edit: {sensor.get('name', 'Unknown')}"))
-            for i, sensor in enumerate(sensors):
-                menu_items.append((f"DELETE_{i}", f"Delete: {sensor.get('name', 'Unknown')}"))
-            menu_items.append(("DONE", "Done (save and exit)"))
+            sensor_summary = f"Currently configured: {len(sensors)} sensor(s)"
+            if sensors:
+                sensor_summary += f"\n{', '.join(s.get('name', 'Unknown') for s in sensors)}"
+            
+            main_menu_items = [
+                ("ADD", "Add Filament Sensor"),
+                ("EDIT", f"Edit Filament Sensor ({len(sensors)} configured)"),
+                ("DELETE", f"Delete Filament Sensor ({len(sensors)} configured)"),
+                ("DONE", "Done (save and exit)"),
+            ]
 
             choice = self.ui.menu(
-                f"Filament Sensor Configuration\n\n"
-                f"Currently configured: {len(sensors)} sensor(s)\n"
-                f"{', '.join(s.get('name', 'Unknown') for s in sensors) if sensors else 'None'}",
-                menu_items,
+                f"Filament Sensor Configuration\n\n{sensor_summary}",
+                main_menu_items,
                 title="Filament Sensor Management"
             )
 
@@ -6259,17 +6361,41 @@ class GschpooziWizard:
                 new_sensor = _edit_sensor()
                 if new_sensor:
                     sensors.append(new_sensor)
-            elif choice.startswith("EDIT_"):
-                idx = int(choice.split("_")[1])
-                if 0 <= idx < len(sensors):
-                    edited = _edit_sensor(sensors[idx])
-                    if edited:
-                        sensors[idx] = edited
-            elif choice.startswith("DELETE_"):
-                idx = int(choice.split("_")[1])
-                if 0 <= idx < len(sensors):
-                    if self.ui.yesno(f"Delete sensor '{sensors[idx].get('name', 'Unknown')}'?", title="Confirm Delete"):
-                        sensors.pop(idx)
+            elif choice == "EDIT":
+                if not sensors:
+                    self.ui.msgbox("No filament sensors configured yet. Add one first.", title="No Sensors")
+                    continue
+                # Submenu for editing
+                edit_items = [(str(i), sensor.get('name', 'Unknown')) for i, sensor in enumerate(sensors)]
+                edit_items.append(("B", "Back"))
+                edit_choice = self.ui.menu(
+                    "Select filament sensor to edit:",
+                    edit_items,
+                    title="Edit Filament Sensor"
+                )
+                if edit_choice and edit_choice != "B":
+                    idx = int(edit_choice)
+                    if 0 <= idx < len(sensors):
+                        edited = _edit_sensor(sensors[idx])
+                        if edited:
+                            sensors[idx] = edited
+            elif choice == "DELETE":
+                if not sensors:
+                    self.ui.msgbox("No filament sensors configured yet.", title="No Sensors")
+                    continue
+                # Submenu for deletion
+                delete_items = [(str(i), sensor.get('name', 'Unknown')) for i, sensor in enumerate(sensors)]
+                delete_items.append(("B", "Back"))
+                delete_choice = self.ui.menu(
+                    "Select filament sensor to delete:",
+                    delete_items,
+                    title="Delete Filament Sensor"
+                )
+                if delete_choice and delete_choice != "B":
+                    idx = int(delete_choice)
+                    if 0 <= idx < len(sensors):
+                        if self.ui.yesno(f"Delete sensor '{sensors[idx].get('name', 'Unknown')}'?", title="Confirm Delete"):
+                            sensors.pop(idx)
 
         # Save
         self.state.set("filament_sensors", sensors)
@@ -6283,14 +6409,19 @@ class GschpooziWizard:
         )
 
     def _display_setup(self) -> None:
-        """Configure display options (KlipperScreen first)."""
+        """Configure display options (LCD/OLED direct display via Klipper).
+        
+        Note: KlipperScreen is managed separately in the Klipper Setup section
+        (Section 1: Manage Klipper Components) since it's a software component
+        rather than hardware configuration.
+        """
         while True:
             choice = self.ui.menu(
                 "Display Configuration\n\n"
-                "Configure display hardware and UI.\n\n"
-                "KlipperScreen runs on the host (Pi/CB1) and connects to Moonraker.",
+                "Configure display hardware connected directly to the MCU.\n\n"
+                "Note: KlipperScreen (touch UI) is managed in Section 1:\n"
+                "      Klipper Setup > Manage Klipper Components",
                 [
-                    ("KS", "KlipperScreen         (Touch UI on host)"),
                     ("LCD", "LCD/OLED              (Direct display via Klipper) - Coming soon"),
                     ("B", "Back"),
                 ],
@@ -6298,8 +6429,6 @@ class GschpooziWizard:
             )
             if choice is None or choice == "B":
                 return
-            if choice == "KS":
-                self._klipperscreen_setup()
             else:
                 self.ui.msgbox("Coming soon!", title="Display")
 
@@ -6618,15 +6747,6 @@ class GschpooziWizard:
     def _advanced_setup(self) -> None:
         """Configure advanced features (generator-backed)."""
         while True:
-            multi_pins = self.state.get("advanced.multi_pins", [])
-            multi_pin_status = f"{len(multi_pins)} group(s)" if isinstance(multi_pins, list) and multi_pins else None
-            additional_fans = self.state.get("fans.additional_fans", [])
-            has_multi_pin_fans = False
-            if isinstance(additional_fans, list):
-                has_multi_pin_fans = any(
-                    isinstance(f, dict) and f.get("pin_type") == "multi_pin"
-                    for f in additional_fans
-                )
             fm_enabled = self.state.get("advanced.force_move.enable_force_move", False)
             fr_enabled = self.state.get("advanced.firmware_retraction.enabled", False)
             inc_mainsail = self.state.get("includes.mainsail.enabled")
@@ -6640,12 +6760,13 @@ class GschpooziWizard:
                     parts.append("timelapse")
                 inc_status = ", ".join(parts)
 
+            # Note: Multi-pin groups removed from Advanced menu.
+            # They are managed through Fans > Additional Fans when creating multi-pin fans.
             choice = self.ui.menu(
                 "Advanced Configuration\n\n"
                 "Optional Klipper features.\n\n"
                 "Only items that are already supported by the generator are exposed here.",
                 [
-                    ("MP", "Multi-pin groups      (managed in Fans)" if has_multi_pin_fans else (self._format_menu_item("Multi-pin groups", multi_pin_status) if multi_pin_status else "Multi-pin groups      ([multi_pin])")),
                     ("FM", self._format_menu_item("Force move", "Enabled" if fm_enabled else None) if fm_enabled else "Force move            ([force_move])"),
                     ("FR", self._format_menu_item("Firmware retraction", "Enabled" if fr_enabled else None) if fr_enabled else "Firmware retraction   ([firmware_retraction])"),
                     ("INC", self._format_menu_item("printer.cfg includes", inc_status) if inc_status else "printer.cfg includes  (mainsail/timelapse)"),
@@ -6658,25 +6779,7 @@ class GschpooziWizard:
             )
             if choice is None or choice == "B":
                 return
-            if choice == "MP":
-                # Avoid confusing duplicate configuration:
-                # If multi-pin groups come from Fans -> Additional Fans, don't allow editing them here.
-                if has_multi_pin_fans:
-                    go_fans = self.ui.yesno(
-                        "Multi-pin groups for fans are configured in:\n\n"
-                        "Hardware Setup -> Fans -> Additional Fans\n\n"
-                        "This avoids defining the same multi-pin group twice.\n\n"
-                        "Open Fans setup now?",
-                        title="Multi-pin groups",
-                        default_no=False,
-                        height=16,
-                        width=90,
-                    )
-                    if go_fans:
-                        self._fans_setup()
-                    continue
-                self._advanced_multi_pin_setup()
-            elif choice == "FM":
+            if choice == "FM":
                 self._advanced_force_move_setup()
             elif choice == "FR":
                 self._advanced_firmware_retraction_setup()

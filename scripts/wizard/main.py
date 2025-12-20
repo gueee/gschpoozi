@@ -7094,9 +7094,15 @@ class GschpooziWizard:
         """
         Configure klipper_tmc_autotune (optional third-party plugin).
 
-        Safety: by default we only generate a commented example block unless the user
-        explicitly chooses to emit the live [autotune_tmc] section.
+        Simplified flow with voltage groups:
+        - High voltage group: Core motors (X, Y, X1, Y1 for AWD)
+        - Low voltage group: Z motors + extruder
+
+        Motor selection is hierarchical (vendor -> motor) with no manual input.
         """
+        import re
+        from pathlib import Path as _Path
+
         def _tmc_autotune_install_status() -> tuple[bool, list[str], str]:
             """
             Detect whether klipper_tmc_autotune is installed and COMPLETE.
@@ -7109,7 +7115,6 @@ class GschpooziWizard:
             Returns: (is_complete, missing_files, target_dir)
             """
             try:
-                from pathlib import Path as _Path
                 base = _Path.home() / "klipper" / "klippy"
                 target = base / "plugins" if (base / "plugins").exists() else (base / "extras")
 
@@ -7123,10 +7128,144 @@ class GschpooziWizard:
             except Exception:
                 return False, ["autotune_tmc.py", "motor_constants.py", "motor_database.cfg"], str(Path.home() / "klipper" / "klippy" / "extras")
 
+        def _find_motor_db() -> _Path | None:
+            """Find the motor database file."""
+            candidates = [
+                _Path.home() / "klipper_tmc_autotune" / "motor_database.cfg",
+                _Path.home() / "klipper" / "klippy" / "plugins" / "motor_database.cfg",
+                _Path.home() / "klipper" / "klippy" / "extras" / "motor_database.cfg",
+            ]
+            for p in candidates:
+                if p.exists():
+                    return p
+            return None
+
+        def _parse_motor_ids(cfg_text: str) -> list[str]:
+            """Parse motor IDs from motor_database.cfg."""
+            out: list[str] = []
+            for line in cfg_text.splitlines():
+                line = line.strip()
+                m = re.match(r"^\[motor_constants\s+([^\]]+)\]\s*$", line)
+                if m:
+                    out.append(m.group(1).strip())
+            return sorted(set([x for x in out if x]))
+
+        def _parse_motor_vendors(motor_ids: list[str]) -> dict[str, list[str]]:
+            """
+            Extract vendor prefixes from motor IDs and group motors by vendor.
+
+            Motor IDs typically follow the pattern: vendor-model (e.g., ldo-42sth48-2004mah)
+            Returns: dict mapping vendor name to list of motor IDs
+            """
+            vendors: dict[str, list[str]] = {}
+            for motor_id in motor_ids:
+                # Extract vendor from first segment before hyphen
+                parts = motor_id.split("-", 1)
+                if len(parts) >= 1:
+                    vendor = parts[0].lower()
+                    # Normalize common vendor names for display
+                    vendor_display = vendor.upper() if len(vendor) <= 4 else vendor.title()
+                    if vendor_display not in vendors:
+                        vendors[vendor_display] = []
+                    vendors[vendor_display].append(motor_id)
+            return vendors
+
+        def _pick_motor_hierarchical(purpose: str, motor_ids: list[str], default_value: str = "") -> str | None:
+            """
+            Pick a motor using hierarchical vendor -> motor selection.
+            No manual input allowed - only menu selection.
+
+            Returns:
+              - string (motor ID) on success
+              - empty string if user chooses to skip
+              - None if user cancels
+            """
+            if not motor_ids:
+                self.ui.msgbox(
+                    "Motor database not found.\n\n"
+                    "Install the klipper_tmc_autotune plugin first to access the motor database.",
+                    title="No Motor Database",
+                    height=12,
+                    width=80,
+                )
+                return None
+
+            vendors = _parse_motor_vendors(motor_ids)
+            if not vendors:
+                self.ui.msgbox(
+                    "Could not parse vendors from motor database.",
+                    title="Parse Error",
+                    height=10,
+                    width=60,
+                )
+                return None
+
+            # Determine default vendor from existing value
+            default_vendor = ""
+            if default_value:
+                parts = default_value.split("-", 1)
+                if parts:
+                    dv = parts[0].lower()
+                    default_vendor = dv.upper() if len(dv) <= 4 else dv.title()
+
+            while True:
+                # Step 1: Select vendor
+                vendor_items: list[tuple[str, str, bool]] = []
+                for vendor in sorted(vendors.keys()):
+                    count = len(vendors[vendor])
+                    is_default = (vendor == default_vendor)
+                    vendor_items.append((vendor, f"{vendor} ({count} motors)", is_default))
+
+                # Add skip/cancel options
+                vendor_items.append(("__SKIP__", "Skip (no motor for this group)", False))
+
+                selected_vendor = self.ui.radiolist(
+                    f"Select motor vendor for {purpose}:",
+                    vendor_items,
+                    title=f"TMC Autotune - {purpose} - Vendor",
+                    height=min(len(vendor_items) + 12, 30),
+                    width=80,
+                    list_height=min(len(vendor_items), 18),
+                )
+                if selected_vendor is None:
+                    return None
+                if selected_vendor == "__SKIP__":
+                    return ""
+
+                # Step 2: Select motor from vendor
+                vendor_motors = vendors.get(selected_vendor, [])
+                if not vendor_motors:
+                    continue
+
+                motor_items: list[tuple[str, str, bool]] = []
+                for motor in sorted(vendor_motors):
+                    is_default = (motor == default_value)
+                    # Show just the model part (after vendor prefix) for cleaner display
+                    display = motor
+                    motor_items.append((motor, display, is_default))
+
+                motor_items.append(("__BACK__", "← Back to vendor selection", False))
+
+                selected_motor = self.ui.radiolist(
+                    f"Select motor for {purpose}:\n\nVendor: {selected_vendor}",
+                    motor_items,
+                    title=f"TMC Autotune - {purpose} - Motor",
+                    height=min(len(motor_items) + 12, 35),
+                    width=100,
+                    list_height=min(len(motor_items), 25),
+                )
+                if selected_motor is None:
+                    return None
+                if selected_motor == "__BACK__":
+                    continue
+
+                return selected_motor
+
+        # === Plugin install check ===
         plugin_installed, missing_files, target_dir = _tmc_autotune_install_status()
 
         if (not plugin_installed) and missing_files and ("autotune_tmc.py" not in missing_files):
-            # Partial install: module exists but DB/constants are missing (causes Klipper load errors).
+            # Partial install: module exists but DB/constants are missing
             if self.ui.yesno(
                 "TMC Autotune plugin appears PARTIALLY installed.\n\n"
                 f"Target: {target_dir}\n"
@@ -7137,7 +7276,6 @@ class GschpooziWizard:
                 height=16,
                 width=88,
             ):
-                # Force the install/update flow below to run.
                 plugin_installed = False
 
         if not plugin_installed:
@@ -7261,6 +7399,7 @@ read -r _
                             width=80,
                         )
 
+        # === Enable/Disable ===
         enabled = self.ui.yesno(
             "Enable TMC Autotune config generation?\n\n"
             "This is for the optional klipper_tmc_autotune plugin.\n"
@@ -7283,6 +7422,7 @@ read -r _
             self.ui.msgbox("TMC Autotune disabled.", title="Saved")
             return
 
+        # === Emit config? ===
         emit_current = self.state.get("tuning.tmc_autotune.emit_config", None)
         emit_default_yes = plugin_installed if emit_current is None else bool(emit_current)
         emit = self.ui.yesno(
@@ -7298,249 +7438,149 @@ read -r _
         if emit is None:
             return
 
-        # Load motor database IDs (if available) so users can pick instead of typing.
+        # === Load motor database ===
         motor_ids: list[str] = []
         try:
-            import re
-            from pathlib import Path as _Path
-
-            def _find_motor_db() -> _Path | None:
-                candidates = [
-                    _Path.home() / "klipper_tmc_autotune" / "motor_database.cfg",
-                    _Path.home() / "klipper" / "klippy" / "plugins" / "motor_database.cfg",
-                    _Path.home() / "klipper" / "klippy" / "extras" / "motor_database.cfg",
-                ]
-                for p in candidates:
-                    if p.exists():
-                        return p
-                return None
-
-            def _parse_motor_ids(cfg_text: str) -> list[str]:
-                out: list[str] = []
-                for line in cfg_text.splitlines():
-                    line = line.strip()
-                    m = re.match(r"^\[motor_constants\s+([^\]]+)\]\s*$", line)
-                    if m:
-                        out.append(m.group(1).strip())
-                # Deduplicate while preserving sortability
-                return sorted(set([x for x in out if x]))
-
             db_path = _find_motor_db()
             if db_path is not None:
                 motor_ids = _parse_motor_ids(db_path.read_text(encoding="utf-8", errors="ignore"))
         except Exception:
             motor_ids = []
 
-        def _pick_motor_id(stepper_name: str, default_value: str) -> str | None:
-            """
-            Pick a motor database ID for a stepper.
-            Returns:
-              - string (may be empty) on success
-              - None if user cancels the whole flow
-            """
-            # If we can't load the database, fall back to manual entry.
-            if not motor_ids:
-                return self.ui.inputbox(
-                    f"Motor database ID for {stepper_name}:\n\n"
-                    "Examples:\n"
-                    "  ldo-42sth48-2004mah\n"
-                    "  ldo-36sth20-1004ahg\n\n"
-                    "Leave blank to omit.",
-                    default=default_value,
-                    title=f"TMC Autotune - motor ({stepper_name})",
-                    height=16,
-                    width=92,
-                )
+        if not motor_ids:
+            self.ui.msgbox(
+                "Motor database not found or empty.\n\n"
+                "Please install the klipper_tmc_autotune plugin first.\n"
+                "The motor database is required for motor selection.",
+                title="No Motor Database",
+                height=14,
+                width=80,
+            )
+            return
 
-            # Search + pick loop (keeps the menu manageable even for large databases)
-            query_default = (default_value or "").strip()
-            while True:
-                query = self.ui.inputbox(
-                    f"Search motor database for {stepper_name}.\n\n"
-                    "Tip: type a fragment like 'ldo-42sth' or '36sth20'.\n"
-                    "Leave empty to show the first matches.\n",
-                    default=query_default,
-                    title=f"TMC Autotune - Search ({stepper_name})",
-                    height=14,
-                    width=92,
-                )
-                if query is None:
-                    return None
-                query = (query or "").strip().lower()
-
-                matches = motor_ids
-                if query:
-                    matches = [m for m in motor_ids if query in m.lower()]
-
-                if not matches:
-                    self.ui.msgbox(
-                        "No matches found.\n\n"
-                        "Try a shorter search (e.g. 'ldo', '42sth', '2004').",
-                        title="No Matches",
-                        height=12,
-                        width=80,
-                    )
-                    query_default = query
-                    continue
-
-                max_show = 200
-                shown = matches[:max_show]
-                extra = len(matches) - len(shown)
-
-                items: list[tuple[str, str]] = [(m, m) for m in shown]
-                if extra > 0:
-                    items.append(("SEARCH", f"(showing first {len(shown)} of {len(matches)} matches) Search again"))
-                else:
-                    items.append(("SEARCH", "Search again"))
-                items.append(("MANUAL", "Manual entry (type/paste)"))
-                items.append(("CLEAR", "Leave blank (omit motor)"))
-                items.append(("B", "Back/Cancel"))
-
-                choice = self.ui.menu(
-                    "Pick a motor ID:",
-                    items,
-                    title=f"TMC Autotune - Pick Motor ({stepper_name})",
-                    height=26,
-                    width=110,
-                    menu_height=18,
-                )
-                if choice is None or choice == "B":
-                    return None
-                if choice == "SEARCH":
-                    query_default = query
-                    continue
-                if choice == "CLEAR":
-                    return ""
-                if choice == "MANUAL":
-                    manual = self.ui.inputbox(
-                        f"Enter motor database ID for {stepper_name}:",
-                        default=default_value,
-                        title=f"TMC Autotune - Manual ({stepper_name})",
-                        height=10,
-                        width=92,
-                    )
-                    return None if manual is None else (manual or "").strip()
-
-                # Selected a motor ID
-                return choice.strip()
-
-        # Choose which steppers to autotune (avoid free-text stepper names).
+        # === Determine stepper groups based on kinematics ===
         awd_enabled = bool(self.state.get("printer.awd_enabled", False))
         z_count = int(self.state.get("stepper_z.z_motor_count", 1) or 1)
-        stepper_choices = [
-            ("stepper_x", "stepper_x (X)", True),
-            ("stepper_y", "stepper_y (Y)", True),
-            ("stepper_z", "stepper_z (Z)", True),
-            ("extruder", "extruder (E)", True),
-        ]
-        if z_count >= 2:
-            stepper_choices.append(("stepper_z1", "stepper_z1 (Z1)", True))
-        if z_count >= 3:
-            stepper_choices.append(("stepper_z2", "stepper_z2 (Z2)", True))
-        if z_count >= 4:
-            stepper_choices.append(("stepper_z3", "stepper_z3 (Z3)", True))
+        kinematics = self.state.get("printer.kinematics", "corexy")
+
+        # High voltage group: Core motors (X/Y, and X1/Y1 for AWD)
+        high_voltage_steppers = ["stepper_x", "stepper_y"]
         if awd_enabled:
-            stepper_choices.extend(
-                [
-                    ("stepper_x1", "stepper_x1 (AWD X1)", True),
-                    ("stepper_y1", "stepper_y1 (AWD Y1)", True),
-                ]
-            )
+            high_voltage_steppers.extend(["stepper_x1", "stepper_y1"])
 
-        selected_steppers = self.ui.checklist(
-            "Select which steppers/extruder to autotune:\n\n"
-            "This will generate config sections like:\n"
-            "  [autotune_tmc stepper_x]\n\n"
-            "Pick only steppers that actually use TMC drivers.",
-            stepper_choices,
-            title="TMC Autotune - Select Steppers",
-            height=22,
-            width=92,
-            list_height=10,
-        )
-        if selected_steppers is None:
-            return
-        if not selected_steppers:
-            self.ui.msgbox("No steppers selected. Nothing to configure.", title="TMC Autotune")
-            return
+        # Low voltage group: Z motors + extruder
+        low_voltage_z_steppers = ["stepper_z"]
+        if z_count >= 2:
+            low_voltage_z_steppers.append("stepper_z1")
+        if z_count >= 3:
+            low_voltage_z_steppers.append("stepper_z2")
+        if z_count >= 4:
+            low_voltage_z_steppers.append("stepper_z3")
 
-        # Legacy defaults (older wizard versions stored motor_x/motor_y/...)
-        legacy_defaults = {
-            "stepper_x": str(self.state.get("tuning.tmc_autotune.motor_x", "") or ""),
-            "stepper_y": str(self.state.get("tuning.tmc_autotune.motor_y", "") or ""),
-            "stepper_z": str(self.state.get("tuning.tmc_autotune.motor_z", "") or ""),
-            "extruder": str(self.state.get("tuning.tmc_autotune.motor_extruder", "") or ""),
-        }
-        existing_list = self.state.get("tuning.tmc_autotune.steppers", [])
-        existing_map: dict[str, str] = {}
-        if isinstance(existing_list, list):
-            for e in existing_list:
-                if isinstance(e, dict) and isinstance(e.get("stepper"), str):
-                    motor = e.get("motor")
-                    if isinstance(motor, str):
-                        existing_map[e["stepper"]] = motor
+        # Get existing values for defaults
+        existing_high = self.state.get("tuning.tmc_autotune.high_voltage_group", {}) or {}
+        existing_low = self.state.get("tuning.tmc_autotune.low_voltage_group", {}) or {}
 
-        steppers_cfg: list[dict] = []
-        chosen_motors_by_stepper: dict[str, str] = {}
-        last_nonempty_motor: str = ""
-        last_nonempty_stepper: str = ""
-        for stepper in selected_steppers:
-            default_motor = existing_map.get(stepper, legacy_defaults.get(stepper, ""))
-            # Convenience: allow reusing the same motor as stepper_x (or last chosen motor)
-            # to avoid repeatedly searching the database for identical motors.
-            motor: str | None
-            reuse_motor: str | None = None
-            reuse_from: str | None = None
-            if stepper != "stepper_x":
-                mx = (chosen_motors_by_stepper.get("stepper_x") or "").strip()
-                if mx:
-                    reuse_motor = mx
-                    reuse_from = "stepper_x"
-                elif last_nonempty_motor:
-                    reuse_motor = last_nonempty_motor
-                    reuse_from = last_nonempty_stepper or "previous"
+        # Legacy fallback
+        legacy_motor_x = str(self.state.get("tuning.tmc_autotune.motor_x", "") or "")
+        legacy_motor_z = str(self.state.get("tuning.tmc_autotune.motor_z", "") or "")
+        legacy_motor_e = str(self.state.get("tuning.tmc_autotune.motor_extruder", "") or "")
 
-            if reuse_motor and reuse_from:
-                use_same = self.ui.yesno(
-                    f"Use same motor as {reuse_from}?\n\n"
-                    f"{reuse_motor}\n\n"
-                    f"For: {stepper}",
-                    title="TMC Autotune - Reuse Motor",
-                    default_no=False,
-                    height=14,
-                    width=90,
-                )
-                if use_same is None:
-                    return
-                if use_same:
-                    motor = reuse_motor
-                else:
-                    motor = _pick_motor_id(stepper, default_motor)
-            else:
-                motor = _pick_motor_id(stepper, default_motor)
-            if motor is None:
-                return
-            motor = (motor or "").strip()
-            chosen_motors_by_stepper[stepper] = motor
-            if motor:
-                last_nonempty_motor = motor
-                last_nonempty_stepper = stepper
-            steppers_cfg.append({"stepper": stepper, "motor": motor})
+        # === Show driver info (read-only, from stepper config) ===
+        x_driver = self.state.get("stepper_x.driver_type", "TMC2209")
+        z_driver = self.state.get("stepper_z.driver_type", "TMC2209")
+        e_driver = self.state.get("extruder.driver_type", "TMC2209")
 
-        voltage_choice = self.ui.radiolist(
-            "System voltage:",
-            [
-                ("24", "24V (most printers)", True),
-                ("48", "48V", False),
-            ],
-            title="TMC Autotune - Voltage",
+        # === Configure High Voltage Group (Core motors) ===
+        high_voltage_label = "Core Motors (X/Y" + (", X1/Y1" if awd_enabled else "") + ")"
+
+        self.ui.msgbox(
+            f"Configure HIGH VOLTAGE group:\n\n"
+            f"Steppers: {', '.join(high_voltage_steppers)}\n"
+            f"Driver (from stepper config): {x_driver}\n\n"
+            "These motors typically share the same voltage and motor type\n"
+            "in CoreXY/CoreXZ configurations.",
+            title="TMC Autotune - High Voltage Group",
             height=16,
-            width=70,
-            list_height=6,
+            width=80,
         )
-        if voltage_choice is None:
+
+        # High voltage selection
+        current_high_voltage = existing_high.get("voltage", 48)
+        high_voltage = self.ui.radiolist(
+            f"Voltage for {high_voltage_label}:",
+            [
+                ("24", "24V", current_high_voltage == 24),
+                ("48", "48V (typical for high-performance)", current_high_voltage == 48),
+            ],
+            title="TMC Autotune - High Voltage Group",
+            height=14,
+            width=70,
+            list_height=4,
+        )
+        if high_voltage is None:
             return
 
+        # High voltage motor selection (hierarchical)
+        default_high_motor = existing_high.get("motor", legacy_motor_x) or ""
+        high_motor = _pick_motor_hierarchical(
+            high_voltage_label,
+            motor_ids,
+            default_high_motor
+        )
+        if high_motor is None:
+            return
+
+        # === Configure Low Voltage Group (Z + Extruder) ===
+        self.ui.msgbox(
+            f"Configure LOW VOLTAGE group:\n\n"
+            f"Z Steppers: {', '.join(low_voltage_z_steppers)}\n"
+            f"Z Driver (from stepper config): {z_driver}\n\n"
+            f"Extruder Driver (from stepper config): {e_driver}\n\n"
+            "Z and extruder often run on lower voltage (24V) with different motors.",
+            title="TMC Autotune - Low Voltage Group",
+            height=18,
+            width=80,
+        )
+
+        # Low voltage selection
+        current_low_voltage = existing_low.get("voltage", 24)
+        low_voltage = self.ui.radiolist(
+            "Voltage for Z motors and Extruder:",
+            [
+                ("24", "24V (typical)", current_low_voltage == 24),
+                ("48", "48V", current_low_voltage == 48),
+            ],
+            title="TMC Autotune - Low Voltage Group",
+            height=14,
+            width=70,
+            list_height=4,
+        )
+        if low_voltage is None:
+            return
+
+        # Z motor selection
+        default_z_motor = existing_low.get("z_motor", legacy_motor_z) or ""
+        z_motor = _pick_motor_hierarchical(
+            f"Z Motors ({', '.join(low_voltage_z_steppers)})",
+            motor_ids,
+            default_z_motor
+        )
+        if z_motor is None:
+            return
+
+        # Extruder motor selection
+        default_e_motor = existing_low.get("extruder_motor", legacy_motor_e) or ""
+        extruder_motor = _pick_motor_hierarchical(
+            "Extruder",
+            motor_ids,
+            default_e_motor
+        )
+        if extruder_motor is None:
+            return
+
+        # === Tuning Goal ===
+        current_goal = self.state.get("tuning.tmc_autotune.tuning_goal", "auto")
         goal = self.ui.menu(
             "Tuning goal (plugin-specific):",
             [
@@ -7557,17 +7597,67 @@ read -r _
         if goal is None:
             return
 
+        # === Build steppers array for generator compatibility ===
+        steppers_cfg: list[dict] = []
+
+        # High voltage steppers
+        for stepper in high_voltage_steppers:
+            steppers_cfg.append({
+                "stepper": stepper,
+                "motor": high_motor,
+                "voltage": int(high_voltage),
+            })
+
+        # Z steppers
+        for stepper in low_voltage_z_steppers:
+            steppers_cfg.append({
+                "stepper": stepper,
+                "motor": z_motor,
+                "voltage": int(low_voltage),
+            })
+
+        # Extruder
+        steppers_cfg.append({
+            "stepper": "extruder",
+            "motor": extruder_motor,
+            "voltage": int(low_voltage),
+        })
+
+        # === Save state ===
         self.state.set("tuning.tmc_autotune.enabled", True)
         self.state.set("tuning.tmc_autotune.emit_config", bool(emit))
-        self.state.set("tuning.tmc_autotune.steppers", steppers_cfg)
-        try:
-            self.state.set("tuning.tmc_autotune.voltage", int(voltage_choice))
-        except Exception:
-            self.state.set("tuning.tmc_autotune.voltage", 24)
         self.state.set("tuning.tmc_autotune.tuning_goal", goal)
+
+        # Save group settings for UI restoration
+        self.state.set("tuning.tmc_autotune.high_voltage_group", {
+            "voltage": int(high_voltage),
+            "motor": high_motor,
+            "steppers": high_voltage_steppers,
+        })
+        self.state.set("tuning.tmc_autotune.low_voltage_group", {
+            "voltage": int(low_voltage),
+            "z_motor": z_motor,
+            "extruder_motor": extruder_motor,
+        })
+
+        # Save steppers array for generator compatibility
+        self.state.set("tuning.tmc_autotune.steppers", steppers_cfg)
         self.state.save()
 
-        self.ui.msgbox("TMC Autotune settings saved!", title="Saved")
+        # === Summary ===
+        summary = (
+            "TMC Autotune configured!\n\n"
+            f"HIGH VOLTAGE GROUP ({high_voltage}V):\n"
+            f"  Motor: {high_motor or '(none)'}\n"
+            f"  Steppers: {', '.join(high_voltage_steppers)}\n\n"
+            f"LOW VOLTAGE GROUP ({low_voltage}V):\n"
+            f"  Z Motor: {z_motor or '(none)'}\n"
+            f"  Z Steppers: {', '.join(low_voltage_z_steppers)}\n"
+            f"  Extruder Motor: {extruder_motor or '(none)'}\n\n"
+            f"Tuning Goal: {goal}\n"
+            f"Emit Config: {'Yes' if emit else 'No (commented)'}"
+        )
+        self.ui.msgbox(summary, title="TMC Autotune - Saved", height=24, width=80)
 
     def _configure_input_shaper(self) -> None:
         """Configure [input_shaper] (resonance compensation)."""

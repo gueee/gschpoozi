@@ -606,7 +606,9 @@ common:
       {% if s.motor -%}
       motor: {{ s.motor }}
       {% endif -%}
-      {% if tuning.tmc_autotune.voltage -%}
+      {% if s.voltage -%}
+      voltage: {{ s.voltage }}
+      {% elif tuning.tmc_autotune.voltage -%}
       voltage: {{ tuning.tmc_autotune.voltage }}
       {% endif -%}
       {% if tuning.tmc_autotune.tuning_goal -%}

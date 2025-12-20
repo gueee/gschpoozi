@@ -311,6 +311,17 @@ extruder:
     pid_Ki: 0
     pid_Kd: 0
 
+tmc_extruder:
+  template: |
+    [{{ extruder.driver_type | default('tmc2209') | lower }} extruder]
+    {% if extruder.location == 'toolboard' %}
+    uart_pin: toolboard:{{ pins.extruder.uart }}
+    {% else %}
+    uart_pin: {{ pins.extruder.uart }}
+    {% endif %}
+    run_current: {{ extruder.run_current | default(0.6) }}
+    interpolate: {{ extruder.interpolate | default(false) | lower }}
+
 # -----------------------------------------------------------------------------
 # Heater Bed
 # -----------------------------------------------------------------------------

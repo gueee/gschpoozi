@@ -5877,14 +5877,14 @@ class GschpooziWizard:
         probe_type = self.state.get("probe.probe_type", "")
         eddy_probes = ["beacon", "cartographer", "btt_eddy"]
         inductive_probes = ["inductive"]  # PINDA
-        
+
         current_probe_temp_enabled = self.state.get("temperature_sensors.probe.enabled", False)
-        
+
         if probe_type in eddy_probes:
             # Eddy current probes (Beacon/Cartographer/BTT Eddy) have coil temperature
             probe_name_map = {"beacon": "Beacon", "cartographer": "Cartographer", "btt_eddy": "BTT Eddy"}
             probe_display_name = probe_name_map.get(probe_type, "Probe")
-            
+
             if self.ui.yesno(
                 f"Enable {probe_display_name} coil temperature sensor?\n\n"
                 f"This monitors the eddy current coil temperature,\n"
@@ -5903,7 +5903,7 @@ class GschpooziWizard:
                 self.state.set("temperature_sensors.probe.enabled", False)
                 self.state.delete("temperature_sensors.probe.sensor_type")
             self.state.save()
-            
+
         elif probe_type in inductive_probes:
             # PINDA probes can have built-in NTC temperature sensor
             if self.ui.yesno(
@@ -5928,7 +5928,7 @@ class GschpooziWizard:
                         default=current_probe_pin,
                         title="PINDA Thermistor Port"
                     )
-                
+
                 if probe_pin:
                     sensors.append({
                         "name": "pinda_temp",
@@ -6154,7 +6154,7 @@ class GschpooziWizard:
             led_summary = f"Currently configured: {len(leds)} LED strip(s)"
             if leds:
                 led_summary += f"\n{', '.join(l.get('name', 'Unknown') for l in leds)}"
-            
+
             main_menu_items = [
                 ("ADD", "Add LED Strip"),
                 ("EDIT", f"Edit LED Strip ({len(leds)} configured)"),
@@ -6341,7 +6341,7 @@ class GschpooziWizard:
             sensor_summary = f"Currently configured: {len(sensors)} sensor(s)"
             if sensors:
                 sensor_summary += f"\n{', '.join(s.get('name', 'Unknown') for s in sensors)}"
-            
+
             main_menu_items = [
                 ("ADD", "Add Filament Sensor"),
                 ("EDIT", f"Edit Filament Sensor ({len(sensors)} configured)"),
@@ -6410,7 +6410,7 @@ class GschpooziWizard:
 
     def _display_setup(self) -> None:
         """Configure display options (LCD/OLED direct display via Klipper).
-        
+
         Note: KlipperScreen is managed separately in the Klipper Setup section
         (Section 1: Manage Klipper Components) since it's a software component
         rather than hardware configuration.

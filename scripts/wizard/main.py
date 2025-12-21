@@ -8042,54 +8042,40 @@ if [ ! -d "$KLIPPER_TARGET" ]; then
   exit 1
 fi
 
-# Try multiple sources for gcode_shell_command.py
-EXTENSION_URLS=(
-  "https://raw.githubusercontent.com/th33xitus/kiauh/master/resources/gcode_shell_command.py"
-  "https://raw.githubusercontent.com/Klipper3d/klipper/master/klippy/extras/gcode_shell_command.py"
-)
+# Download from official KIAUH GitHub repository
+EXTENSION_URL="https://raw.githubusercontent.com/dw-0/kiauh/refs/heads/master/kiauh/extensions/gcode_shell_cmd/assets/gcode_shell_command.py"
 
-DOWNLOAD_CMD=""
-if command -v curl >/dev/null 2>&1; then
-  DOWNLOAD_CMD="curl -sSL"
-elif command -v wget >/dev/null 2>&1; then
-  DOWNLOAD_CMD="wget -q -O -"
+echo "Downloading gcode_shell_command.py from GitHub..."
+if command -v wget >/dev/null 2>&1; then
+  if ! wget -q -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL"; then
+    echo "ERROR: Failed to download from GitHub"
+    exit 1
+  fi
+elif command -v curl >/dev/null 2>&1; then
+  if ! curl -sSL -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL"; then
+    echo "ERROR: Failed to download from GitHub"
+    exit 1
+  fi
 else
-  echo "ERROR: Neither curl nor wget found. Please install one of them."
+  echo "ERROR: Neither wget nor curl found. Please install one of them."
   exit 1
 fi
 
-SUCCESS=0
-for URL in "${EXTENSION_URLS[@]}"; do
-  echo "Trying: $URL"
-  if [ "$DOWNLOAD_CMD" = "curl -sSL" ]; then
-    if $DOWNLOAD_CMD "$URL" -o "$KLIPPER_TARGET/gcode_shell_command.py" 2>/dev/null; then
-      if [ -f "$KLIPPER_TARGET/gcode_shell_command.py" ] && [ -s "$KLIPPER_TARGET/gcode_shell_command.py" ]; then
-        SUCCESS=1
-        break
-      fi
-    fi
-  else
-    if $DOWNLOAD_CMD "$URL" > "$KLIPPER_TARGET/gcode_shell_command.py" 2>/dev/null; then
-      if [ -f "$KLIPPER_TARGET/gcode_shell_command.py" ] && [ -s "$KLIPPER_TARGET/gcode_shell_command.py" ]; then
-        SUCCESS=1
-        break
-      fi
-    fi
-  fi
-done
+if [ ! -f "$KLIPPER_TARGET/gcode_shell_command.py" ] || [ ! -s "$KLIPPER_TARGET/gcode_shell_command.py" ]; then
+  echo "ERROR: Downloaded file is missing or empty"
+  exit 1
+fi
 
-if [ $SUCCESS -eq 0 ]; then
-  echo "ERROR: Failed to download gcode_shell_command.py from any source"
-  echo ""
-  echo "Please install manually:"
-  echo "1. Download gcode_shell_command.py from a Klipper extension repository"
-  echo "2. Place it in: $KLIPPER_TARGET/"
-  echo "3. Restart Klipper"
+# Validate it's valid Python
+if ! python3 -m py_compile "$KLIPPER_TARGET/gcode_shell_command.py" 2>/dev/null; then
+  echo "ERROR: Downloaded file is not valid Python code"
+  echo "This may indicate a network issue or the file has changed."
+  rm -f "$KLIPPER_TARGET/gcode_shell_command.py"
   exit 1
 fi
 
 echo "Extension installed to: $KLIPPER_TARGET/gcode_shell_command.py"
-chmod +x "$KLIPPER_TARGET/gcode_shell_command.py" 2>/dev/null || true
+chmod 644 "$KLIPPER_TARGET/gcode_shell_command.py"
 """
                     if restart:
                         script += r"""

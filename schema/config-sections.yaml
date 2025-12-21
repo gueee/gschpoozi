@@ -350,9 +350,9 @@ fan:
     [fan]
     pin: {{ pins.fans.part_cooling }}
     max_power: {{ fans.part_cooling.max_power | default(1.0) }}
-    kick_start_time: {{ fans.part_cooling.kick_start_time | default(0.5) }}
-    off_below: {{ fans.part_cooling.off_below | default(0.1) }}
-    cycle_time: {{ fans.part_cooling.cycle_time | default(0.010) }}
+    cycle_time: {{ fans.part_cooling.cycle_time | default(0.002) }}
+    hardware_pwm: {{ fans.part_cooling.hardware_pwm | default(false) | lower }}
+    shutdown_speed: {{ fans.part_cooling.shutdown_speed | default(0) }}
 
 heater_fan:
   template: |

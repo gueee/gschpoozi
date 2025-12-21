@@ -4699,34 +4699,37 @@ class GschpooziWizard:
         if max_power is None:
             return
 
-        current_kick_start = self.state.get("fans.part_cooling.kick_start_time", 0.5)
-        kick_start_time = self.ui.inputbox(
-            "Kick start time (seconds):\n\n"
-            "(Time to run at full speed to start fan)",
-            default=str(current_kick_start),
-            title="Fans - Part Cooling Kick Start"
-        )
-        if kick_start_time is None:
-            return
-
-        current_off_below = self.state.get("fans.part_cooling.off_below", 0.1)
-        off_below = self.ui.inputbox(
-            "Off below (PWM):\n\n"
-            "(Minimum PWM for fan to spin, usually 0.1)",
-            default=str(current_off_below),
-            title="Fans - Part Cooling Off Below"
-        )
-        if off_below is None:
-            return
-
-        current_cycle = self.state.get("fans.part_cooling.cycle_time", 0.010)
+        current_cycle = self.state.get("fans.part_cooling.cycle_time", 0.002)
         cycle_time = self.ui.inputbox(
             "Cycle time (seconds):\n\n"
-            "(PWM cycle time, usually 0.010)",
+            "(PWM cycle time, usually 0.002 for part cooling fans)",
             default=str(current_cycle),
             title="Fans - Part Cooling Cycle Time"
         )
         if cycle_time is None:
+            return
+
+        # Hardware PWM (default to false for part cooling)
+        current_hardware_pwm = self.state.get("fans.part_cooling.hardware_pwm", False)
+        hardware_pwm = self.ui.yesno(
+            "Use hardware PWM for part cooling fan?\n\n"
+            "Most part cooling fans use software PWM (No).\n"
+            "Hardware PWM is only needed for specific fan controllers.",
+            title="Fans - Part Cooling Hardware PWM",
+            default_no=not current_hardware_pwm
+        )
+        if hardware_pwm is None:
+            return
+
+        # Shutdown speed (default to 0 - fan should turn off on shutdown)
+        current_shutdown_speed = self.state.get("fans.part_cooling.shutdown_speed", 0)
+        shutdown_speed = self.ui.inputbox(
+            "Shutdown speed (0.0-1.0):\n\n"
+            "(Fan speed when printer shuts down, usually 0)",
+            default=str(current_shutdown_speed),
+            title="Fans - Part Cooling Shutdown Speed"
+        )
+        if shutdown_speed is None:
             return
 
         # === HOTEND FAN ===
@@ -5147,9 +5150,12 @@ class GschpooziWizard:
             self.state.set("fans.part_cooling.pin_mainboard", part_pin)
             self.state.delete("fans.part_cooling.pin_toolboard")  # Clear other key
         self.state.set("fans.part_cooling.max_power", float(max_power or 1.0))
-        self.state.set("fans.part_cooling.kick_start_time", float(kick_start_time or 0.5))
-        self.state.set("fans.part_cooling.off_below", float(off_below or 0.1))
-        self.state.set("fans.part_cooling.cycle_time", float(cycle_time or 0.010))
+        self.state.set("fans.part_cooling.cycle_time", float(cycle_time or 0.002))
+        self.state.set("fans.part_cooling.hardware_pwm", bool(hardware_pwm))
+        self.state.set("fans.part_cooling.shutdown_speed", float(shutdown_speed or 0))
+        # Remove invalid parameters if they exist (from old configs)
+        self.state.delete("fans.part_cooling.kick_start_time")
+        self.state.delete("fans.part_cooling.off_below")
         # Save progress even if user later cancels out
         self.state.save()
 

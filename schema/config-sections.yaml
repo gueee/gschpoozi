@@ -306,7 +306,9 @@ extruder:
     max_extrude_cross_section: {{ extruder.max_extrude_cross_section | default(5) }}
     pressure_advance: {{ extruder_presets[extruder.extruder_type].default_pa | default(0.04) }}
     pressure_advance_smooth_time: 0.040
-    # PID values - run PID_CALIBRATE HEATER=extruder TARGET=240
+    # PID control - required for Klipper to start
+    # Run PID_CALIBRATE HEATER=extruder TARGET=240, then SAVE_CONFIG
+    # SAVE_CONFIG will append PID values to printer.cfg (they override these placeholders)
     control: pid
     pid_Kp: 0
     pid_Ki: 0
@@ -337,8 +339,10 @@ heater_bed:
     {% endif -%}
     min_temp: {{ heater_bed.min_temp | default(0) }}
     max_temp: {{ heater_bed.max_temp | default(120) }}
-    # PID values - run PID_CALIBRATE HEATER=heater_bed TARGET=60
-    control: {{ heater_bed.control | default('pid') }}
+    # PID control - required for Klipper to start
+    # Run PID_CALIBRATE HEATER=heater_bed TARGET=60, then SAVE_CONFIG
+    # SAVE_CONFIG will append PID values to printer.cfg (they override these placeholders)
+    control: pid
     pid_Kp: 0
     pid_Ki: 0
     pid_Kd: 0

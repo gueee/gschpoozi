@@ -389,7 +389,7 @@ class GschpooziWizard:
             return False, str(e)
 
     def _get_board_ports(self, port_type: str, board_type: str = "boards",
-                         default_port: str = None) -> list:
+                         default_port: str = None, current_purpose: str = None) -> list:
         """Get available ports from currently selected board.
 
         Args:
@@ -397,6 +397,8 @@ class GschpooziWizard:
                        "motor_ports", "endstop_ports"
             board_type: "boards" or "toolboards"
             default_port: Port ID to mark as default selection
+            current_purpose: Current purpose/function being assigned (e.g., "stepper_x endstop")
+                           If provided, warnings are only shown for different purposes
 
         Returns:
             List of (port_id, label, is_default) tuples for radiolist
@@ -444,9 +446,9 @@ class GschpooziWizard:
             else:
                 label = port_id
 
-            # Add assignment info if port is used
+            # Add assignment info if port is used AND it's a different purpose
             assigned_to = pin_manager.get_used_by(location, port_id)
-            if assigned_to:
+            if assigned_to and assigned_to != current_purpose:
                 label = f"{label} ⚠️ Assigned to: {assigned_to}"
 
             is_default = (port_id == default_port)
@@ -3062,7 +3064,9 @@ class GschpooziWizard:
                     else:
                         current_endstop_port = self.state.get(f"{state_key}.endstop_port", "")
 
-                    endstop_ports = self._get_board_ports("endstop_ports", board_type)
+                    # Pass current purpose to avoid false warnings when reassigning same function
+                    current_purpose = f"{state_key} endstop"
+                    endstop_ports = self._get_board_ports("endstop_ports", board_type, current_purpose=current_purpose)
                     if endstop_ports:
                         endstop_port = self.ui.radiolist(
                             f"Select endstop port for {axis_upper} axis:",
@@ -3528,7 +3532,9 @@ class GschpooziWizard:
 
                 # Endstop port selection from board templates
                 board_type = "toolboards" if endstop_source == "toolboard" else "boards"
-                endstop_ports = self._get_board_ports("endstop_ports", board_type)
+                # Pass current purpose to avoid false warnings when reassigning same function
+                current_purpose = f"{state_key} endstop"
+                endstop_ports = self._get_board_ports("endstop_ports", board_type, current_purpose=current_purpose)
                 if endstop_ports:
                     if endstop_source == "toolboard":
                         current_port = self.state.get(f"{state_key}.endstop_port_toolboard", "")

@@ -1056,9 +1056,11 @@ class ConfigGenerator:
             pre = existing if save_idx is None else existing[:save_idx]
             save_block = [] if save_idx is None else existing[save_idx:]
 
-            # Remove old generator include lines and header blocks from pre-block; keep everything else.
+            # Remove old generator include lines, header blocks, and override sections from pre-block; keep everything else.
             kept_pre: list[str] = []
             in_header = False
+            in_override_section = False
+            override_section_name = None
             for ln in pre:
                 s = ln.strip()
                 # Skip old gschpoozi include lines
@@ -1089,6 +1091,27 @@ class ConfigGenerator:
                         continue
                     # If we hit non-comment content, header block ended (shouldn't happen, but be safe)
                     in_header = False
+                # Skip old override sections ([extruder] and [heater_bed] override sections)
+                if s == "[extruder]" or s == "[heater_bed]":
+                    # Check if this is in the override section area (after includes, before SAVE_CONFIG)
+                    # We'll skip these sections and their content until we hit a new section or empty line followed by non-section content
+                    in_override_section = True
+                    override_section_name = s
+                    continue
+                if in_override_section:
+                    # Skip all lines until we hit an empty line followed by a new section or non-section content
+                    if s == "":
+                        # Check next non-empty line to see if it's a new section
+                        continue
+                    if s.startswith("[") and s.endswith("]"):
+                        # New section started, end of override section
+                        in_override_section = False
+                        override_section_name = None
+                        # Don't skip this line, it's a new section we want to keep
+                        kept_pre.append(ln)
+                        continue
+                    # Skip lines within override section
+                    continue
                 kept_pre.append(ln)
 
             # If pre already had a gschpoozi include position, we want our new block after existing

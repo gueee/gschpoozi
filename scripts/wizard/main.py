@@ -8053,103 +8053,78 @@ read -r _
                     if restart is None:
                         restart = True
 
-                    script = r"""
-set -euo pipefail
-KLIPPER_BASE="$HOME/klipper/klippy"
-if [ -d "$KLIPPER_BASE/plugins" ]; then
-  KLIPPER_TARGET="$KLIPPER_BASE/plugins"
-else
-  KLIPPER_TARGET="$KLIPPER_BASE/extras"
-fi
+                    # Install using Python - delete old file first, then copy from repo or download
+                    target_base = Path.home() / "klipper" / "klippy"
+                    target_dir = target_base / "plugins" if (target_base / "plugins").exists() else (target_base / "extras")
+                    target_file = target_dir / "gcode_shell_command.py"
+                    source_file = REPO_ROOT / "scripts" / "tools" / "gcode_shell_command.py"
 
-echo "== gcode_shell_command extension install =="
-echo "Target dir: $KLIPPER_TARGET"
-echo ""
+                    if not target_dir.exists():
+                        self.ui.msgbox(
+                            f"Klipper target directory not found:\n\n{target_dir}\n\n"
+                            "Install Klipper first.",
+                            title="Cannot Install",
+                            height=12,
+                            width=70,
+                        )
+                        return
 
-if [ ! -d "$KLIPPER_TARGET" ]; then
-  echo "ERROR: Klipper target directory not found: $KLIPPER_TARGET"
-  exit 1
-fi
+                    try:
+                        # Delete old file first for clean reinstall
+                        if target_file.exists():
+                            target_file.unlink()
 
-# Download from KIAUH repository (same method KIAUH uses)
-EXTENSION_URL="https://raw.githubusercontent.com/th33xitus/kiauh/master/resources/gcode_shell_command.py"
+                        # Try to copy from repo file first (fastest, no network needed)
+                        if source_file.exists():
+                            import shutil
+                            target_dir.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(source_file, target_file)
+                            success_msg = f"Extension installed from repository!\n\nLocation: {target_file}"
+                        else:
+                            # Fallback: download from GitHub using Python urllib
+                            import urllib.request
+                            target_dir.mkdir(parents=True, exist_ok=True)
+                            url = "https://raw.githubusercontent.com/th33xitus/kiauh/master/resources/gcode_shell_command.py"
+                            urllib.request.urlretrieve(url, target_file)
+                            success_msg = f"Extension downloaded and installed!\n\nLocation: {target_file}"
 
-echo "Downloading gcode_shell_command.py from GitHub..."
-echo "URL: $EXTENSION_URL"
-echo ""
+                        # Verify the file
+                        if not target_file.exists() or target_file.stat().st_size < 100:
+                            raise Exception("File is missing or too small")
 
-DOWNLOAD_SUCCESS=0
-if command -v wget >/dev/null 2>&1; then
-  echo "Using wget (this may take a few seconds)..."
-  # Use timeout wrapper if available, otherwise rely on wget's own timeout
-  if command -v timeout >/dev/null 2>&1; then
-    if timeout 45 wget --timeout=30 --tries=2 -q -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-      DOWNLOAD_SUCCESS=1
-    else
-      WGET_EXIT=$?
-      if [ $WGET_EXIT -eq 124 ]; then
-        echo "Download timed out after 45 seconds"
-      else
-        echo "wget failed, exit code: $WGET_EXIT"
-      fi
-    fi
-  else
-    if wget --timeout=30 --tries=2 -q -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-      DOWNLOAD_SUCCESS=1
-    else
-      echo "wget failed, exit code: $?"
-    fi
-  fi
-elif command -v curl >/dev/null 2>&1; then
-  echo "Using curl (this may take a few seconds)..."
-  # Use timeout wrapper if available
-  if command -v timeout >/dev/null 2>&1; then
-    if timeout 45 curl --max-time 30 --connect-timeout 10 -sSL -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-      DOWNLOAD_SUCCESS=1
-    else
-      CURL_EXIT=$?
-      if [ $CURL_EXIT -eq 124 ]; then
-        echo "Download timed out after 45 seconds"
-      else
-        echo "curl failed, exit code: $CURL_EXIT"
-      fi
-    fi
-  else
-    if curl --max-time 30 --connect-timeout 10 -sSL -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-      DOWNLOAD_SUCCESS=1
-    else
-      echo "curl failed, exit code: $?"
-    fi
-  fi
-else
-  echo "ERROR: Neither wget nor curl found. Please install one of them."
-  exit 1
-fi
+                        self.ui.msgbox(success_msg, title="Installed", height=10, width=70)
 
-if [ $DOWNLOAD_SUCCESS -eq 0 ]; then
-  echo ""
-  echo "ERROR: Download failed or timed out"
-  echo "Please check your internet connection and try again."
-  exit 1
-fi
+                        # Restart if requested
+                        if restart:
+                            import subprocess
+                            subprocess.run(["sudo", "systemctl", "restart", "klipper"], check=False)
+                            self.ui.msgbox(
+                                "Extension installed and Klipper restarted!",
+                                title="Complete",
+                                height=8,
+                                width=60,
+                            )
 
-if [ ! -f "$KLIPPER_TARGET/gcode_shell_command.py" ] || [ ! -s "$KLIPPER_TARGET/gcode_shell_command.py" ]; then
-  echo ""
-  echo "ERROR: Downloaded file is missing or empty"
-  exit 1
-fi
-
-FILE_SIZE=$(stat -c%s "$KLIPPER_TARGET/gcode_shell_command.py" 2>/dev/null || echo "0")
-echo "Downloaded file size: $FILE_SIZE bytes"
-if [ "$FILE_SIZE" -lt 100 ]; then
-  echo "ERROR: File is too small, download may have failed"
-  rm -f "$KLIPPER_TARGET/gcode_shell_command.py"
-  exit 1
-fi
-
-echo ""
-echo "Extension installed to: $KLIPPER_TARGET/gcode_shell_command.py"
-"""
+                        extension_installed, target_dir_str = _gcode_shell_command_install_status()
+                        if extension_installed:
+                            return  # Success, exit the function
+                        else:
+                            self.ui.msgbox(
+                                "Installation completed but extension not detected.\n\n"
+                                f"Check: {target_file}",
+                                title="Warning",
+                                height=10,
+                                width=70,
+                            )
+                    except Exception as e:
+                        self.ui.msgbox(
+                            f"Installation failed:\n\n{str(e)}\n\n"
+                            "You may need to install manually.",
+                            title="Install Failed",
+                            height=12,
+                            width=70,
+                        )
+                        return
                     if restart:
                         script += r"""
 echo ""
@@ -8259,16 +8234,18 @@ read -r _
 
         # Handle extension install/reinstall
         if choice == "__INSTALL__" or choice == "__REINSTALL__":
-            # Re-run the installation logic
-            if not (Path.home() / "klipper" / "klippy" / "extras").exists():
+            target_base = Path.home() / "klipper" / "klippy"
+            target_dir = target_base / "plugins" if (target_base / "plugins").exists() else (target_base / "extras")
+            target_file = target_dir / "gcode_shell_command.py"
+            source_file = REPO_ROOT / "scripts" / "tools" / "gcode_shell_command.py"
+
+            if not target_dir.exists():
                 self.ui.msgbox(
-                    "Klipper source tree not found at:\n\n"
-                    "~/klipper/klippy/extras\n\n"
-                    "Install Klipper first (Klipper Setup → Manage Components → install klipper),\n"
-                    "then retry this install.",
+                    f"Klipper target directory not found:\n\n{target_dir}\n\n"
+                    "Install Klipper first.",
                     title="Cannot Install",
-                    height=14,
-                    width=80,
+                    height=12,
+                    width=70,
                 )
                 return
 
@@ -8283,143 +8260,60 @@ read -r _
             if restart is None:
                 restart = True
 
-            script = r"""
-set -euo pipefail
-KLIPPER_BASE="$HOME/klipper/klippy"
-if [ -d "$KLIPPER_BASE/plugins" ]; then
-  KLIPPER_TARGET="$KLIPPER_BASE/plugins"
-else
-  KLIPPER_TARGET="$KLIPPER_BASE/extras"
-fi
+            try:
+                # Delete old file first for clean reinstall
+                if target_file.exists():
+                    target_file.unlink()
 
-echo "== gcode_shell_command extension install =="
-echo "Target dir: $KLIPPER_TARGET"
-echo ""
+                # Try to copy from repo file first (fastest, no network needed)
+                if source_file.exists():
+                    import shutil
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source_file, target_file)
+                    success_msg = f"Extension installed from repository!\n\nLocation: {target_file}"
+                else:
+                    # Fallback: download from GitHub using Python urllib
+                    import urllib.request
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    url = "https://raw.githubusercontent.com/th33xitus/kiauh/master/resources/gcode_shell_command.py"
+                    urllib.request.urlretrieve(url, target_file)
+                    success_msg = f"Extension downloaded and installed!\n\nLocation: {target_file}"
 
-if [ ! -d "$KLIPPER_TARGET" ]; then
-  echo "ERROR: Klipper target directory not found: $KLIPPER_TARGET"
-  exit 1
-fi
+                # Verify the file
+                if not target_file.exists() or target_file.stat().st_size < 100:
+                    raise Exception("File is missing or too small")
 
-# Download from KIAUH repository (same method KIAUH uses)
-EXTENSION_URL="https://raw.githubusercontent.com/th33xitus/kiauh/master/resources/gcode_shell_command.py"
+                self.ui.msgbox(success_msg, title="Installed", height=10, width=70)
 
-echo "Downloading gcode_shell_command.py from GitHub..."
-echo "URL: $EXTENSION_URL"
-echo ""
+                # Restart if requested
+                if restart:
+                    import subprocess
+                    subprocess.run(["sudo", "systemctl", "restart", "klipper"], check=False)
+                    self.ui.msgbox(
+                        "Extension installed and Klipper restarted!",
+                        title="Complete",
+                        height=8,
+                        width=60,
+                    )
 
-DOWNLOAD_SUCCESS=0
-if command -v wget >/dev/null 2>&1; then
-  echo "Using wget (this may take a few seconds)..."
-  # Use timeout wrapper if available, otherwise rely on wget's own timeout
-  if command -v timeout >/dev/null 2>&1; then
-    if timeout 45 wget --timeout=30 --tries=2 -q -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-      DOWNLOAD_SUCCESS=1
-    else
-      WGET_EXIT=$?
-      if [ $WGET_EXIT -eq 124 ]; then
-        echo "Download timed out after 45 seconds"
-      else
-        echo "wget failed, exit code: $WGET_EXIT"
-      fi
-    fi
-  else
-    if wget --timeout=30 --tries=2 -q -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-      DOWNLOAD_SUCCESS=1
-    else
-      echo "wget failed, exit code: $?"
-    fi
-  fi
-elif command -v curl >/dev/null 2>&1; then
-  echo "Using curl (this may take a few seconds)..."
-  # Use timeout wrapper if available
-  if command -v timeout >/dev/null 2>&1; then
-    if timeout 45 curl --max-time 30 --connect-timeout 10 -sSL -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-      DOWNLOAD_SUCCESS=1
-    else
-      CURL_EXIT=$?
-      if [ $CURL_EXIT -eq 124 ]; then
-        echo "Download timed out after 45 seconds"
-      else
-        echo "curl failed, exit code: $CURL_EXIT"
-      fi
-    fi
-  else
-    if curl --max-time 30 --connect-timeout 10 -sSL -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-      DOWNLOAD_SUCCESS=1
-    else
-      echo "curl failed, exit code: $?"
-    fi
-  fi
-else
-  echo "ERROR: Neither wget nor curl found. Please install one of them."
-  exit 1
-fi
-
-if [ $DOWNLOAD_SUCCESS -eq 0 ]; then
-  echo ""
-  echo "ERROR: Download failed or timed out"
-  echo "Please check your internet connection and try again."
-  exit 1
-fi
-
-if [ ! -f "$KLIPPER_TARGET/gcode_shell_command.py" ] || [ ! -s "$KLIPPER_TARGET/gcode_shell_command.py" ]; then
-  echo ""
-  echo "ERROR: Downloaded file is missing or empty"
-  exit 1
-fi
-
-FILE_SIZE=$(stat -c%s "$KLIPPER_TARGET/gcode_shell_command.py" 2>/dev/null || echo "0")
-echo "Downloaded file size: $FILE_SIZE bytes"
-if [ "$FILE_SIZE" -lt 100 ]; then
-  echo "ERROR: File is too small, download may have failed"
-  rm -f "$KLIPPER_TARGET/gcode_shell_command.py"
-  exit 1
-fi
-
-echo ""
-echo "Extension installed to: $KLIPPER_TARGET/gcode_shell_command.py"
-"""
-            if restart:
-                script += r"""
-echo ""
-echo "Restarting klipper service..."
-sudo systemctl restart klipper
-echo "Restarted."
-"""
-            script += r"""
-echo ""
-echo "Done. Press Enter to return to wizard."
-read -r _
-"""
-            rc = self._run_tty_command(["bash", "-lc", script])
-            extension_installed, target_dir = _gcode_shell_command_install_status()
-            if rc == 0 and extension_installed:
+                extension_installed, target_dir_str = _gcode_shell_command_install_status()
+                if extension_installed:
+                    return  # Success, exit the function
+                else:
+                    self.ui.msgbox(
+                        "Installation completed but extension not detected.\n\n"
+                        f"Check: {target_file}",
+                        title="Warning",
+                        height=10,
+                        width=70,
+                    )
+            except Exception as e:
                 self.ui.msgbox(
-                    "Extension installed and detected!\n\n"
-                    "You can now use shaper graph commands in your macros.",
-                    title="Installed",
+                    f"Installation failed:\n\n{str(e)}\n\n"
+                    "You may need to install manually.",
+                    title="Install Failed",
                     height=12,
                     width=70,
-                )
-            elif rc != 0:
-                self.ui.msgbox(
-                    f"Install command failed (exit code {rc}).\n\n"
-                    "Check the console output for details.\n\n"
-                    "You may need to manually download gcode_shell_command.py\n"
-                    "from the Klipper community repositories.",
-                    title="Install Failed",
-                    height=14,
-                    width=80,
-                )
-            else:
-                self.ui.msgbox(
-                    "Install finished, but extension still not detected.\n\n"
-                    f"Target: {target_dir}\n\n"
-                    "Check the console output for details.",
-                    title="Not Detected",
-                    height=12,
-                    width=80,
                 )
             return
 

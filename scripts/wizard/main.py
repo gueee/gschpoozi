@@ -8080,18 +8080,46 @@ echo ""
 
 DOWNLOAD_SUCCESS=0
 if command -v wget >/dev/null 2>&1; then
-  echo "Using wget..."
-  if wget --timeout=30 --tries=3 -q --show-progress -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-    DOWNLOAD_SUCCESS=1
+  echo "Using wget (this may take a few seconds)..."
+  # Use timeout wrapper if available, otherwise rely on wget's own timeout
+  if command -v timeout >/dev/null 2>&1; then
+    if timeout 45 wget --timeout=30 --tries=2 -q -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
+      DOWNLOAD_SUCCESS=1
+    else
+      WGET_EXIT=$?
+      if [ $WGET_EXIT -eq 124 ]; then
+        echo "Download timed out after 45 seconds"
+      else
+        echo "wget failed, exit code: $WGET_EXIT"
+      fi
+    fi
   else
-    echo "wget failed, exit code: $?"
+    if wget --timeout=30 --tries=2 -q -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
+      DOWNLOAD_SUCCESS=1
+    else
+      echo "wget failed, exit code: $?"
+    fi
   fi
 elif command -v curl >/dev/null 2>&1; then
-  echo "Using curl..."
-  if curl --max-time 30 --connect-timeout 10 -sSL --progress-bar -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-    DOWNLOAD_SUCCESS=1
+  echo "Using curl (this may take a few seconds)..."
+  # Use timeout wrapper if available
+  if command -v timeout >/dev/null 2>&1; then
+    if timeout 45 curl --max-time 30 --connect-timeout 10 -sSL -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
+      DOWNLOAD_SUCCESS=1
+    else
+      CURL_EXIT=$?
+      if [ $CURL_EXIT -eq 124 ]; then
+        echo "Download timed out after 45 seconds"
+      else
+        echo "curl failed, exit code: $CURL_EXIT"
+      fi
+    fi
   else
-    echo "curl failed, exit code: $?"
+    if curl --max-time 30 --connect-timeout 10 -sSL -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
+      DOWNLOAD_SUCCESS=1
+    else
+      echo "curl failed, exit code: $?"
+    fi
   fi
 else
   echo "ERROR: Neither wget nor curl found. Please install one of them."
@@ -8282,18 +8310,46 @@ echo ""
 
 DOWNLOAD_SUCCESS=0
 if command -v wget >/dev/null 2>&1; then
-  echo "Using wget..."
-  if wget --timeout=30 --tries=3 -q --show-progress -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-    DOWNLOAD_SUCCESS=1
+  echo "Using wget (this may take a few seconds)..."
+  # Use timeout wrapper if available, otherwise rely on wget's own timeout
+  if command -v timeout >/dev/null 2>&1; then
+    if timeout 45 wget --timeout=30 --tries=2 -q -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
+      DOWNLOAD_SUCCESS=1
+    else
+      WGET_EXIT=$?
+      if [ $WGET_EXIT -eq 124 ]; then
+        echo "Download timed out after 45 seconds"
+      else
+        echo "wget failed, exit code: $WGET_EXIT"
+      fi
+    fi
   else
-    echo "wget failed, exit code: $?"
+    if wget --timeout=30 --tries=2 -q -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
+      DOWNLOAD_SUCCESS=1
+    else
+      echo "wget failed, exit code: $?"
+    fi
   fi
 elif command -v curl >/dev/null 2>&1; then
-  echo "Using curl..."
-  if curl --max-time 30 --connect-timeout 10 -sSL --progress-bar -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
-    DOWNLOAD_SUCCESS=1
+  echo "Using curl (this may take a few seconds)..."
+  # Use timeout wrapper if available
+  if command -v timeout >/dev/null 2>&1; then
+    if timeout 45 curl --max-time 30 --connect-timeout 10 -sSL -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
+      DOWNLOAD_SUCCESS=1
+    else
+      CURL_EXIT=$?
+      if [ $CURL_EXIT -eq 124 ]; then
+        echo "Download timed out after 45 seconds"
+      else
+        echo "curl failed, exit code: $CURL_EXIT"
+      fi
+    fi
   else
-    echo "curl failed, exit code: $?"
+    if curl --max-time 30 --connect-timeout 10 -sSL -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL" 2>&1; then
+      DOWNLOAD_SUCCESS=1
+    else
+      echo "curl failed, exit code: $?"
+    fi
   fi
 else
   echo "ERROR: Neither wget nor curl found. Please install one of them."

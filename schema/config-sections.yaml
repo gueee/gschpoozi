@@ -306,12 +306,9 @@ extruder:
     max_extrude_cross_section: {{ extruder.max_extrude_cross_section | default(5) }}
     pressure_advance: {{ extruder_presets[extruder.extruder_type].default_pa | default(0.04) }}
     pressure_advance_smooth_time: 0.040
-    # PID control - control: pid and PID values are in printer.cfg override sections
+    # PID control and PID values are in printer.cfg override sections (not here to avoid SAVE_CONFIG conflicts)
     # Run PID_CALIBRATE HEATER=extruder TARGET=240, then SAVE_CONFIG
-    # SAVE_CONFIG will save PID values to the [extruder] override section in printer.cfg
-    pid_Kp: 0
-    pid_Ki: 0
-    pid_Kd: 0
+    # SAVE_CONFIG will save control: pid and PID values to the [extruder] override section in printer.cfg
 
 tmc_extruder:
   template: |
@@ -338,12 +335,9 @@ heater_bed:
     {% endif -%}
     min_temp: {{ heater_bed.min_temp | default(0) }}
     max_temp: {{ heater_bed.max_temp | default(120) }}
-    # PID control - control: pid and PID values are in printer.cfg override sections
+    # PID control and PID values are in printer.cfg override sections (not here to avoid SAVE_CONFIG conflicts)
     # Run PID_CALIBRATE HEATER=heater_bed TARGET=60, then SAVE_CONFIG
-    # SAVE_CONFIG will save PID values to the [heater_bed] override section in printer.cfg
-    pid_Kp: 0
-    pid_Ki: 0
-    pid_Kd: 0
+    # SAVE_CONFIG will save control: pid and PID values to the [heater_bed] override section in printer.cfg
 
 # -----------------------------------------------------------------------------
 # Fans

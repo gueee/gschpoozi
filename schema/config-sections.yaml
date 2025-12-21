@@ -701,17 +701,17 @@ common:
     condition: "tuning.accelerometer.enabled"
     template: |
       [gcode_shell_command shaper_graph_x]
-      command: python3 ~/printer_data/config/gschpoozi/scripts/tools/shaper_graphs.py axis x
+      command: python3 $HOME/printer_data/config/gschpoozi/scripts/tools/shaper_graphs.py axis x
       timeout: 120
       verbose: True
 
       [gcode_shell_command shaper_graph_y]
-      command: python3 ~/printer_data/config/gschpoozi/scripts/tools/shaper_graphs.py axis y
+      command: python3 $HOME/printer_data/config/gschpoozi/scripts/tools/shaper_graphs.py axis y
       timeout: 120
       verbose: True
 
       [gcode_shell_command shaper_graph_belts]
-      command: python3 ~/printer_data/config/gschpoozi/scripts/tools/shaper_graphs.py belts
+      command: python3 $HOME/printer_data/config/gschpoozi/scripts/tools/shaper_graphs.py belts
       timeout: 120
       verbose: True
 

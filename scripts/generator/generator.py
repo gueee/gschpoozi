@@ -597,18 +597,17 @@ class ConfigGenerator:
                 heater_port = extruder.get('heater_port_mainboard')
                 pins['extruder']['heater'] = _get_pin(board_pins, heater_port, 'signal')
 
-            # Sensor pin (may have pullup)
+            # Sensor pin (ADC input - no ^ modifier, uses pullup_resistor value instead)
             sensor_loc = extruder.get('sensor_location', 'mainboard')
-            sensor_pullup = extruder.get('sensor_pullup', False)
             if sensor_loc == 'toolboard':
                 sensor_port = extruder.get('sensor_port_toolboard')
                 pins['extruder']['sensor'] = _get_pin(
                     toolboard_pins, sensor_port, 'signal',
-                    mcu_prefix='toolboard', pullup=sensor_pullup
+                    mcu_prefix='toolboard'
                 )
             else:
                 sensor_port = extruder.get('sensor_port_mainboard')
-                pins['extruder']['sensor'] = _get_pin(board_pins, sensor_port, 'signal', pullup=sensor_pullup)
+                pins['extruder']['sensor'] = _get_pin(board_pins, sensor_port, 'signal')
 
         # --- Heater Bed ---
         heater_bed = context.get('heater_bed', {})

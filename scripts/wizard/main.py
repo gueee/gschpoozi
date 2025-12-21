@@ -10,6 +10,7 @@ import sys
 import os
 import json
 import re
+import traceback
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -8182,8 +8183,45 @@ read -r _
                 title="Generation Complete"
             )
         except Exception as e:
+            # Format detailed error message with traceback
+            error_type = type(e).__name__
+            error_msg = str(e) if str(e) else "(no error message)"
+            full_traceback = traceback.format_exc()
+            tb_lines = full_traceback.splitlines()
+
+            # Log full error to file for debugging
+            log_path = self._wizard_log_path()
+            try:
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(log_path, "a", encoding="utf-8") as f:
+                    from datetime import datetime
+                    ts = datetime.now().isoformat(timespec="seconds")
+                    f.write(f"\n{'='*80}\n")
+                    f.write(f"{ts} - Configuration Generation Error\n")
+                    f.write(f"{'='*80}\n")
+                    f.write(f"Error Type: {error_type}\n")
+                    f.write(f"Error Message: {error_msg}\n")
+                    f.write(f"\nFull Traceback:\n{full_traceback}\n")
+            except Exception:
+                # Logging must never break the wizard
+                pass
+
+            # Build a readable error message for dialog (show summary + traceback tail)
+            error_details = f"Error Type: {error_type}\n"
+            error_details += f"Error Message: {error_msg}\n\n"
+
+            # Include the last 10 lines of traceback (most relevant)
+            if len(tb_lines) > 10:
+                error_details += "Traceback (most recent call last):\n"
+                error_details += "\n".join(tb_lines[-10:])
+            else:
+                error_details += "Full Traceback:\n"
+                error_details += "\n".join(tb_lines)
+
+            error_details += f"\n\nFull error details logged to:\n{log_path}"
+
             self.ui.msgbox(
-                f"Error generating configuration:\n\n{e}",
+                f"Error generating configuration:\n\n{error_details}",
                 title="Generation Failed"
             )
 

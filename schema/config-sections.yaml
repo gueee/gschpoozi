@@ -846,7 +846,7 @@ common:
           {% endif %}
 
   # START_PRINT macro
-  start_print:
+  start_print_macro:
     render: raw
     template: |
       # ═══════════════════════════════════════════════════════════════════════════════
@@ -1259,7 +1259,7 @@ common:
           {% endif %}
 
   # END_PRINT macro
-  end_print:
+  end_print_macro:
     render: raw
     template: |
       # ═══════════════════════════════════════════════════════════════════════════════

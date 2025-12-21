@@ -272,9 +272,6 @@ class TemplateRenderer:
             ('temperature_sensor', None),
             ('neopixel', None),
             ('filament_switch_sensor', None),
-            # Macros
-            ('start_print', None),
-            ('end_print', None),
         ]
 
         for section_name, subsection in section_order:

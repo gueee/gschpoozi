@@ -8042,97 +8042,25 @@ if [ ! -d "$KLIPPER_TARGET" ]; then
   exit 1
 fi
 
-# Download from official KIAUH GitHub repository
-EXTENSION_URL="https://raw.githubusercontent.com/dw-0/kiauh/refs/heads/master/kiauh/extensions/gcode_shell_cmd/assets/gcode_shell_command.py"
+# Download from KIAUH repository (same method KIAUH uses)
+EXTENSION_URL="https://raw.githubusercontent.com/th33xitus/kiauh/master/resources/gcode_shell_command.py"
 
-echo "Downloading gcode_shell_command.py from GitHub..."
-TEMP_FILE=$(mktemp)
+echo "Downloading gcode_shell_command.py from GitHub (KIAUH method)..."
 if command -v wget >/dev/null 2>&1; then
-  if ! wget -q -O "$TEMP_FILE" "$EXTENSION_URL"; then
-    echo "ERROR: Failed to download from GitHub"
-    rm -f "$TEMP_FILE"
-    exit 1
-  fi
+  wget -q -O "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL"
 elif command -v curl >/dev/null 2>&1; then
-  if ! curl -sSL -o "$TEMP_FILE" "$EXTENSION_URL"; then
-    echo "ERROR: Failed to download from GitHub"
-    rm -f "$TEMP_FILE"
-    exit 1
-  fi
+  curl -sSL -o "$KLIPPER_TARGET/gcode_shell_command.py" "$EXTENSION_URL"
 else
   echo "ERROR: Neither wget nor curl found. Please install one of them."
   exit 1
 fi
 
-if [ ! -s "$TEMP_FILE" ]; then
-  echo "ERROR: Downloaded file is empty"
-  rm -f "$TEMP_FILE"
+if [ ! -f "$KLIPPER_TARGET/gcode_shell_command.py" ] || [ ! -s "$KLIPPER_TARGET/gcode_shell_command.py" ]; then
+  echo "ERROR: Failed to download gcode_shell_command.py"
   exit 1
 fi
 
-# Validate it's valid Python syntax using the same Python that Klipper uses
-KLIPPY_PYTHON="$HOME/klippy-env/bin/python3"
-if [ -f "$KLIPPY_PYTHON" ]; then
-  PYTHON_CMD="$KLIPPY_PYTHON"
-else
-  PYTHON_CMD="python3"
-fi
-
-echo "Validating Python syntax..."
-# First check if file has BOM or encoding issues
-if file "$TEMP_FILE" | grep -q "BOM\|UTF-16\|UTF-32"; then
-  echo "WARNING: File has encoding issues, attempting to fix..."
-  # Convert to UTF-8 without BOM
-  python3 -c "
-import sys
-with open('$TEMP_FILE', 'rb') as f:
-    data = f.read()
-# Remove BOM if present
-if data.startswith(b'\xef\xbb\xbf'):
-    data = data[3:]
-# Try to decode and re-encode as UTF-8
-try:
-    text = data.decode('utf-8')
-except UnicodeDecodeError:
-    text = data.decode('utf-8', errors='ignore')
-with open('$TEMP_FILE', 'w', encoding='utf-8') as f:
-    f.write(text)
-"
-fi
-
-# Validate syntax
-if ! $PYTHON_CMD -m py_compile "$TEMP_FILE" 2>&1; then
-  echo ""
-  echo "ERROR: Downloaded file has Python syntax errors"
-  echo "First few lines of the file:"
-  head -n 5 "$TEMP_FILE" | cat -A
-  echo ""
-  echo "This may indicate:"
-  echo "- Network issue (downloaded HTML error page)"
-  echo "- Python version incompatibility"
-  echo "- File format/encoding issue"
-  rm -f "$TEMP_FILE"
-  exit 1
-fi
-
-# Ensure file starts with proper Python header (no BOM, proper encoding)
-# Re-save the file to ensure clean UTF-8 encoding
-python3 << 'PYEOF'
-import sys
-with open('$TEMP_FILE', 'r', encoding='utf-8') as f:
-    content = f.read()
-# Remove any BOM that might have been added
-if content.startswith('\ufeff'):
-    content = content[1:]
-# Ensure it starts cleanly
-with open('$TEMP_FILE', 'w', encoding='utf-8', newline='\n') as f:
-    f.write(content)
-PYEOF
-
-# Move validated file to target location
-mv "$TEMP_FILE" "$KLIPPER_TARGET/gcode_shell_command.py"
 echo "Extension installed to: $KLIPPER_TARGET/gcode_shell_command.py"
-chmod 644 "$KLIPPER_TARGET/gcode_shell_command.py"
 """
                     if restart:
                         script += r"""

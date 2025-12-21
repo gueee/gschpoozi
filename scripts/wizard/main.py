@@ -5563,7 +5563,7 @@ class GschpooziWizard:
             )
 
             # Mesh boundaries and/or probe count
-            current_probe_count = self.state.get("bed_leveling.bed_mesh.probe_count", "5,5")
+            current_probe_count = self.state.get("bed_leveling.bed_mesh.probe_count", "5,5") or "5,5"
             current_mesh_min = self.state.get("bed_leveling.bed_mesh.mesh_min", None)
             current_mesh_max = self.state.get("bed_leveling.bed_mesh.mesh_max", None)
 
@@ -5630,7 +5630,8 @@ class GschpooziWizard:
                         mesh_max = "auto"
 
             self.state.set("bed_leveling.bed_mesh.enabled", enable_mesh)
-            self.state.set("bed_leveling.bed_mesh.probe_count", probe_count)
+            # Ensure probe_count is always a valid string, never None
+            self.state.set("bed_leveling.bed_mesh.probe_count", probe_count or "5,5")
             if enable_mesh:
                 # Always store boundaries (template supports "auto")
                 self.state.set("bed_leveling.bed_mesh.mesh_min", mesh_min or "auto")

@@ -1105,6 +1105,7 @@ class GschpooziWizard:
                     ("2", "Hardware Setup        (Configure your printer)"),
                     ("3", "Tuning & Optimization (Macros, input shaper, etc.)"),
                     ("G", "Generate Config       (Create printer.cfg)"),
+                    ("C", "Clear Settings        (Reset all wizard settings)"),
                     ("Q", "Quit"),
                 ],
                 height=40,
@@ -1122,6 +1123,8 @@ class GschpooziWizard:
                 self.tuning_menu()
             elif choice == "G":
                 self.generate_config()
+            elif choice == "C":
+                self._clear_settings()
 
     def _get_status_text(self) -> str:
         """Get status text showing configuration progress."""
@@ -1137,6 +1140,32 @@ class GschpooziWizard:
         else:
             items = [k for k, v in completion.items() if v]
             return f"Status: {done}/{total} sections configured ({', '.join(items)})"
+
+    def _clear_settings(self) -> None:
+        """Clear all wizard settings and reset to defaults."""
+        if not self.ui.yesno(
+            "Clear all wizard settings?\n\n"
+            "This will reset all your configuration choices.\n"
+            "You will need to reconfigure everything.\n\n"
+            "This action cannot be undone!",
+            title="Clear Settings",
+            default_no=True,
+            height=14,
+            width=70,
+        ):
+            return
+
+        # Clear the state
+        self.state.clear()
+        self.state.save()
+
+        self.ui.msgbox(
+            "All settings have been cleared!\n\n"
+            "You can now start fresh configuration.",
+            title="Settings Cleared",
+            height=10,
+            width=60,
+        )
 
     def _format_menu_item(self, base_label: str, status_info: str = None) -> str:
         """Format a menu item with checkmark and status info.

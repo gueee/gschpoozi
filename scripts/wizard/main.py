@@ -423,8 +423,24 @@ class GschpooziWizard:
                 label = port_info.get("label", port_id)
                 # Include pin info if available
                 pin = port_info.get("pin", port_info.get("signal_pin", ""))
+                # Check for alternative name (e.g., PWM_out)
+                alt_name = port_info.get("name", port_info.get("alt_name", ""))
+
+                # Build comprehensive label showing all identifiers
+                parts = []
                 if pin:
-                    label = f"{label} ({pin})"
+                    parts.append(pin)
+                if alt_name:
+                    parts.append(alt_name)
+
+                if parts:
+                    # Format: "Port ID (pin - alt_name)" or "Port ID (pin)"
+                    identifiers = " - ".join(parts)
+                    label = f"{port_id} ({identifiers}) - {label}"
+                elif pin:
+                    label = f"{port_id} ({pin}) - {label}"
+                else:
+                    label = f"{port_id} - {label}"
             else:
                 label = port_id
 
@@ -535,13 +551,28 @@ class GschpooziWizard:
                     continue
 
                 if isinstance(port_info, dict):
+                    # Get alternative name if available
+                    alt_name = port_info.get("name", port_info.get("alt_name", ""))
+
                     # Common forms
                     if "pin" in port_info:
                         tag = f"{group}:{port_id}:pin"
-                        _add_option(tag, f"{port_id} ({port_info['pin']}) [{group}]", str(port_info["pin"]), port_id)
+                        pin_str = str(port_info["pin"])
+                        # Build description with all identifiers
+                        if alt_name:
+                            desc = f"{port_id} ({pin_str} - {alt_name}) [{group}]"
+                        else:
+                            desc = f"{port_id} ({pin_str}) [{group}]"
+                        _add_option(tag, desc, pin_str, port_id)
                     if "signal_pin" in port_info:
                         tag = f"{group}:{port_id}:signal"
-                        _add_option(tag, f"{port_id} ({port_info['signal_pin']}) [{group}]", str(port_info["signal_pin"]), port_id)
+                        signal_str = str(port_info["signal_pin"])
+                        # Build description with all identifiers
+                        if alt_name:
+                            desc = f"{port_id} ({signal_str} - {alt_name}) [{group}]"
+                        else:
+                            desc = f"{port_id} ({signal_str}) [{group}]"
+                        _add_option(tag, desc, signal_str, port_id)
 
                     # Include other *_pin fields (useful for "all known" discovery)
                     for k, v in port_info.items():

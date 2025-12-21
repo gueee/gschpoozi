@@ -183,10 +183,11 @@
       "pin": "PD15",
       "pwm": true
     },
-    "FAN10": {
-      "label": "Fan 10 (PF8 - 5V tolerant input, PWM capable)",
+    "IN7": {
+      "label": "IN7 (PF8 - PWM_out, 5V tolerant input, PWM capable)",
       "pin": "PF8",
-      "pwm": true
+      "pwm": true,
+      "name": "PWM_out"
     }
   },
 

@@ -8205,6 +8205,12 @@ read -r _
                 "beacon": "Beacon",
                 "cartographer": "Cartographer",
             }.get(accel_source, None)
+            
+            # Format accelerometer menu item
+            if accel_status:
+                accel_menu_label = self._format_menu_item("Accelerometer", accel_status)
+            else:
+                accel_menu_label = "Accelerometer         (For input shaper calibration)"
 
             choice = self.ui.menu(
                 "Tuning & Optimization\n\n"
@@ -8212,7 +8218,7 @@ read -r _
                 [
                     ("3.1", "TMC Autotune         (Motor optimization)"),
                     ("3.2", "Input Shaper         (Resonance compensation)"),
-                    ("3.3", self._format_menu_item("Accelerometer", accel_status) if accel_status else "Accelerometer         (For input shaper calibration)"),
+                    ("3.3", accel_menu_label),
                     ("3.6", "Macros               (START_PRINT, etc.)"),
                     ("3.9", "Exclude Object       (Cancel individual objects)"),
                     ("3.10", "Arc Support         (G2/G3 commands)"),

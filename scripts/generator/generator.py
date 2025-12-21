@@ -98,6 +98,8 @@ class ConfigGenerator:
             'common.firmware_retraction': 'gschpoozi/tuning.cfg',
             'common.macro_config': 'gschpoozi/macros-config.cfg',
             'common.bed_mesh_macro': 'gschpoozi/macros.cfg',
+            'start_print': 'gschpoozi/macros.cfg',
+            'end_print': 'gschpoozi/macros.cfg',
             'common.calibration': 'gschpoozi/calibration.cfg',
         }
 

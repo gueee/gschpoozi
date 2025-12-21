@@ -765,8 +765,8 @@ common:
       # Probe and Leveling
       variable_probe_type: "{{ probe.probe_type | default('none') }}"
       {% if probe.probe_type == 'beacon' %}
-      # Beacon always uses rapid_scan for fast mesh scanning
-      variable_eddy_mesh_method: "rapid_scan"
+      # Beacon uses 'scan' method for continuous fast scanning (not rapid_scan)
+      variable_eddy_mesh_method: "scan"
       {% elif probe.probe_type == 'cartographer' %}
       # Cartographer: use scan method (touch mode uses scan for mesh)
       variable_eddy_mesh_method: "{{ probe.eddy_mesh_method | default('scan') }}"

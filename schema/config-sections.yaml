@@ -510,11 +510,17 @@ bed_mesh:
   condition: "bed_leveling.bed_mesh.enabled"
   template: |
     [bed_mesh]
-    speed: {{ bed_leveling.bed_mesh.speed | default(200) }}
-    {% if probe.probe_type in ['beacon', 'cartographer', 'btt_eddy'] %}
-    # Eddy probes need lower horizontal_move_z (2-3mm vs 5mm for standard)
-    horizontal_move_z: 3
+    {% if probe.probe_type in ['beacon', 'btt_eddy'] %}
+    # Eddy probes: faster speed, lower horizontal_move_z (must be ≤2mm for valid readings)
+    speed: {{ bed_leveling.bed_mesh.speed | default(300) }}
+    horizontal_move_z: 2
+    {% elif probe.probe_type == 'cartographer' %}
+    # Cartographer: fast scanning with zero reference at bed center
+    speed: {{ bed_leveling.bed_mesh.speed | default(300) }}
+    horizontal_move_z: 2
+    zero_reference_position: {{ (printer.bed_size_x / 2) | int }}, {{ (printer.bed_size_y / 2) | int }}
     {% else %}
+    speed: {{ bed_leveling.bed_mesh.speed | default(200) }}
     horizontal_move_z: {{ bed_leveling.bed_mesh.horizontal_move_z | default(5) }}
     {% endif %}
     {% if bed_leveling.bed_mesh.mesh_min == 'auto' %}
@@ -527,11 +533,23 @@ bed_mesh:
     {% else %}
     mesh_max: {{ bed_leveling.bed_mesh.mesh_max }}
     {% endif %}
-    # Klipper requires probe_count when [bed_mesh] is present.
-    # Always emit it with a safe default if state is missing/incomplete.
-    # Use default(..., true) so empty strings/falsey values also fall back.
-    probe_count: {{ bed_leveling.bed_mesh.probe_count | default('5,5', true) }}
+    # Probe count: eddy probes are fast, use higher density for better mesh
+    {% if probe.probe_type == 'cartographer' %}
+    probe_count: {{ bed_leveling.bed_mesh.probe_count | default('20, 20', true) }}
+    {% elif probe.probe_type in ['beacon', 'btt_eddy'] %}
+    probe_count: {{ bed_leveling.bed_mesh.probe_count | default('9, 9', true) }}
+    {% else %}
+    probe_count: {{ bed_leveling.bed_mesh.probe_count | default('5, 5', true) }}
+    {% endif %}
     algorithm: {{ bed_leveling.bed_mesh.algorithm | default('bicubic') }}
+    {% if probe.probe_type in ['beacon', 'cartographer', 'btt_eddy'] %}
+    # scan_overshoot: required for rapid_scan path optimization (min 1mm, 8mm recommended)
+    scan_overshoot: 8
+    {% endif %}
+    {% if probe.probe_type == 'cartographer' %}
+    # mesh_pps: disable interpolation for scan mode (Cartographer recommendation)
+    mesh_pps: 0, 0
+    {% endif %}
     fade_start: {{ bed_leveling.bed_mesh.fade_start | default(0.6) }}
     fade_end: {{ bed_leveling.bed_mesh.fade_end | default(10.0) }}
     fade_target: {{ bed_leveling.bed_mesh.fade_target | default(0) }}

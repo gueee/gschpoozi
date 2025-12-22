@@ -272,8 +272,10 @@ gcode:
         {% if params.PRINT_MIN is defined and params.PRINT_MAX is defined %}
             BED_MESH_CALIBRATE MESH_MIN={params.PRINT_MIN} MESH_MAX={params.PRINT_MAX}
         {% else %}
-            # Fall back to rapid scan for eddy probes or standard mesh
-            {% if cfg.probe_type in ["beacon", "cartographer", "btt-eddy"] %}
+            # Fall back to scan/rapid_scan for eddy probes or standard mesh
+            {% if cfg.probe_type in ["beacon", "cartographer"] %}
+                BED_MESH_CALIBRATE METHOD=scan
+            {% elif cfg.probe_type in ["btt_eddy", "btt-eddy"] %}
                 BED_MESH_CALIBRATE METHOD=rapid_scan
             {% else %}
                 BED_MESH_CALIBRATE ADAPTIVE=1
@@ -281,7 +283,9 @@ gcode:
         {% endif %}
     {% else %}
         # Full mesh
-        {% if cfg.probe_type in ["beacon", "cartographer", "btt-eddy"] %}
+        {% if cfg.probe_type in ["beacon", "cartographer"] %}
+            BED_MESH_CALIBRATE METHOD=scan
+        {% elif cfg.probe_type in ["btt_eddy", "btt-eddy"] %}
             BED_MESH_CALIBRATE METHOD=rapid_scan
         {% else %}
             BED_MESH_CALIBRATE

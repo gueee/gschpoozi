@@ -2574,14 +2574,20 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     lines.append('    {% elif MODE == "adaptive" %}')
 
     # Probe-specific mesh commands
-    if probe_type in ('beacon', 'cartographer', 'btt-eddy'):
+    # Beacon/Cartographer use scan method, BTT Eddy uses rapid_scan
+    if probe_type in ('beacon', 'cartographer'):
+        lines.append("        BED_MESH_CALIBRATE METHOD=scan")
+    elif probe_type in ('btt_eddy', 'btt-eddy'):
         lines.append("        BED_MESH_CALIBRATE METHOD=rapid_scan")
     else:
         lines.append("        BED_MESH_CALIBRATE ADAPTIVE=1")
 
     lines.append("    {% else %}")
 
-    if probe_type in ('beacon', 'cartographer', 'btt-eddy'):
+    # Full mesh mode - same probe-specific methods
+    if probe_type in ('beacon', 'cartographer'):
+        lines.append("        BED_MESH_CALIBRATE METHOD=scan")
+    elif probe_type in ('btt_eddy', 'btt-eddy'):
         lines.append("        BED_MESH_CALIBRATE METHOD=rapid_scan")
     else:
         lines.append("        BED_MESH_CALIBRATE")

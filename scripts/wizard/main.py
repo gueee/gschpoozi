@@ -5434,15 +5434,29 @@ class GschpooziWizard:
                 homing_mode = None
 
             # Eddy probe mesh method (stored here, used later in bed mesh config)
-            if probe_type != "btt_eddy":  # BTT Eddy already set above
-                current_mesh_method = self.state.get("probe.bed_mesh.mesh_method", "scan" if probe_type == "beacon" else "rapid_scan")
+            if probe_type == "beacon":
+                # Beacon uses METHOD=beacon for scan mode (not METHOD=scan)
+                current_mesh_method = self.state.get("probe.bed_mesh.mesh_method", "beacon")
                 mesh_method = self.ui.radiolist(
-                    f"{probe_type.replace('_', ' ').title()} mesh method:",
+                    "Beacon mesh method:",
                     [
+                        ("beacon", "Beacon Scan (continuous scanning)", current_mesh_method == "beacon" or not current_mesh_method),
                         ("rapid_scan", "Rapid Scan (fastest)", current_mesh_method == "rapid_scan"),
-                        ("scan", "Standard Scan (more accurate)", current_mesh_method == "scan" or (probe_type == "beacon" and not current_mesh_method)),
                     ],
-                    title="Probe - Mesh Method"
+                    title="Beacon - Mesh Method"
+                )
+                if mesh_method:
+                    self.state.set("probe.bed_mesh.mesh_method", mesh_method)
+            elif probe_type == "cartographer":
+                # Cartographer uses METHOD=scan (Klipper standard)
+                current_mesh_method = self.state.get("probe.bed_mesh.mesh_method", "scan")
+                mesh_method = self.ui.radiolist(
+                    "Cartographer mesh method:",
+                    [
+                        ("scan", "Standard Scan (continuous scanning)", current_mesh_method == "scan" or not current_mesh_method),
+                        ("rapid_scan", "Rapid Scan (fastest)", current_mesh_method == "rapid_scan"),
+                    ],
+                    title="Cartographer - Mesh Method"
                 )
                 if mesh_method:
                     self.state.set("probe.bed_mesh.mesh_method", mesh_method)

@@ -5434,20 +5434,8 @@ class GschpooziWizard:
                 homing_mode = None
 
             # Eddy probe mesh method (stored here, used later in bed mesh config)
-            if probe_type == "beacon":
-                # Beacon uses METHOD=beacon for scan mode (not METHOD=scan)
-                current_mesh_method = self.state.get("probe.bed_mesh.mesh_method", "beacon")
-                mesh_method = self.ui.radiolist(
-                    "Beacon mesh method:",
-                    [
-                        ("beacon", "Beacon Scan (continuous scanning)", current_mesh_method == "beacon" or not current_mesh_method),
-                        ("rapid_scan", "Rapid Scan (fastest)", current_mesh_method == "rapid_scan"),
-                    ],
-                    title="Beacon - Mesh Method"
-                )
-                if mesh_method:
-                    self.state.set("probe.bed_mesh.mesh_method", mesh_method)
-            elif probe_type == "cartographer":
+            # Beacon only supports METHOD=beacon - no selection needed (hardcoded in generator)
+            if probe_type == "cartographer":
                 # Cartographer uses METHOD=scan (Klipper standard)
                 current_mesh_method = self.state.get("probe.bed_mesh.mesh_method", "scan")
                 mesh_method = self.ui.radiolist(

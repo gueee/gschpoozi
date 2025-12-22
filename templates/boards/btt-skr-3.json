@@ -53,6 +53,10 @@
     "HE1": {
       "label": "Heater 1",
       "pin": "PB4"
+    },
+    "HB": {
+      "label": "Heated Bed",
+      "pin": "PD7"
     }
   },
   "fan_ports": {

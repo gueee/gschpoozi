@@ -107,19 +107,19 @@
     },
     "TH0": {
       "label": "Thermistor 0 (Hotend)",
-      "pin": "PA7"
+      "pin": "PA1"
     },
     "TH1": {
       "label": "Thermistor 1",
-      "pin": "PF4"
+      "pin": "PA2"
     },
     "TH2": {
       "label": "Thermistor 2",
-      "pin": "PF5"
+      "pin": "PA0"
     },
     "TH3": {
       "label": "Thermistor 3",
-      "pin": "PF6"
+      "pin": "PA3"
     }
   },
   "endstop_ports": {

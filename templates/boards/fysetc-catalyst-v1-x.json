@@ -4,6 +4,22 @@
   "manufacturer": "Fysetc",
   "source": "Extracted from Klippain (GPL-3.0)",
   "motor_ports": {
+    "MOTOR_X": {
+      "label": "X Stepper",
+      "step_pin": "PC12",
+      "dir_pin": "PC10",
+      "enable_pin": "PD2",
+      "cs_pin": "PC11",
+      "uart_pin": "PC11"
+    },
+    "MOTOR_Y": {
+      "label": "Y Stepper",
+      "step_pin": "PC15",
+      "dir_pin": "PC13",
+      "enable_pin": "PA10",
+      "cs_pin": "PC14",
+      "uart_pin": "PC14"
+    },
     "MOTOR_Z": {
       "label": "Z Stepper",
       "step_pin": "PB2",
@@ -47,7 +63,7 @@
   "thermistor_ports": {
     "TH": {
       "label": "Thermistor (Hotend)",
-      "pin": "PA0"
+      "pin": "PC0"
     }
   },
   "endstop_ports": {

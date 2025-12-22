@@ -792,8 +792,8 @@ common:
       # ═══════════════════════════════════════════════════════════════════════════════
       variable_probe_type: "{{ probe.probe_type | default('none') }}"
       {% if probe.probe_type == 'beacon' %}
-      # Beacon uses 'scan' method for continuous fast scanning
-      variable_eddy_mesh_method: "{{ probe.bed_mesh.mesh_method | default('scan') }}"
+      # Beacon uses 'beacon' method for continuous fast scanning
+      variable_eddy_mesh_method: "{{ probe.bed_mesh.mesh_method | default('beacon') }}"
       {% elif probe.probe_type == 'cartographer' %}
       # Cartographer: scan method (touch mode uses scan for mesh)
       variable_eddy_mesh_method: "{{ probe.bed_mesh.mesh_method | default('scan') }}"

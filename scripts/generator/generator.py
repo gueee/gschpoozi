@@ -903,7 +903,13 @@ class ConfigGenerator:
         files: Dict[str, List[str]] = {}
 
         for section_key, content in rendered.items():
-            file_path = self.file_mapping.get(section_key, 'gschpoozi/misc.cfg')
+            file_path = self.file_mapping.get(section_key)
+            if not file_path:
+                # Unmapped sections go to calibration.cfg with a warning
+                # (Better than silent misc.cfg accumulation that causes duplicate macros)
+                import sys
+                print(f"Warning: unmapped section '{section_key}', placing in calibration.cfg", file=sys.stderr)
+                file_path = 'gschpoozi/calibration.cfg'
 
             if file_path not in files:
                 files[file_path] = []
@@ -1182,6 +1188,11 @@ class ConfigGenerator:
         # Ensure gschpoozi directory exists
         gschpoozi_dir = self.output_dir / "gschpoozi"
         gschpoozi_dir.mkdir(parents=True, exist_ok=True)
+
+        # Clean up stale generated files before writing new ones
+        # This prevents leftover files from previous generator versions (e.g. misc.cfg)
+        for old_file in gschpoozi_dir.glob("*.cfg"):
+            old_file.unlink()
 
         for file_path, content in files.items():
             full_path = self.output_dir / file_path

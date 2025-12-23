@@ -245,12 +245,12 @@ class WizardUI:
         height: int = 8,
         width: int = 60,
         default_no: bool = False
-    ) -> bool:
+    ) -> Optional[bool]:
         """
         Display a yes/no dialog.
 
         Returns:
-            True for Yes, False for No
+            True for Yes, False for No, None if cancelled (Escape)
         """
         args = [
             "--title", title or self.title,
@@ -262,7 +262,13 @@ class WizardUI:
             args.insert(0, "--defaultno")
 
         code, _ = self._run(args)
-        return code == 0
+        if code == 0:
+            return True
+        elif code == 1:
+            return False
+        else:
+            # Escape or other cancellation (code 255)
+            return None
 
     def msgbox(
         self,

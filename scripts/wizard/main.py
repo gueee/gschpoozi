@@ -7939,141 +7939,27 @@ read -r _
         """Configure [input_shaper] (resonance compensation)."""
         enabled = self.ui.yesno(
             "Enable Input Shaper?\n\n"
-            "This adds the [input_shaper] section.\n"
-            "You can set frequencies to 0 and calibrate later with SHAPER_CALIBRATE.\n\n"
+            "This adds the [input_shaper] section.\n\n"
+            "Calibration is done via macros:\n"
+            "- SHAPER_CALIBRATE (with accelerometer)\n"
+            "- Use generated shaper graph commands after calibration\n\n"
             "Recommended: enable once you have (or plan to do) resonance tuning.",
             title="Input Shaper",
             default_no=not bool(self.state.get("tuning.input_shaper.enabled", False)),
-            height=16,
+            height=18,
             width=88,
         )
         if enabled is None:
             return
 
-        if not enabled:
+        if enabled:
+            self.state.set("tuning.input_shaper.enabled", True)
+            self.ui.msgbox("Input shaper enabled!", title="Saved")
+        else:
             self.state.set("tuning.input_shaper.enabled", False)
-            self.state.save()
             self.ui.msgbox("Input shaper disabled.", title="Saved")
-            return
 
-        # Shaper types
-        shaper_types = [
-            ("mzv", "MZV (recommended default)"),
-            ("ei", "EI"),
-            ("2hump_ei", "2HUMP_EI"),
-            ("3hump_ei", "3HUMP_EI"),
-            ("zv", "ZV"),
-            ("zvd", "ZVD"),
-        ]
-
-        shaper_x = self.ui.menu(
-            "Select shaper type for X:",
-            shaper_types,
-            title="Input Shaper - X type",
-            height=18,
-            width=80,
-            menu_height=8,
-        )
-        if shaper_x is None:
-            return
-
-        freq_x = self.ui.inputbox(
-            "Shaper frequency X (Hz):\n\n"
-            "Set 0 to calibrate later with SHAPER_CALIBRATE.\n"
-            "Typical values are ~20-80 Hz.",
-            default=str(self.state.get("tuning.input_shaper.shaper_freq_x", 0)),
-            title="Input Shaper - X frequency",
-            height=16,
-            width=88,
-        )
-        if freq_x is None:
-            return
-
-        damp_x = self.ui.inputbox(
-            "Damping ratio X:\n\n"
-            "Typical default: 0.1",
-            default=str(self.state.get("tuning.input_shaper.damping_ratio_x", 0.1)),
-            title="Input Shaper - X damping",
-            height=14,
-            width=70,
-        )
-        if damp_x is None:
-            return
-
-        enable_y = self.ui.yesno(
-            "Configure Y axis shaper as well?",
-            title="Input Shaper - Y axis",
-            default_no=False,
-            height=10,
-            width=60,
-        )
-        if enable_y is None:
-            return
-
-        shaper_y = None
-        freq_y = None
-        damp_y = None
-        if enable_y:
-            shaper_y = self.ui.menu(
-                "Select shaper type for Y:",
-                shaper_types,
-                title="Input Shaper - Y type",
-                height=18,
-                width=80,
-                menu_height=8,
-            )
-            if shaper_y is None:
-                return
-
-            freq_y = self.ui.inputbox(
-                "Shaper frequency Y (Hz):\n\n"
-                "Set 0 to calibrate later with SHAPER_CALIBRATE.\n"
-                "Typical values are ~20-80 Hz.",
-                default=str(self.state.get("tuning.input_shaper.shaper_freq_y", 0)),
-                title="Input Shaper - Y frequency",
-                height=16,
-                width=88,
-            )
-            if freq_y is None:
-                return
-
-            damp_y = self.ui.inputbox(
-                "Damping ratio Y:\n\n"
-                "Typical default: 0.1",
-                default=str(self.state.get("tuning.input_shaper.damping_ratio_y", 0.1)),
-                title="Input Shaper - Y damping",
-                height=14,
-                width=70,
-            )
-            if damp_y is None:
-                return
-
-        try:
-            fx = float(str(freq_x).strip())
-            dx = float(str(damp_x).strip())
-            if fx < 0 or dx <= 0:
-                raise ValueError()
-            if enable_y:
-                fy = float(str(freq_y).strip()) if freq_y is not None else 0.0
-                dy = float(str(damp_y).strip()) if damp_y is not None else 0.1
-                if fy < 0 or dy <= 0:
-                    raise ValueError()
-        except Exception:
-            self.ui.msgbox("Invalid number entered. Please try again.", title="Error")
-            return
-
-        self.state.set("tuning.input_shaper.enabled", True)
-        self.state.set("tuning.input_shaper.shaper_type_x", shaper_x)
-        self.state.set("tuning.input_shaper.shaper_freq_x", fx)
-        self.state.set("tuning.input_shaper.damping_ratio_x", dx)
-        self.state.set("tuning.input_shaper.enable_y", bool(enable_y))
-        if enable_y:
-            self.state.set("tuning.input_shaper.shaper_type_y", shaper_y)
-            self.state.set("tuning.input_shaper.shaper_freq_y", fy)
-            self.state.set("tuning.input_shaper.damping_ratio_y", dy)
         self.state.save()
-
-        self.ui.msgbox("Input shaper saved!", title="Saved")
 
     def _configure_accelerometer(self) -> None:
         """Configure accelerometer for input shaper calibration."""
@@ -9244,13 +9130,7 @@ read -r _
             # Check Input Shaper status
             input_shaper_enabled = self.state.get("tuning.input_shaper.enabled", False)
             if input_shaper_enabled:
-                shaper_x = self.state.get("tuning.input_shaper.shaper_type_x", "")
-                shaper_y = self.state.get("tuning.input_shaper.shaper_type_y", "")
-                if shaper_y:
-                    shaper_status = f"{shaper_x}/{shaper_y}"
-                else:
-                    shaper_status = shaper_x or "Configured"
-                input_shaper_menu_label = self._format_menu_item("Input Shaper", shaper_status)
+                input_shaper_menu_label = self._format_menu_item("Input Shaper", "Enabled")
             else:
                 input_shaper_menu_label = "Input Shaper         (Resonance compensation)"
 

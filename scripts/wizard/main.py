@@ -9232,6 +9232,28 @@ read -r _
     def tuning_menu(self) -> None:
         """Tuning and optimization menu."""
         while True:
+            # Check TMC Autotune status
+            tmc_enabled = self.state.get("tuning.tmc_autotune.enabled", False)
+            tmc_steppers = self.state.get("tuning.tmc_autotune.steppers", {}) or {}
+            if tmc_enabled and tmc_steppers:
+                tmc_count = len(tmc_steppers)
+                tmc_menu_label = self._format_menu_item("TMC Autotune", f"{tmc_count} motor{'s' if tmc_count > 1 else ''}")
+            else:
+                tmc_menu_label = "TMC Autotune         (Motor optimization)"
+
+            # Check Input Shaper status
+            input_shaper_enabled = self.state.get("tuning.input_shaper.enabled", False)
+            if input_shaper_enabled:
+                shaper_x = self.state.get("tuning.input_shaper.shaper_type_x", "")
+                shaper_y = self.state.get("tuning.input_shaper.shaper_type_y", "")
+                if shaper_y:
+                    shaper_status = f"{shaper_x}/{shaper_y}"
+                else:
+                    shaper_status = shaper_x or "Configured"
+                input_shaper_menu_label = self._format_menu_item("Input Shaper", shaper_status)
+            else:
+                input_shaper_menu_label = "Input Shaper         (Resonance compensation)"
+
             # Show accelerometer status
             accel_source = self.state.get("tuning.accelerometer.source", "")
             accel_status = {
@@ -9246,16 +9268,39 @@ read -r _
             else:
                 accel_menu_label = "Accelerometer         (For input shaper calibration)"
 
+            # Check Macros status
+            macros_preset = self.state.get("macros.preset")
+            if macros_preset:
+                preset_display = macros_preset.replace("_", " ").title()
+                macros_menu_label = self._format_menu_item("Macros", preset_display)
+            else:
+                macros_menu_label = "Macros               (START_PRINT, etc.)"
+
+            # Check Exclude Object status
+            exclude_enabled = self.state.get("tuning.exclude_object.enabled", False)
+            if exclude_enabled:
+                exclude_menu_label = self._format_menu_item("Exclude Object", "Enabled")
+            else:
+                exclude_menu_label = "Exclude Object       (Cancel individual objects)"
+
+            # Check Arc Support status
+            arc_enabled = self.state.get("tuning.arc_support.enabled", False)
+            if arc_enabled:
+                arc_resolution = self.state.get("tuning.arc_support.resolution", 0.1)
+                arc_menu_label = self._format_menu_item("Arc Support", f"res={arc_resolution}")
+            else:
+                arc_menu_label = "Arc Support         (G2/G3 commands)"
+
             choice = self.ui.menu(
                 "Tuning & Optimization\n\n"
                 "Configure advanced features and calibration.",
                 [
-                    ("3.1", "TMC Autotune         (Motor optimization)"),
-                    ("3.2", "Input Shaper         (Resonance compensation)"),
+                    ("3.1", tmc_menu_label),
+                    ("3.2", input_shaper_menu_label),
                     ("3.3", accel_menu_label),
-                    ("3.6", "Macros               (START_PRINT, etc.)"),
-                    ("3.9", "Exclude Object       (Cancel individual objects)"),
-                    ("3.10", "Arc Support         (G2/G3 commands)"),
+                    ("3.6", macros_menu_label),
+                    ("3.9", exclude_menu_label),
+                    ("3.10", arc_menu_label),
                     ("B", "Back to Main Menu"),
                 ],
                 title="3. Tuning & Optimization",

@@ -736,6 +736,772 @@ common:
       timeout: 120
       verbose: True
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # TMC Chopper Tuning
+  # Finds optimal chopper parameters (TPFD, TBL, TOFF, HSTRT, HEND) for TMC5160/TMC2240
+  # to reduce mid-range resonance and improve print quality.
+  #
+  # Requires: gcode_shell_command extension (same as input shaper)
+  # See: docs/TMC_CHOPPER_TUNING_IMPLEMENTATION.md for usage
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  # Shell command to run the Python chopper analyzer
+  chopper_shell_command:
+    condition: "tuning.chopper_tuning.enabled"
+    template: |
+      [gcode_shell_command chopper_analyze]
+      command: python3 $HOME/printer_data/config/gschpoozi/scripts/tools/chopper_analyze.py
+      timeout: 300
+      verbose: True
+
+  # Hardware stall detection using DIAG pins (TMC5160/TMC2240 only)
+  # Monitors for motor stalls during tuning to prevent damage
+  chopper_stall_monitor_x:
+    condition: "tuning.chopper_tuning.enabled and tuning.chopper_tuning.enable_stall_detection and pins.stepper_x.diag"
+    template: |
+      [gcode_button stall_monitor_x]
+      pin: ^{{ pins.stepper_x.diag }}
+      press_gcode:
+          _CHOPPER_STALL_DETECTED AXIS=X
+
+  chopper_stall_monitor_y:
+    condition: "tuning.chopper_tuning.enabled and tuning.chopper_tuning.enable_stall_detection and pins.stepper_y.diag"
+    template: |
+      [gcode_button stall_monitor_y]
+      pin: ^{{ pins.stepper_y.diag }}
+      press_gcode:
+          _CHOPPER_STALL_DETECTED AXIS=Y
+
+  # Chopper tuning state and macros
+  chopper_tuning_macros:
+    condition: "tuning.chopper_tuning.enabled"
+    template: |
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # TMC CHOPPER TUNING STATE
+      # Stores tuning state, original parameters, and test results
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro _CHOPPER_TUNE_STATE]
+      description: Internal state for chopper tuning process
+      # Tuning state
+      variable_tuning_active: False
+      variable_current_axis: "x"
+      variable_current_phase: "idle"
+      variable_test_count: 0
+      variable_abort_requested: False
+      # Safety tracking
+      variable_last_driver_temp: 0
+      variable_stall_detected: False
+      variable_stall_axis: ""
+      # Original parameters for X axis (stored before tuning)
+      variable_x_original_tpfd: 0
+      variable_x_original_tbl: 0
+      variable_x_original_toff: 0
+      variable_x_original_hstrt: 0
+      variable_x_original_hend: 0
+      # Original parameters for Y axis
+      variable_y_original_tpfd: 0
+      variable_y_original_tbl: 0
+      variable_y_original_toff: 0
+      variable_y_original_hstrt: 0
+      variable_y_original_hend: 0
+      # Best results found
+      variable_x_best_tpfd: 0
+      variable_x_best_tbl: 0
+      variable_x_best_toff: 0
+      variable_x_best_hstrt: 0
+      variable_x_best_hend: 0
+      variable_x_best_score: 999999
+      variable_y_best_tpfd: 0
+      variable_y_best_tbl: 0
+      variable_y_best_toff: 0
+      variable_y_best_hstrt: 0
+      variable_y_best_hend: 0
+      variable_y_best_score: 999999
+      gcode:
+          # State holder - no gcode needed
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # STALL DETECTION HANDLER
+      # Called by gcode_button when DIAG pin triggers
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro _CHOPPER_STALL_DETECTED]
+      description: Handle motor stall during chopper tuning
+      gcode:
+          {% set axis = params.AXIS | default("?") | upper %}
+          {% set state = printer["gcode_macro _CHOPPER_TUNE_STATE"] %}
+
+          {% if state.tuning_active %}
+              # Only respond to stalls during active tuning
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=stall_detected VALUE=True
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=stall_axis VALUE="'{axis}'"
+              RESPOND TYPE=error MSG="STALL DETECTED on {axis} axis during chopper tuning!"
+              _CHOPPER_ABORT REASON="stall"
+          {% endif %}
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # STORE ORIGINAL PARAMETERS
+      # Saves current chopper settings before tuning begins
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro _CHOPPER_STORE_ORIGINALS]
+      description: Store original TMC chopper parameters before tuning
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set stepper = "stepper_" ~ axis %}
+
+          # Determine TMC driver type (TMC5160/TMC2240 have TPFD, TMC2209 does not)
+          {% if printer.configfile.config["tmc5160 " ~ stepper] is defined %}
+              {% set tmc = "tmc5160 " ~ stepper %}
+              {% set has_tpfd = true %}
+          {% elif printer.configfile.config["tmc2240 " ~ stepper] is defined %}
+              {% set tmc = "tmc2240 " ~ stepper %}
+              {% set has_tpfd = true %}
+          {% elif printer.configfile.config["tmc2209 " ~ stepper] is defined %}
+              {% set tmc = "tmc2209 " ~ stepper %}
+              {% set has_tpfd = false %}
+          {% else %}
+              { action_raise_error("No TMC5160, TMC2240, or TMC2209 found for " ~ stepper) }
+          {% endif %}
+
+          # Store original values
+          {% if axis == "x" %}
+              {% if has_tpfd %}
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=x_original_tpfd VALUE={printer[tmc].driver_tpfd | default(0)}
+              {% endif %}
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=x_original_tbl VALUE={printer[tmc].driver_tbl | default(1)}
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=x_original_toff VALUE={printer[tmc].driver_toff | default(3)}
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=x_original_hstrt VALUE={printer[tmc].driver_hstrt | default(0)}
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=x_original_hend VALUE={printer[tmc].driver_hend | default(0)}
+          {% else %}
+              {% if has_tpfd %}
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=y_original_tpfd VALUE={printer[tmc].driver_tpfd | default(0)}
+              {% endif %}
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=y_original_tbl VALUE={printer[tmc].driver_tbl | default(1)}
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=y_original_toff VALUE={printer[tmc].driver_toff | default(3)}
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=y_original_hstrt VALUE={printer[tmc].driver_hstrt | default(0)}
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=y_original_hend VALUE={printer[tmc].driver_hend | default(0)}
+          {% endif %}
+
+          RESPOND MSG="Stored original chopper parameters for {axis | upper} axis"
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # RESTORE ORIGINAL PARAMETERS
+      # Restores saved chopper settings (used on abort or after tuning)
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro _CHOPPER_RESTORE_ORIGINALS]
+      description: Restore original TMC chopper parameters
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set stepper = "stepper_" ~ axis %}
+          {% set state = printer["gcode_macro _CHOPPER_TUNE_STATE"] %}
+
+          # Determine TMC driver type (TMC5160/TMC2240 have TPFD, TMC2209 does not)
+          {% if printer.configfile.config["tmc5160 " ~ stepper] is defined %}
+              {% set tmc = "tmc5160" %}
+              {% set has_tpfd = true %}
+          {% elif printer.configfile.config["tmc2240 " ~ stepper] is defined %}
+              {% set tmc = "tmc2240" %}
+              {% set has_tpfd = true %}
+          {% elif printer.configfile.config["tmc2209 " ~ stepper] is defined %}
+              {% set tmc = "tmc2209" %}
+              {% set has_tpfd = false %}
+          {% else %}
+              { action_raise_error("No TMC5160, TMC2240, or TMC2209 found for " ~ stepper) }
+          {% endif %}
+
+          # Restore original values
+          {% if axis == "x" %}
+              {% if has_tpfd %}
+              SET_TMC_FIELD STEPPER={stepper} FIELD=tpfd VALUE={state.x_original_tpfd}
+              {% endif %}
+              SET_TMC_FIELD STEPPER={stepper} FIELD=tbl VALUE={state.x_original_tbl}
+              SET_TMC_FIELD STEPPER={stepper} FIELD=toff VALUE={state.x_original_toff}
+              SET_TMC_FIELD STEPPER={stepper} FIELD=hstrt VALUE={state.x_original_hstrt}
+              SET_TMC_FIELD STEPPER={stepper} FIELD=hend VALUE={state.x_original_hend}
+          {% else %}
+              {% if has_tpfd %}
+              SET_TMC_FIELD STEPPER={stepper} FIELD=tpfd VALUE={state.y_original_tpfd}
+              {% endif %}
+              SET_TMC_FIELD STEPPER={stepper} FIELD=tbl VALUE={state.y_original_tbl}
+              SET_TMC_FIELD STEPPER={stepper} FIELD=toff VALUE={state.y_original_toff}
+              SET_TMC_FIELD STEPPER={stepper} FIELD=hstrt VALUE={state.y_original_hstrt}
+              SET_TMC_FIELD STEPPER={stepper} FIELD=hend VALUE={state.y_original_hend}
+          {% endif %}
+
+          RESPOND MSG="Restored original chopper parameters for {axis | upper} axis"
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # SAFETY CHECK
+      # Checks driver temperature and status before/during tuning
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro _CHOPPER_SAFETY_CHECK]
+      description: Check TMC driver safety status
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set stepper = "stepper_" ~ axis %}
+          {% set max_driver_temp = params.MAX_DRIVER_TEMP | default({{ tuning.chopper_tuning.max_driver_temp | default(100) }}) | int %}
+          {% set state = printer["gcode_macro _CHOPPER_TUNE_STATE"] %}
+
+          # Determine TMC driver type
+          {% if printer.configfile.config["tmc5160 " ~ stepper] is defined %}
+              {% set tmc = "tmc5160 " ~ stepper %}
+          {% elif printer.configfile.config["tmc2240 " ~ stepper] is defined %}
+              {% set tmc = "tmc2240 " ~ stepper %}
+          {% elif printer.configfile.config["tmc2209 " ~ stepper] is defined %}
+              {% set tmc = "tmc2209 " ~ stepper %}
+          {% else %}
+              { action_raise_error("No TMC5160, TMC2240, or TMC2209 found for " ~ stepper) }
+          {% endif %}
+
+          # Check driver status
+          {% set drv = printer[tmc] %}
+
+          # Check for over-temperature
+          {% if drv.drv_status is defined %}
+              {% if drv.drv_status.ot is defined and drv.drv_status.ot %}
+                  RESPOND TYPE=error MSG="TMC driver {stepper} OVER-TEMPERATURE!"
+                  _CHOPPER_ABORT REASON="overtemp"
+              {% endif %}
+
+              # Check for open load (disconnected motor)
+              {% if (drv.drv_status.ola is defined and drv.drv_status.ola) or
+                    (drv.drv_status.olb is defined and drv.drv_status.olb) %}
+                  RESPOND TYPE=error MSG="TMC driver {stepper} reports OPEN LOAD - check motor connection!"
+                  _CHOPPER_ABORT REASON="open_load"
+              {% endif %}
+
+              # Check for short to ground
+              {% if (drv.drv_status.s2ga is defined and drv.drv_status.s2ga) or
+                    (drv.drv_status.s2gb is defined and drv.drv_status.s2gb) %}
+                  RESPOND TYPE=error MSG="TMC driver {stepper} reports SHORT TO GROUND!"
+                  _CHOPPER_ABORT REASON="short_gnd"
+              {% endif %}
+          {% endif %}
+
+          # All checks passed
+          {% if not state.abort_requested %}
+              RESPOND MSG="Safety check passed for {axis | upper} axis"
+          {% endif %}
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # ABORT TUNING
+      # Emergency stop for chopper tuning with parameter restoration
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro _CHOPPER_ABORT]
+      description: Abort chopper tuning and restore original parameters
+      gcode:
+          {% set reason = params.REASON | default("user_request") %}
+          {% set state = printer["gcode_macro _CHOPPER_TUNE_STATE"] %}
+
+          # Mark abort requested
+          SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=abort_requested VALUE=True
+          SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=tuning_active VALUE=False
+
+          # Stop any movement
+          M400
+
+          RESPOND TYPE=error MSG="Chopper tuning ABORTED: {reason}"
+
+          # Restore original parameters for whichever axis was being tuned
+          {% if state.current_axis == "x" or state.current_axis == "both" %}
+              _CHOPPER_RESTORE_ORIGINALS AXIS=X
+          {% endif %}
+          {% if state.current_axis == "y" or state.current_axis == "both" %}
+              _CHOPPER_RESTORE_ORIGINALS AXIS=Y
+          {% endif %}
+
+          # Reset state
+          SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=current_phase VALUE="'aborted'"
+          SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=stall_detected VALUE=False
+
+          {% if reason == "stall" %}
+              RESPOND TYPE=error MSG="Motor stall detected - check for mechanical issues or reduce test speed"
+          {% elif reason == "overtemp" %}
+              RESPOND TYPE=error MSG="Driver overtemperature - allow to cool before retrying"
+          {% endif %}
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # SAFE POSITION
+      # Move to safe position for tuning movements
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro _CHOPPER_SAFE_POSITION]
+      description: Move to safe center position for chopper tuning
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set speed = params.SPEED | default(100) | float %}
+
+          {% set max_x = printer.toolhead.axis_maximum.x %}
+          {% set min_x = printer.toolhead.axis_minimum.x %}
+          {% set max_y = printer.toolhead.axis_maximum.y %}
+          {% set min_y = printer.toolhead.axis_minimum.y %}
+
+          # Calculate center position
+          {% set center_x = (max_x + min_x) / 2 %}
+          {% set center_y = (max_y + min_y) / 2 %}
+
+          # Ensure homed
+          {% if "xyz" not in printer.toolhead.homed_axes %}
+              G28
+          {% endif %}
+
+          # Move to center
+          G90
+          {% if axis == "x" or axis == "both" %}
+              G1 X{center_x} F{speed * 60}
+          {% endif %}
+          {% if axis == "y" or axis == "both" %}
+              G1 Y{center_y} F{speed * 60}
+          {% endif %}
+          G4 P500  ; Brief pause to settle
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # MAIN ENTRY POINT
+      # User-callable macro to start chopper tuning
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro TMC_CHOPPER_TUNE]
+      description: Auto-tune TMC chopper settings to reduce vibration (TMC5160/TMC2240/TMC2209)
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set mode = params.MODE | default("full") | lower %}
+          {% set min_speed = params.MIN_SPEED | default({{ tuning.chopper_tuning.test_speed_min | default(30) }}) | int %}
+          {% set max_speed = params.MAX_SPEED | default({{ tuning.chopper_tuning.test_speed_max | default(150) }}) | int %}
+          {% set step = params.STEP | default({{ tuning.chopper_tuning.test_speed_step | default(10) }}) | int %}
+          {% set state = printer["gcode_macro _CHOPPER_TUNE_STATE"] %}
+          {% set stepper = "stepper_" ~ axis %}
+
+          # Validate stepper has compatible driver
+          {% if not (printer.configfile.config["tmc5160 " ~ stepper] is defined or
+                     printer.configfile.config["tmc2240 " ~ stepper] is defined or
+                     printer.configfile.config["tmc2209 " ~ stepper] is defined) %}
+              { action_raise_error("TMC_CHOPPER_TUNE requires TMC5160, TMC2240, or TMC2209 driver on " ~ stepper) }
+          {% endif %}
+
+          # Check if driver has TPFD support (TMC2209 does not)
+          {% set has_tpfd = printer.configfile.config["tmc5160 " ~ stepper] is defined or
+                            printer.configfile.config["tmc2240 " ~ stepper] is defined %}
+          {% if not has_tpfd %}
+              RESPOND MSG="Note: TMC2209 detected - TPFD optimization not available"
+          {% endif %}
+
+          # Validate accelerometer is available
+          {% if not (printer.configfile.config["adxl345"] is defined or
+                     printer.configfile.config["lis2dw"] is defined or
+                     printer.configfile.config["beacon"] is defined) %}
+              { action_raise_error("TMC_CHOPPER_TUNE requires an accelerometer") }
+          {% endif %}
+
+          # Initialize state
+          SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=tuning_active VALUE=True
+          SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=current_axis VALUE="'{axis}'"
+          SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=current_phase VALUE="'init'"
+          SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=abort_requested VALUE=False
+          SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=test_count VALUE=0
+
+          RESPOND MSG="═══════════════════════════════════════════════════════"
+          RESPOND MSG="     TMC CHOPPER TUNING - {axis | upper} AXIS"
+          RESPOND MSG="═══════════════════════════════════════════════════════"
+          RESPOND MSG="Mode: {mode} | Speeds: {min_speed}-{max_speed} mm/s"
+
+          # Store original parameters
+          _CHOPPER_STORE_ORIGINALS AXIS={axis}
+
+          # Run safety check
+          _CHOPPER_SAFETY_CHECK AXIS={axis}
+
+          {% if state.abort_requested %}
+              RESPOND TYPE=error MSG="Tuning aborted during safety check"
+          {% else %}
+              # Move to safe position
+              _CHOPPER_SAFE_POSITION AXIS={axis}
+
+              {% if mode == "find_resonance" or mode == "full" %}
+                  RESPOND MSG="═══ Phase 1: Finding Resonant Speeds ═══"
+                  SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=current_phase VALUE="'find_resonance'"
+                  _CHOPPER_FIND_RESONANCE AXIS={axis} MIN_SPEED={min_speed} MAX_SPEED={max_speed} STEP={step}
+              {% endif %}
+
+              {% if mode == "optimize" or mode == "full" %}
+                  RESPOND MSG="═══ Phase 2: Optimizing Parameters ═══"
+                  SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=current_phase VALUE="'optimize'"
+                  _CHOPPER_OPTIMIZE AXIS={axis} MIN_SPEED={min_speed} MAX_SPEED={max_speed}
+              {% endif %}
+
+              # Finalize
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=tuning_active VALUE=False
+              SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=current_phase VALUE="'complete'"
+
+              RESPOND MSG="═══════════════════════════════════════════════════════"
+              RESPOND MSG="     TUNING COMPLETE"
+              RESPOND MSG="═══════════════════════════════════════════════════════"
+              RESPOND MSG="Results saved to ~/printer_data/config/chopper_results/"
+              RESPOND MSG="Run CHOPPER_ANALYZE to generate recommendations"
+          {% endif %}
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # FIND RESONANCE PHASE
+      # Sweep speeds to identify problematic vibration frequencies
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro _CHOPPER_FIND_RESONANCE]
+      description: Sweep speeds to find resonant frequencies
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set min_speed = params.MIN_SPEED | default(30) | int %}
+          {% set max_speed = params.MAX_SPEED | default(150) | int %}
+          {% set step = params.STEP | default(10) | int %}
+          {% set state = printer["gcode_macro _CHOPPER_TUNE_STATE"] %}
+
+          {% set max_pos = printer.toolhead.axis_maximum[axis] %}
+          {% set min_pos = printer.toolhead.axis_minimum[axis] %}
+          {% set travel = max_pos - min_pos %}
+          {% set safe_distance = ([travel / 4, 40] | min) | int %}
+          {% set center = (max_pos + min_pos) / 2 %}
+
+          # Determine accelerometer chip
+          {% if printer.configfile.config["beacon"] is defined %}
+              {% set accel_chip = "beacon" %}
+          {% elif printer.configfile.config["lis2dw"] is defined %}
+              {% set accel_chip = "lis2dw" %}
+          {% else %}
+              {% set accel_chip = "adxl345" %}
+          {% endif %}
+
+          RESPOND MSG="Sweeping {min_speed} to {max_speed} mm/s in {step} mm/s increments"
+          RESPOND MSG="Using accelerometer: {accel_chip}"
+
+          # Start recording
+          ACCELEROMETER_MEASURE CHIP={accel_chip}
+
+          {% for speed in range(min_speed, max_speed + 1, step) %}
+              {% if not state.abort_requested %}
+                  RESPOND MSG="Testing {speed} mm/s..."
+
+                  # Move back and forth at test speed
+                  G90
+                  G1 {axis | upper}{center + safe_distance} F{speed * 60}
+                  G1 {axis | upper}{center - safe_distance} F{speed * 60}
+                  G1 {axis | upper}{center} F{speed * 60}
+                  G4 P300  ; Pause between tests
+              {% endif %}
+          {% endfor %}
+
+          # Stop recording
+          ACCELEROMETER_MEASURE CHIP={accel_chip} NAME=resonance_sweep_{axis}
+
+          RESPOND MSG="Resonance sweep complete for {axis | upper} axis"
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # OPTIMIZE PHASE
+      # Test chopper parameter combinations at problematic speeds
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro _CHOPPER_OPTIMIZE]
+      description: Test chopper parameter combinations
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set min_speed = params.MIN_SPEED | default(50) | int %}
+          {% set max_speed = params.MAX_SPEED | default(100) | int %}
+          {% set stepper = "stepper_" ~ axis %}
+          {% set state = printer["gcode_macro _CHOPPER_TUNE_STATE"] %}
+
+          # Check if driver has TPFD support (TMC2209 does not)
+          {% set has_tpfd = printer.configfile.config["tmc5160 " ~ stepper] is defined or
+                            printer.configfile.config["tmc2240 " ~ stepper] is defined %}
+
+          # Test speeds (mid-range where resonance typically occurs)
+          {% set test_speed = ((min_speed + max_speed) / 2) | int %}
+
+          {% if has_tpfd %}
+              # TMC5160/TMC2240: Test TPFD values (primary parameter for mid-range resonance)
+              {% set tpfd_list = {{ tuning.chopper_tuning.tpfd_values | default("0,4,8,12,15") }}.split(",") %}
+
+              RESPOND MSG="Testing TPFD values at {test_speed} mm/s"
+              RESPOND MSG="TPFD values: {tpfd_list | join(', ')}"
+
+              {% for tpfd in tpfd_list %}
+                  {% if not state.abort_requested %}
+                      _CHOPPER_TEST_COMBO AXIS={axis} SPEED={test_speed} TPFD={tpfd | int}
+                      SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=test_count VALUE={state.test_count + 1}
+                  {% endif %}
+              {% endfor %}
+          {% else %}
+              # TMC2209: Test TBL/TOFF combinations (no TPFD available)
+              {% set tbl_list = {{ tuning.chopper_tuning.tbl_values | default("0,1,2") }}.split(",") %}
+              {% set toff_list = {{ tuning.chopper_tuning.toff_values | default("1,2,3,4") }}.split(",") %}
+
+              RESPOND MSG="TMC2209 mode: Testing TBL/TOFF combinations at {test_speed} mm/s"
+
+              {% for tbl in tbl_list %}
+                  {% for toff in toff_list %}
+                      {% if not state.abort_requested %}
+                          _CHOPPER_TEST_COMBO AXIS={axis} SPEED={test_speed} TBL={tbl | int} TOFF={toff | int}
+                          SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=test_count VALUE={state.test_count + 1}
+                      {% endif %}
+                  {% endfor %}
+              {% endfor %}
+          {% endif %}
+
+          # Restore original parameters after testing
+          _CHOPPER_RESTORE_ORIGINALS AXIS={axis}
+
+          RESPOND MSG="Parameter optimization complete"
+          RESPOND MSG="Total tests: {state.test_count}"
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # TEST COMBO
+      # Test a single parameter combination and record accelerometer data
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro _CHOPPER_TEST_COMBO]
+      description: Test a single chopper parameter combination
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set speed = params.SPEED | default(75) | int %}
+          {% set tpfd = params.TPFD | default(0) | int %}
+          {% set tbl = params.TBL | default({{ tuning.chopper_tuning.default_tbl | default(2) }}) | int %}
+          {% set toff = params.TOFF | default({{ tuning.chopper_tuning.default_toff | default(3) }}) | int %}
+          {% set hstrt = params.HSTRT | default({{ tuning.chopper_tuning.default_hstrt | default(5) }}) | int %}
+          {% set hend = params.HEND | default({{ tuning.chopper_tuning.default_hend | default(3) }}) | int %}
+          {% set stepper = "stepper_" ~ axis %}
+          {% set state = printer["gcode_macro _CHOPPER_TUNE_STATE"] %}
+
+          # Check if driver has TPFD support (TMC2209 does not)
+          {% set has_tpfd = printer.configfile.config["tmc5160 " ~ stepper] is defined or
+                            printer.configfile.config["tmc2240 " ~ stepper] is defined %}
+
+          {% set max_pos = printer.toolhead.axis_maximum[axis] %}
+          {% set min_pos = printer.toolhead.axis_minimum[axis] %}
+          {% set travel = max_pos - min_pos %}
+          {% set safe_distance = ([travel / 4, 40] | min) | int %}
+          {% set center = (max_pos + min_pos) / 2 %}
+
+          # Determine accelerometer chip
+          {% if printer.configfile.config["beacon"] is defined %}
+              {% set accel_chip = "beacon" %}
+          {% elif printer.configfile.config["lis2dw"] is defined %}
+              {% set accel_chip = "lis2dw" %}
+          {% else %}
+              {% set accel_chip = "adxl345" %}
+          {% endif %}
+
+          {% if has_tpfd %}
+              RESPOND MSG="Testing TPFD={tpfd} TBL={tbl} TOFF={toff} HSTRT={hstrt} HEND={hend}"
+          {% else %}
+              RESPOND MSG="Testing TBL={tbl} TOFF={toff} HSTRT={hstrt} HEND={hend} (TMC2209)"
+          {% endif %}
+
+          # Apply chopper parameters
+          {% if has_tpfd %}
+          SET_TMC_FIELD STEPPER={stepper} FIELD=tpfd VALUE={tpfd}
+          {% endif %}
+          SET_TMC_FIELD STEPPER={stepper} FIELD=tbl VALUE={tbl}
+          SET_TMC_FIELD STEPPER={stepper} FIELD=toff VALUE={toff}
+          SET_TMC_FIELD STEPPER={stepper} FIELD=hstrt VALUE={hstrt}
+          SET_TMC_FIELD STEPPER={stepper} FIELD=hend VALUE={hend}
+
+          G4 P200  ; Wait for settings to stabilize
+
+          # Check driver status
+          _CHOPPER_SAFETY_CHECK AXIS={axis}
+
+          {% if not state.abort_requested %}
+              # Test filename encodes parameters
+              {% if has_tpfd %}
+              {% set test_name = "chopper_" ~ axis ~ "_tpfd" ~ tpfd ~ "_tbl" ~ tbl ~ "_toff" ~ toff ~ "_s" ~ speed %}
+              {% else %}
+              {% set test_name = "chopper_" ~ axis ~ "_tbl" ~ tbl ~ "_toff" ~ toff ~ "_s" ~ speed %}
+              {% endif %}
+
+              # Start recording
+              ACCELEROMETER_MEASURE CHIP={accel_chip}
+
+              # Execute test movement
+              G90
+              G1 {axis | upper}{center + safe_distance} F{speed * 60}
+              G1 {axis | upper}{center - safe_distance} F{speed * 60}
+              G1 {axis | upper}{center} F{speed * 60}
+
+              # Stop recording
+              ACCELEROMETER_MEASURE CHIP={accel_chip} NAME={test_name}
+
+              RESPOND MSG="  Recorded: {test_name}"
+          {% endif %}
+
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # CHOPPER ANALYZE
+      # Trigger the Python analysis script
+      # ═══════════════════════════════════════════════════════════════════════════════
+      [gcode_macro CHOPPER_ANALYZE]
+      description: Run analysis on chopper tuning data and generate recommendations
+      gcode:
+          {% set mode = params.MODE | default("report") %}
+          RESPOND MSG="Running chopper analysis ({mode} mode)..."
+          RUN_SHELL_COMMAND CMD=chopper_analyze
+          RESPOND MSG="Analysis complete. Check ~/printer_data/config/chopper_results/"
+
+  # AWD (All Wheel Drive) Chopper Tuning
+  # Additional macros for printers with stepper_x1 and stepper_y1
+  chopper_tuning_awd:
+    condition: "tuning.chopper_tuning.enabled and printer.awd_enabled"
+    template: |
+      # ═══════════════════════════════════════════════════════════════════════════════
+      # AWD CHOPPER TUNING SUPPORT
+      # For printers with dual X/Y motors (stepper_x1, stepper_y1)
+      # ═══════════════════════════════════════════════════════════════════════════════
+
+      [gcode_macro TMC_CHOPPER_TUNE_AWD]
+      description: Auto-tune chopper settings for AWD printers (front + rear motors)
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set mode = params.MODE | default("full") | lower %}
+          {% set tune_method = params.METHOD | default("paired") | lower %}
+
+          RESPOND MSG="═══════════════════════════════════════════════════════"
+          RESPOND MSG="     TMC CHOPPER TUNING - AWD {axis | upper} AXIS"
+          RESPOND MSG="═══════════════════════════════════════════════════════"
+          RESPOND MSG="Method: {tune_method}"
+
+          {% if tune_method == "paired" %}
+              # Tune front and rear motors together (recommended)
+              RESPOND MSG="Tuning front + rear motors together..."
+              TMC_CHOPPER_TUNE AXIS={axis} MODE={mode}
+              RESPOND MSG="Applying same settings to rear motor..."
+              _AWD_SYNC_CHOPPER AXIS={axis}
+
+          {% elif tune_method == "separate" %}
+              # Tune front motor, then rear separately
+              RESPOND MSG="Step 1: Tuning front motor (stepper_{axis})..."
+              TMC_CHOPPER_TUNE AXIS={axis} MODE={mode}
+
+              RESPOND MSG="Step 2: Tuning rear motor (stepper_{axis}1)..."
+              # Disable front motor, enable rear only
+              SET_STEPPER_ENABLE STEPPER=stepper_{axis} ENABLE=0
+              G4 P500
+              _AWD_TUNE_REAR AXIS={axis} MODE={mode}
+              SET_STEPPER_ENABLE STEPPER=stepper_{axis} ENABLE=1
+
+          {% elif tune_method == "front_only" %}
+              # Only tune front motor
+              RESPOND MSG="Tuning front motor only..."
+              TMC_CHOPPER_TUNE AXIS={axis} MODE={mode}
+              RESPOND MSG="Run _AWD_SYNC_CHOPPER AXIS={axis} to apply to rear motor"
+
+          {% endif %}
+
+          RESPOND MSG="AWD chopper tuning complete for {axis | upper} axis"
+
+      # ─────────────────────────────────────────────────────────────────────────────
+      # Sync chopper settings from front to rear motor
+      # ─────────────────────────────────────────────────────────────────────────────
+      [gcode_macro _AWD_SYNC_CHOPPER]
+      description: Copy chopper settings from stepper_x/y to stepper_x1/y1
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set front_stepper = "stepper_" ~ axis %}
+          {% set rear_stepper = "stepper_" ~ axis ~ "1" %}
+
+          # Determine TMC driver type for front
+          {% if printer.configfile.config["tmc5160 " ~ front_stepper] is defined %}
+              {% set tmc_front = "tmc5160 " ~ front_stepper %}
+          {% elif printer.configfile.config["tmc2240 " ~ front_stepper] is defined %}
+              {% set tmc_front = "tmc2240 " ~ front_stepper %}
+          {% else %}
+              { action_raise_error("No TMC5160 or TMC2240 found for " ~ front_stepper) }
+          {% endif %}
+
+          # Get current front motor values
+          {% set tpfd = printer[tmc_front].driver_tpfd | default(0) %}
+          {% set tbl = printer[tmc_front].driver_tbl | default(2) %}
+          {% set toff = printer[tmc_front].driver_toff | default(3) %}
+          {% set hstrt = printer[tmc_front].driver_hstrt | default(5) %}
+          {% set hend = printer[tmc_front].driver_hend | default(3) %}
+
+          # Apply to rear motor
+          SET_TMC_FIELD STEPPER={rear_stepper} FIELD=tpfd VALUE={tpfd}
+          SET_TMC_FIELD STEPPER={rear_stepper} FIELD=tbl VALUE={tbl}
+          SET_TMC_FIELD STEPPER={rear_stepper} FIELD=toff VALUE={toff}
+          SET_TMC_FIELD STEPPER={rear_stepper} FIELD=hstrt VALUE={hstrt}
+          SET_TMC_FIELD STEPPER={rear_stepper} FIELD=hend VALUE={hend}
+
+          RESPOND MSG="Synced chopper settings from {front_stepper} to {rear_stepper}"
+          RESPOND MSG="  TPFD={tpfd} TBL={tbl} TOFF={toff} HSTRT={hstrt} HEND={hend}"
+
+      # ─────────────────────────────────────────────────────────────────────────────
+      # Tune rear motor separately (front disabled)
+      # ─────────────────────────────────────────────────────────────────────────────
+      [gcode_macro _AWD_TUNE_REAR]
+      description: Tune rear motor (stepper_x1/y1) with front motor disabled
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set mode = params.MODE | default("full") | lower %}
+          {% set rear_stepper = "stepper_" ~ axis ~ "1" %}
+          {% set state = printer["gcode_macro _CHOPPER_TUNE_STATE"] %}
+
+          # Store original parameters for rear motor
+          _CHOPPER_STORE_ORIGINALS_REAR AXIS={axis}
+
+          # Run parameter sweep on rear motor
+          _CHOPPER_OPTIMIZE_REAR AXIS={axis}
+
+          RESPOND MSG="Rear motor tuning complete"
+
+      [gcode_macro _CHOPPER_STORE_ORIGINALS_REAR]
+      description: Store original TMC chopper parameters for rear motor
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set stepper = "stepper_" ~ axis ~ "1" %}
+
+          # Determine TMC driver type
+          {% if printer.configfile.config["tmc5160 " ~ stepper] is defined %}
+              {% set tmc = "tmc5160 " ~ stepper %}
+          {% elif printer.configfile.config["tmc2240 " ~ stepper] is defined %}
+              {% set tmc = "tmc2240 " ~ stepper %}
+          {% else %}
+              RESPOND TYPE=error MSG="No TMC5160 or TMC2240 found for {stepper}"
+          {% endif %}
+
+          RESPOND MSG="Stored original chopper parameters for {stepper}"
+
+      [gcode_macro _CHOPPER_OPTIMIZE_REAR]
+      description: Test chopper parameters on rear motor
+      gcode:
+          {% set axis = params.AXIS | default("x") | lower %}
+          {% set stepper = "stepper_" ~ axis ~ "1" %}
+          {% set state = printer["gcode_macro _CHOPPER_TUNE_STATE"] %}
+
+          # TPFD values to test
+          {% set tpfd_list = {{ tuning.chopper_tuning.tpfd_values | default("0,4,8,12,15") }}.split(",") %}
+
+          {% set max_pos = printer.toolhead.axis_maximum[axis] %}
+          {% set min_pos = printer.toolhead.axis_minimum[axis] %}
+          {% set center = (max_pos + min_pos) / 2 %}
+          {% set safe_distance = [((max_pos - min_pos) / 4) | int, 40] | min %}
+
+          # Determine accelerometer chip
+          {% if printer.configfile.config["beacon"] is defined %}
+              {% set accel_chip = "beacon" %}
+          {% elif printer.configfile.config["lis2dw"] is defined %}
+              {% set accel_chip = "lis2dw" %}
+          {% else %}
+              {% set accel_chip = "adxl345" %}
+          {% endif %}
+
+          RESPOND MSG="Testing rear motor ({stepper}) TPFD values..."
+
+          {% for tpfd in tpfd_list %}
+              {% if not state.abort_requested %}
+                  SET_TMC_FIELD STEPPER={stepper} FIELD=tpfd VALUE={tpfd | int}
+                  G4 P200
+
+                  {% set test_name = "chopper_" ~ axis ~ "1_tpfd" ~ tpfd %}
+                  ACCELEROMETER_MEASURE CHIP={accel_chip}
+
+                  G90
+                  G1 {axis | upper}{center + safe_distance} F{75 * 60}
+                  G1 {axis | upper}{center - safe_distance} F{75 * 60}
+                  G1 {axis | upper}{center} F{75 * 60}
+
+                  ACCELEROMETER_MEASURE CHIP={accel_chip} NAME={test_name}
+                  RESPOND MSG="  Tested rear TPFD={tpfd}"
+              {% endif %}
+          {% endfor %}
+
   gcode_arcs:
     # Arc (G2/G3) support
     # Default: enabled (the wizard sets tuning.arc_support.enabled; generator also defaults it on)

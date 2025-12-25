@@ -10,7 +10,8 @@
       "dir_pin": "PC14",
       "enable_pin": "PE6",
       "uart_pin": "PG14",
-      "cs_pin": "PG14"
+      "cs_pin": "PG14",
+      "diag_pin": "PF0"
     },
     "MOTOR_1": {
       "label": "Driver 1",
@@ -18,7 +19,8 @@
       "dir_pin": "PE5",
       "enable_pin": "PE3",
       "uart_pin": "PG13",
-      "cs_pin": "PG13"
+      "cs_pin": "PG13",
+      "diag_pin": "PF2"
     },
     "MOTOR_2_1": {
       "label": "Driver 2_1",
@@ -26,7 +28,8 @@
       "dir_pin": "PE0",
       "enable_pin": "PE2",
       "uart_pin": "PG12",
-      "cs_pin": "PG12"
+      "cs_pin": "PG12",
+      "diag_pin": "PF4"
     },
     "MOTOR_3": {
       "label": "Driver 3",
@@ -34,7 +37,8 @@
       "dir_pin": "PB9",
       "enable_pin": "PB7",
       "uart_pin": "PG11",
-      "cs_pin": "PG11"
+      "cs_pin": "PG11",
+      "diag_pin": "PF3"
     },
     "MOTOR_4": {
       "label": "Driver 4",
@@ -42,7 +46,8 @@
       "dir_pin": "PB4",
       "enable_pin": "PB6",
       "uart_pin": "PG10",
-      "cs_pin": "PG10"
+      "cs_pin": "PG10",
+      "diag_pin": "PF1"
     },
     "MOTOR_5": {
       "label": "Driver 5",
@@ -50,7 +55,8 @@
       "dir_pin": "PB3",
       "enable_pin": "PD5",
       "uart_pin": "PG9",
-      "cs_pin": "PG9"
+      "cs_pin": "PG9",
+      "diag_pin": "PC15"
     },
     "MOTOR_6": {
       "label": "Driver 6",
@@ -58,7 +64,8 @@
       "dir_pin": "PD2",
       "enable_pin": "PD4",
       "uart_pin": "PD7",
-      "cs_pin": "PD7"
+      "cs_pin": "PD7",
+      "diag_pin": "PG14"
     },
     "MOTOR_7": {
       "label": "Driver 7",
@@ -66,7 +73,8 @@
       "dir_pin": "PA9",
       "enable_pin": "PA15",
       "uart_pin": "PD6",
-      "cs_pin": "PD6"
+      "cs_pin": "PD6",
+      "diag_pin": "PG15"
     },
     "MOTOR_8": {
       "label": "Driver 8",
@@ -74,7 +82,8 @@
       "dir_pin": "PC7",
       "enable_pin": "PC9",
       "uart_pin": "PG8",
-      "cs_pin": "PG8"
+      "cs_pin": "PG8",
+      "diag_pin": null
     },
     "MOTOR_9": {
       "label": "Driver 9",
@@ -82,7 +91,8 @@
       "dir_pin": "PC6",
       "enable_pin": "PC8",
       "uart_pin": "PG7",
-      "cs_pin": "PG7"
+      "cs_pin": "PG7",
+      "diag_pin": null
     }
   },
   "heater_ports": {

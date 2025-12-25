@@ -10,7 +10,8 @@
       "dir_pin": "PF12",
       "enable_pin": "PF14",
       "uart_pin": "PC4",
-      "cs_pin": "PC4"
+      "cs_pin": "PC4",
+      "diag_pin": "PG6"
     },
     "MOTOR_1": {
       "label": "Driver 1",
@@ -18,7 +19,8 @@
       "dir_pin": "PG1",
       "enable_pin": "PF15",
       "uart_pin": "PD11",
-      "cs_pin": "PD11"
+      "cs_pin": "PD11",
+      "diag_pin": "PG9"
     },
     "MOTOR_2_1": {
       "label": "Driver 2_1",
@@ -26,7 +28,8 @@
       "dir_pin": "PG3",
       "enable_pin": "PG5",
       "uart_pin": "PC6",
-      "cs_pin": "PC6"
+      "cs_pin": "PC6",
+      "diag_pin": "PG10"
     },
     "MOTOR_3": {
       "label": "Driver 3",
@@ -34,7 +37,8 @@
       "dir_pin": "PC1",
       "enable_pin": "PA2",
       "uart_pin": "PC7",
-      "cs_pin": "PC7"
+      "cs_pin": "PC7",
+      "diag_pin": "PG11"
     },
     "MOTOR_4": {
       "label": "Driver 4",
@@ -42,7 +46,8 @@
       "dir_pin": "PF10",
       "enable_pin": "PG2",
       "uart_pin": "PF2",
-      "cs_pin": "PF2"
+      "cs_pin": "PF2",
+      "diag_pin": "PG12"
     },
     "MOTOR_5": {
       "label": "Driver 5",
@@ -50,7 +55,8 @@
       "dir_pin": "PF0",
       "enable_pin": "PF1",
       "uart_pin": "PE4",
-      "cs_pin": "PE4"
+      "cs_pin": "PE4",
+      "diag_pin": "PG13"
     },
     "MOTOR_6": {
       "label": "Driver 6",
@@ -58,7 +64,8 @@
       "dir_pin": "PE3",
       "enable_pin": "PD4",
       "uart_pin": "PE1",
-      "cs_pin": "PE1"
+      "cs_pin": "PE1",
+      "diag_pin": "PG14"
     },
     "MOTOR_7": {
       "label": "Driver 7",
@@ -66,7 +73,8 @@
       "dir_pin": "PA14",
       "enable_pin": "PE0",
       "uart_pin": "PD3",
-      "cs_pin": "PD3"
+      "cs_pin": "PD3",
+      "diag_pin": "PG15"
     }
   },
   "heater_ports": {

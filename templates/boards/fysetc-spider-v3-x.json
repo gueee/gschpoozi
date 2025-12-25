@@ -10,7 +10,8 @@
       "dir_pin": "PE10",
       "enable_pin": "PE9",
       "cs_pin": "PE7",
-      "uart_pin": "PE7"
+      "uart_pin": "PE7",
+      "diag_pin": "PB14"
     },
     "MOTOR_Y": {
       "label": "Y Stepper",
@@ -18,7 +19,8 @@
       "dir_pin": "PB12",
       "enable_pin": "PD9",
       "cs_pin": "PE15",
-      "uart_pin": "PE15"
+      "uart_pin": "PE15",
+      "diag_pin": "PB13"
     },
     "MOTOR_Z": {
       "label": "Z Stepper",
@@ -26,7 +28,8 @@
       "dir_pin": "PD13",
       "enable_pin": "PD15",
       "cs_pin": "PD10",
-      "uart_pin": "PD10"
+      "uart_pin": "PD10",
+      "diag_pin": "PA0"
     },
     "MOTOR_E0": {
       "label": "Extruder E0",
@@ -34,7 +37,8 @@
       "dir_pin": "PD6",
       "enable_pin": "PD4",
       "cs_pin": "PD7",
-      "uart_pin": "PD7"
+      "uart_pin": "PD7",
+      "diag_pin": null
     },
     "MOTOR_E1": {
       "label": "Extruder E1",
@@ -42,7 +46,8 @@
       "dir_pin": "PC13",
       "enable_pin": "PE5",
       "cs_pin": "PC14",
-      "uart_pin": "PC14"
+      "uart_pin": "PC14",
+      "diag_pin": null
     },
     "MOTOR_E2": {
       "label": "Extruder E2",
@@ -50,7 +55,8 @@
       "dir_pin": "PE4",
       "enable_pin": "PE3",
       "cs_pin": "PC15",
-      "uart_pin": "PC15"
+      "uart_pin": "PC15",
+      "diag_pin": null
     },
     "MOTOR_E3": {
       "label": "Extruder E3",
@@ -58,7 +64,8 @@
       "dir_pin": "PC4",
       "enable_pin": "PE8",
       "cs_pin": "PA15",
-      "uart_pin": "PA15"
+      "uart_pin": "PA15",
+      "diag_pin": null
     },
     "MOTOR_E4": {
       "label": "Extruder E4",
@@ -66,7 +73,8 @@
       "dir_pin": "PE0",
       "enable_pin": "PC5",
       "cs_pin": "PD11",
-      "uart_pin": "PD11"
+      "uart_pin": "PD11",
+      "diag_pin": null
     }
   },
   "heater_ports": {

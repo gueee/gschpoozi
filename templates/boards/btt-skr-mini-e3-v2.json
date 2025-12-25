@@ -8,25 +8,29 @@
       "label": "X Stepper",
       "step_pin": "PB13",
       "dir_pin": "PB12",
-      "enable_pin": "PB14"
+      "enable_pin": "PB14",
+      "diag_pin": "PC0"
     },
     "MOTOR_Y": {
       "label": "Y Stepper",
       "step_pin": "PB10",
       "dir_pin": "PB2",
-      "enable_pin": "PB11"
+      "enable_pin": "PB11",
+      "diag_pin": "PC1"
     },
     "MOTOR_Z": {
       "label": "Z Stepper",
       "step_pin": "PB0",
       "dir_pin": "PC5",
-      "enable_pin": "PB1"
+      "enable_pin": "PB1",
+      "diag_pin": "PC2"
     },
     "MOTOR_E": {
       "label": "Extruder E",
       "step_pin": "PB3",
       "dir_pin": "PB4",
-      "enable_pin": "PD2"
+      "enable_pin": "PD2",
+      "diag_pin": null
     }
   },
   "heater_ports": {

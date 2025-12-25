@@ -8,25 +8,29 @@
       "label": "X Stepper",
       "step_pin": "gpio11",
       "dir_pin": "gpio10",
-      "enable_pin": "gpio12"
+      "enable_pin": "gpio12",
+      "diag_pin": "gpio4"
     },
     "MOTOR_Y": {
       "label": "Y Stepper",
       "step_pin": "gpio6",
       "dir_pin": "gpio5",
-      "enable_pin": "gpio7"
+      "enable_pin": "gpio7",
+      "diag_pin": "gpio3"
     },
     "MOTOR_Z": {
       "label": "Z Stepper",
       "step_pin": "gpio19",
       "dir_pin": "gpio28",
-      "enable_pin": "gpio2"
+      "enable_pin": "gpio2",
+      "diag_pin": "gpio25"
     },
     "MOTOR_E0": {
       "label": "Extruder E0",
       "step_pin": "gpio14",
       "dir_pin": "gpio13",
-      "enable_pin": "gpio15"
+      "enable_pin": "gpio15",
+      "diag_pin": null
     }
   },
   "heater_ports": {

@@ -10,7 +10,8 @@
       "step_pin": "PC13",
       "dir_pin": "PC1",
       "uart_pin": "PB11",
-      "cs_pin": "PB11"
+      "cs_pin": "PB11",
+      "diag_pin": "PA4"
     },
     "MOTOR_1": {
       "label": "Driver 1",
@@ -18,7 +19,8 @@
       "step_pin": "PC14",
       "dir_pin": "PC4",
       "uart_pin": "PC10",
-      "cs_pin": "PC10"
+      "cs_pin": "PC10",
+      "diag_pin": "PA5"
     },
     "MOTOR_2": {
       "label": "Driver 2",
@@ -26,7 +28,8 @@
       "step_pin": "PC15",
       "dir_pin": "PC5",
       "uart_pin": "PB7",
-      "cs_pin": "PB7"
+      "cs_pin": "PB7",
+      "diag_pin": "PA6"
     },
     "MOTOR_3": {
       "label": "Driver 3",
@@ -34,7 +37,8 @@
       "step_pin": "PC3",
       "dir_pin": "PC8",
       "uart_pin": "PB6",
-      "cs_pin": "PB6"
+      "cs_pin": "PB6",
+      "diag_pin": "PB1"
     }
   },
   "heater_ports": {

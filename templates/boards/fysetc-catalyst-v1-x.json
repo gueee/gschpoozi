@@ -10,7 +10,8 @@
       "dir_pin": "PC10",
       "enable_pin": "PD2",
       "cs_pin": "PC11",
-      "uart_pin": "PC11"
+      "uart_pin": "PC11",
+      "diag_pin": null
     },
     "MOTOR_Y": {
       "label": "Y Stepper",
@@ -18,7 +19,8 @@
       "dir_pin": "PC13",
       "enable_pin": "PA10",
       "cs_pin": "PC14",
-      "uart_pin": "PC14"
+      "uart_pin": "PC14",
+      "diag_pin": null
     },
     "MOTOR_Z": {
       "label": "Z Stepper",
@@ -26,7 +28,8 @@
       "dir_pin": "PC5",
       "enable_pin": "PB10",
       "cs_pin": "PC4",
-      "uart_pin": "PC4"
+      "uart_pin": "PC4",
+      "diag_pin": null
     },
     "MOTOR_E": {
       "label": "Extruder E",
@@ -34,7 +37,8 @@
       "dir_pin": "PB4",
       "enable_pin": "PB7",
       "cs_pin": "PB5",
-      "uart_pin": "PB5"
+      "uart_pin": "PB5",
+      "diag_pin": null
     }
   },
   "heater_ports": {

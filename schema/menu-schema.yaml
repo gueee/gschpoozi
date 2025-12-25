@@ -335,6 +335,11 @@ categories:
                 default: 70
                 range: [0, 255]
                 condition: "2.3.1.endstop_type == 'sensorless'"
+              - name: "diag0_pin"
+                type: "select"
+                source: "board.motor_ports.diag_pin"
+                condition: "driver_type in ['TMC5160', 'TMC2240']"
+                description: "DIAG0 pin for stall detection (chopper tuning safety)"
 
           # AWD X1 Motor (secondary X motor)
           - id: "2.3.3"
@@ -516,6 +521,11 @@ categories:
                 default: 70
                 range: [0, 255]
                 condition: "2.4.1.endstop_type == 'sensorless'"
+              - name: "diag0_pin"
+                type: "select"
+                source: "board.motor_ports.diag_pin"
+                condition: "driver_type in ['TMC5160', 'TMC2240']"
+                description: "DIAG0 pin for stall detection (chopper tuning safety)"
 
           # AWD Y1 Motor (secondary Y motor)
           - id: "2.4.3"
@@ -2331,6 +2341,109 @@ categories:
             type: "bool"
             default: true
             condition: "enabled == true"
+
+      # 3.13 TMC Chopper Tuning
+      - id: "3.13"
+        name: "TMC Chopper Tuning"
+        description: "Find optimal TMC chopper parameters to reduce resonance (TMC5160/TMC2240 have TPFD, TMC2209 has TBL/TOFF only)"
+        condition: "2.3.2.driver_type in ['TMC5160', 'TMC2240', 'TMC2209'] or 2.4.2.driver_type in ['TMC5160', 'TMC2240', 'TMC2209']"
+        sections:
+          - id: "3.13.1"
+            name: "Chopper Tuning Settings"
+            parameters:
+              - name: "enabled"
+                type: "bool"
+                default: false
+                description: "Enable chopper tuning macros and infrastructure"
+              - name: "accelerometer_source"
+                type: "choice"
+                options:
+                  - value: "adxl345"
+                    label: "ADXL345 (via SPI/USB)"
+                  - value: "lis2dw12"
+                    label: "LIS2DW12 (toolboard)"
+                  - value: "beacon"
+                    label: "Beacon (built-in accelerometer)"
+                  - value: "cartographer"
+                    label: "Cartographer (built-in accelerometer)"
+                condition: "enabled == true"
+                description: "Accelerometer for vibration measurement"
+              - name: "accelerometer_chip_name"
+                type: "text"
+                default: "adxl345"
+                condition: "enabled == true"
+                description: "Klipper accelerometer chip name"
+              - name: "tuning_axes"
+                type: "multi-select"
+                options: ["x", "y"]
+                default: ["x", "y"]
+                condition: "enabled == true"
+                description: "Axes to tune (X, Y, or both)"
+              - name: "test_speed_min"
+                type: "int"
+                default: 50
+                condition: "enabled == true"
+                description: "Minimum speed for resonance sweep (mm/s)"
+              - name: "test_speed_max"
+                type: "int"
+                default: 300
+                condition: "enabled == true"
+                description: "Maximum speed for resonance sweep (mm/s)"
+              - name: "test_speed_step"
+                type: "int"
+                default: 25
+                condition: "enabled == true"
+                description: "Speed increment for resonance sweep (mm/s)"
+              - name: "enable_stall_detection"
+                type: "bool"
+                default: true
+                condition: "enabled == true"
+                description: "Enable DIAG pin stall detection for safety (requires diag0_pin)"
+
+          - id: "3.13.2"
+            name: "Tuning Parameters"
+            condition: "3.13.1.enabled == true"
+            description: "Parameter ranges to test during chopper tuning"
+            parameters:
+              - name: "tpfd_values"
+                type: "text"
+                default: "0,4,8,12,15"
+                description: "TPFD values to test (0-15, comma-separated)"
+              - name: "tbl_values"
+                type: "text"
+                default: "0,1,2"
+                description: "TBL values to test (0-3, comma-separated)"
+              - name: "toff_values"
+                type: "text"
+                default: "1,2,3,4"
+                description: "TOFF values to test (1-15, comma-separated)"
+              - name: "hstrt_values"
+                type: "text"
+                default: "0,1,2,3,4,5,6,7"
+                description: "HSTRT values to test (0-7, comma-separated)"
+              - name: "hend_values"
+                type: "text"
+                default: "0,3,6,9,12"
+                description: "HEND values to test (0-15, comma-separated)"
+
+          - id: "3.13.3"
+            name: "Safety Limits"
+            condition: "3.13.1.enabled == true"
+            description: "Safety thresholds during tuning"
+            parameters:
+              - name: "max_driver_temp"
+                type: "int"
+                default: 100
+                description: "Maximum driver temperature before abort (°C)"
+              - name: "max_motor_temp"
+                type: "int"
+                default: 80
+                description: "Maximum motor temperature before abort (°C, if sensor available)"
+              - name: "stall_sensitivity"
+                type: "int"
+                default: 50
+                range: [0, 255]
+                description: "StallGuard sensitivity (lower = more sensitive)"
 
 # Motor presets for current selection
 motor_presets:

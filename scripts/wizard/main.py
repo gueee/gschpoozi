@@ -1204,11 +1204,17 @@ class GschpooziWizard:
     def klipper_setup_menu(self) -> None:
         """Klipper installation and verification menu."""
         while True:
+            # Get current variant selection
+            current_variant = self.state.get("klipper.variant", "standard")
+            variant_text = "Standard Klipper" if current_variant == "standard" else "Kalico Klipper"
+
             choice = self.ui.menu(
                 "Klipper Setup\n\n"
                 "Manage Klipper ecosystem components and related tools.\n"
-                "Warning: install/remove actions may require sudo and can modify system services.",
+                "Warning: install/remove actions may require sudo and can modify system services.\n\n"
+                f"Current Klipper variant: {variant_text}",
                 [
+                    ("1.0", "Configure Klipper Variant    (Standard / Kalico)"),
                     ("1.1", "Manage Klipper Components  (KIAUH-style install/update/remove)"),
                     ("1.2", "CAN Interface Setup       (can0 / can-utils / systemd)"),
                     ("1.3", "Katapult / Flashing       (DFU + CAN firmware flash)"),
@@ -1220,6 +1226,8 @@ class GschpooziWizard:
 
             if choice is None or choice == "B":
                 break
+            elif choice == "1.0":
+                self._configure_klipper_variant()
             elif choice == "1.1":
                 self._manage_klipper_components()
             elif choice == "1.2":
@@ -1228,6 +1236,38 @@ class GschpooziWizard:
                 self._katapult_setup()
             elif choice == "1.4":
                 self._update_manager_git_fetch_workaround()
+
+    def _configure_klipper_variant(self) -> None:
+        """Configure Klipper variant selection (Standard vs Kalico)."""
+        current_variant = self.state.get("klipper.variant", "standard")
+
+        variant = self.ui.radiolist(
+            "Select Klipper variant:\n\n"
+            "• Standard Klipper: Official Klipper3d repository\n"
+            "• Kalico Klipper: KalicoCrew fork with additional features\n\n"
+            "This selection will be used when installing or updating Klipper.",
+            [
+                ("standard", "Standard Klipper (Klipper3d)", current_variant == "standard"),
+                ("kalico", "Kalico Klipper (KalicoCrew)", current_variant == "kalico"),
+            ],
+            title="Klipper Variant Selection",
+            height=12,
+            width=80,
+            list_height=4,
+        )
+
+        if variant is None:
+            return
+
+        self.state.set("klipper.variant", variant)
+        self.state.save()
+
+        variant_name = "Standard Klipper" if variant == "standard" else "Kalico Klipper"
+        self.ui.msgbox(
+            f"Klipper variant set to: {variant_name}\n\n"
+            "This will be used for future Klipper installations and updates.",
+            title="Saved",
+        )
 
     def _update_manager_git_fetch_workaround(self) -> None:
         """

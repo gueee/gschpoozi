@@ -1,0 +1,109 @@
+{
+  "id": "btt-ebb36-gen2-v1",
+  "name": "BTT EBB36 Gen2 v1",
+  "type": "toolboard",
+  "manufacturer": "BigTreeTech",
+  "mcu": "stm32g0b1xx",
+  "mcu_name": "toolboard",
+  "connections": ["USB", "CAN"],
+  "notes": "36mm toolhead board for direct drive extruders (Gen2 v1)",
+  "source": "Klippain MCU definition",
+
+  "motor_ports": {
+    "EXTRUDER": {
+      "label": "Extruder Driver",
+      "step_pin": "PB14",
+      "dir_pin": "PA8",
+      "enable_pin": "PB6",
+      "uart_pin": "PB3",
+      "notes": "Onboard TMC driver"
+    }
+  },
+
+  "heater_ports": {
+    "HE": {
+      "label": "Hotend Heater",
+      "pin": "PB4"
+    }
+  },
+
+  "fan_ports": {
+    "FAN0": {
+      "label": "Fan 0",
+      "pin": "PD3",
+      "pwm": true
+    },
+    "FAN1": {
+      "label": "Fan 1",
+      "pin": "PA5",
+      "pwm": true
+    },
+    "FAN2": {
+      "label": "Fan 2",
+      "pin": "PD2",
+      "pwm": true
+    }
+  },
+
+  "thermistor_ports": {
+    "TH0": {
+      "label": "Hotend Thermistor",
+      "pin": "PA3"
+    },
+    "TOOLHEAD_TEMP": {
+      "label": "Toolhead Temperature Sensor",
+      "pin": "PA0"
+    }
+  },
+
+  "endstop_ports": {
+    "STOP": {
+      "label": "X Endstop",
+      "pin": "PA15"
+    },
+    "PROBE": {
+      "label": "Probe Input",
+      "pin": "PB8"
+    }
+  },
+
+  "misc_ports": {
+    "SERVO": {
+      "label": "Servo",
+      "pin": "PB5"
+    },
+    "NEOPIXEL": {
+      "label": "NeoPixel/RGB LED",
+      "pin": "PC7"
+    },
+    "ADXL345": {
+      "label": "Accelerometer (ADXL345)",
+      "cs_pin": "PB1",
+      "spi_bus": "spi2",
+      "notes": "SPI2 CS pin for accelerometer"
+    }
+  },
+
+  "spi_config": {
+    "spi1": {
+      "mosi_pin": "PB11",
+      "miso_pin": "PB2",
+      "sck_pin": "PA10"
+    },
+    "spi2": {
+      "mosi_pin": "PB11",
+      "miso_pin": "PB2",
+      "sck_pin": "PA10",
+      "notes": "SPI2 shares pins with SPI1, CS on PB1"
+    }
+  },
+
+  "default_assignments": {
+    "extruder": "EXTRUDER",
+    "heater_extruder": "HE",
+    "thermistor_extruder": "TH0",
+    "fan_part_cooling": "FAN0",
+    "fan_hotend": "FAN1"
+  }
+}
+

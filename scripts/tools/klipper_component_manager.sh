@@ -124,6 +124,33 @@ confirm() {
   esac
 }
 
+# Read Klipper variant from state file
+# State file is at ~/printer_data/config/.gschpoozi_state.json
+STATE_FILE="${HOME}/printer_data/config/.gschpoozi_state.json"
+KLIPPER_VARIANT="standard"  # Default
+
+if [[ -f "${STATE_FILE}" ]]; then
+  # Use Python to safely parse JSON (more reliable than jq which may not be installed)
+  VARIANT=$(python3 -c "
+import json
+import sys
+try:
+    with open('${STATE_FILE}', 'r') as f:
+        data = json.load(f)
+        variant = data.get('config', {}).get('klipper', {}).get('variant', 'standard')
+        print(variant)
+except Exception:
+    print('standard')
+" 2>/dev/null || echo "standard")
+
+  if [[ -n "${VARIANT}" ]]; then
+    KLIPPER_VARIANT="${VARIANT}"
+  fi
+fi
+
+# Export variant for use by klipper-install.sh
+export KLIPPER_VARIANT
+
 # Source installer library (expects INSTALL_LIB_DIR to point at scripts/lib)
 export INSTALL_LIB_DIR="${REPO_ROOT}/scripts/lib"
 # shellcheck source=/dev/null

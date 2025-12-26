@@ -306,9 +306,16 @@ extruder:
     max_extrude_cross_section: {{ extruder.max_extrude_cross_section | default(5) }}
     pressure_advance: {{ extruder_presets[extruder.extruder_type].default_pa | default(0.04) }}
     pressure_advance_smooth_time: 0.040
+    {% if extruder.control == 'mpc' %}
+    # MPC (Model Predictive Control) - Kalico feature
+    control: mpc
+    heater_power: {{ extruder.heater_power | default(50) }}
+    cooling_fan: fan
+    {% else %}
     # PID control and PID values are in printer.cfg override sections (not here to avoid SAVE_CONFIG conflicts)
     # Run PID_CALIBRATE HEATER=extruder TARGET=240, then SAVE_CONFIG
     # SAVE_CONFIG will save control: pid and PID values to the [extruder] override section in printer.cfg
+    {% endif %}
 
 tmc_extruder:
   template: |
@@ -335,9 +342,15 @@ heater_bed:
     {% endif -%}
     min_temp: {{ heater_bed.min_temp | default(0) }}
     max_temp: {{ heater_bed.max_temp | default(120) }}
+    {% if heater_bed.control == 'mpc' %}
+    # MPC (Model Predictive Control) - Kalico feature
+    control: mpc
+    heater_power: {{ heater_bed.heater_power | default(200) }}
+    {% else %}
     # PID control and PID values are in printer.cfg override sections (not here to avoid SAVE_CONFIG conflicts)
     # Run PID_CALIBRATE HEATER=heater_bed TARGET=60, then SAVE_CONFIG
     # SAVE_CONFIG will save control: pid and PID values to the [heater_bed] override section in printer.cfg
+    {% endif %}
 
 # -----------------------------------------------------------------------------
 # Fans

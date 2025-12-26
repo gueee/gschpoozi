@@ -8899,8 +8899,77 @@ read -r _
                         continue  # Cancelled - back to menu
                     self.state.set("macros.brush_enabled", brush)
                     if brush:
+                        # Brush position
+                        bed_x = self.state.get("printer.bed_size_x", 300)
+                        bed_y = self.state.get("printer.bed_size_y", 300)
+
+                        self.ui.msgbox(
+                            "Configure brush position:\n\n"
+                            "The brush is typically mounted at the back of the bed.\n"
+                            "X = left edge of brush\n"
+                            "Y = front edge of brush\n"
+                            "Z = height where nozzle touches bristles\n"
+                            "Width = brush stroke length (X direction)",
+                            title="Nozzle Brush Position"
+                        )
+
+                        brush_x = self.ui.inputbox(
+                            f"Brush X position (mm):\n\n"
+                            f"Left edge of brush. Your bed is {bed_x}mm wide.",
+                            default=str(self.state.get("macros.brush_x", 50.0)),
+                            title="Brush X Position",
+                        )
+                        if brush_x is None:
+                            continue
+                        try:
+                            self.state.set("macros.brush_x", float(brush_x))
+                        except ValueError:
+                            pass
+
+                        brush_y = self.ui.inputbox(
+                            f"Brush Y position (mm):\n\n"
+                            f"Front edge of brush. Your bed is {bed_y}mm deep.\n"
+                            f"For back-mounted brush, typically {bed_y - 10} to {bed_y + 10}",
+                            default=str(self.state.get("macros.brush_y", bed_y - 3)),
+                            title="Brush Y Position",
+                        )
+                        if brush_y is None:
+                            continue
+                        try:
+                            self.state.set("macros.brush_y", float(brush_y))
+                        except ValueError:
+                            pass
+
+                        brush_z = self.ui.inputbox(
+                            "Brush Z height (mm):\n\n"
+                            "Height where nozzle touches brush bristles.\n"
+                            "Typically 1-3mm. Start higher and lower if needed.",
+                            default=str(self.state.get("macros.brush_z", 1.0)),
+                            title="Brush Z Height",
+                        )
+                        if brush_z is None:
+                            continue
+                        try:
+                            self.state.set("macros.brush_z", float(brush_z))
+                        except ValueError:
+                            pass
+
+                        brush_width = self.ui.inputbox(
+                            "Brush width (mm):\n\n"
+                            "Length of the brush stroke in X direction.\n"
+                            "Measure your brush - typically 25-40mm.",
+                            default=str(self.state.get("macros.brush_width", 30.0)),
+                            title="Brush Width",
+                        )
+                        if brush_width is None:
+                            continue
+                        try:
+                            self.state.set("macros.brush_width", float(brush_width))
+                        except ValueError:
+                            pass
+
                         wc = self.ui.inputbox(
-                            "Wipe count:\n\nNumber of brush strokes. Typical: 3",
+                            "Wipe count:\n\nNumber of brush strokes. Typical: 3-5",
                             default=str(self.state.get("macros.wipe_count", 3)),
                             title="Wipe Count",
                         )
@@ -8909,6 +8978,19 @@ read -r _
                                 self.state.set("macros.wipe_count", int(wc))
                             except ValueError:
                                 pass
+
+                        wipe_speed = self.ui.inputbox(
+                            "Wipe speed (mm/s):\n\n"
+                            "Speed of brush strokes. Typical: 50-150",
+                            default=str(self.state.get("macros.wipe_speed", 100)),
+                            title="Wipe Speed",
+                        )
+                        if wipe_speed:
+                            try:
+                                self.state.set("macros.wipe_speed", int(wipe_speed))
+                            except ValueError:
+                                pass
+
                     self.state.save()
                     self.state.set("macros.preset", "custom")
 

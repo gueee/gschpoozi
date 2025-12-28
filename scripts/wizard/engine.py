@@ -171,6 +171,13 @@ class MenuEngine:
 
         state_dict = self.state.get_all()
 
+        # DEBUG: Show field count
+        import sys
+        all_fields = section.get('fields', [])
+        filtered_fields = self.skeleton.get_section_fields(section_id, state_dict)
+        print(f"DEBUG [{section_id}]: Total fields={len(all_fields)}, Filtered fields={len(filtered_fields)}", file=sys.stderr)
+        print(f"DEBUG [{section_id}]: Filtered field IDs: {[f.get('id') for f in filtered_fields]}", file=sys.stderr)
+
         # Check section-level condition
         condition = section.get('condition')
         if condition and not self.skeleton.evaluate_condition(condition, state_dict):
@@ -211,18 +218,23 @@ class MenuEngine:
         title = section.get('title', section_id)
 
         # Run through each field (skip if copied)
-        for field in fields:
+        for idx, field in enumerate(fields):
             # Skip fields that were copied
             if field.get('skip_if_copied') and field.get('id') in copied_fields:
+                print(f"DEBUG [{section_id}]: Skipping field {idx+1}/{len(fields)}: {field.get('id')} (copied)", file=sys.stderr)
                 continue
 
+            print(f"DEBUG [{section_id}]: Rendering field {idx+1}/{len(fields)}: {field.get('id')} (type: {field.get('type')})", file=sys.stderr)
             result = self.field_renderer.render_field(field)
+            print(f"DEBUG [{section_id}]: Field {field.get('id')} returned: {result} (type: {type(result).__name__})", file=sys.stderr)
             if result is None:
                 # User cancelled
+                print(f"DEBUG [{section_id}]: Cancelled at field {field.get('id')}", file=sys.stderr)
                 return False
 
         # Run through subsections
         subsections = self.skeleton.get_subsections(section_id, state_dict)
+        print(f"DEBUG [{section_id}]: Subsections count: {len(subsections)}", file=sys.stderr)
         for sub in subsections:
             sub_id = sub.get('id')
             sub_title = sub.get('title', sub_id)
@@ -245,6 +257,7 @@ class MenuEngine:
         # Show any warnings
         self._show_warnings(section_id)
 
+        print(f"DEBUG [{section_id}]: Section completed successfully!", file=sys.stderr)
         return True
 
     def run_section_menu(self, section_id: str) -> Optional[str]:

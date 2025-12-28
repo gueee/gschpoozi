@@ -513,16 +513,41 @@ class FieldRenderer:
 
     def _determine_port_location(self, field: Dict[str, Any], state: Dict[str, Any]) -> str:
         """Determine which board (mainboard/toolboard) a port should come from."""
-        # Check if there's a location field nearby in state
         state_key = field.get('state_key', '')
 
-        # Extract prefix (e.g., 'extruder' from 'extruder.motor_port')
-        if '.' in state_key:
-            prefix = state_key.rsplit('.', 1)[0]
-            location_key = f"{prefix}.location"
+        # Check if field has explicit location_key
+        location_key = field.get('location_key')
+        if location_key:
             location = self._get_state_value(location_key)
             if location:
                 return location
+
+        # Extract prefix and field name (e.g., 'stepper_x' and 'endstop_port')
+        if '.' in state_key:
+            prefix, field_name = state_key.rsplit('.', 1)
+
+            # Try specific location keys based on field name pattern
+            location_candidates = []
+
+            # For endstop_port, check endstop_location
+            if 'endstop' in field_name:
+                location_candidates.append(f"{prefix}.endstop_location")
+
+            # For sensor_port, check sensor_location
+            if 'sensor' in field_name:
+                location_candidates.append(f"{prefix}.sensor_location")
+
+            # For heater_port, check heater_location
+            if 'heater' in field_name:
+                location_candidates.append(f"{prefix}.heater_location")
+
+            # Generic location key
+            location_candidates.append(f"{prefix}.location")
+
+            for loc_key in location_candidates:
+                location = self._get_state_value(loc_key)
+                if location:
+                    return location
 
         return 'mainboard'
 

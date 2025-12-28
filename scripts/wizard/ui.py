@@ -87,12 +87,15 @@ class WizardUI:
             "--menu", text,
             str(height), str(width), str(menu_height)
         ]
-        
+
         for tag, desc in items:
             args.extend([tag, desc])
-        
+
         code, output = self._run(args)
-        
+
+        import sys
+        print(f"DEBUG ui.menu: code={code}, output='{output}'", file=sys.stderr)
+
         if code == 0:
             return output
         return None  # Cancelled or error

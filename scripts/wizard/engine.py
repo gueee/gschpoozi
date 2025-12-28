@@ -164,6 +164,9 @@ class MenuEngine:
         Returns:
             True if section completed, False if cancelled
         """
+        import sys
+        print(f"DEBUG: run_section({section_id})", file=sys.stderr)
+
         section = self.skeleton.get_section(section_id)
         if not section:
             self.ui.msgbox(f"Section '{section_id}' not found in skeleton.")
@@ -171,6 +174,7 @@ class MenuEngine:
 
         # Auto-detect list sections and delegate
         if section.get('is_list'):
+            print(f"DEBUG: is_list=True, delegating to run_list_section", file=sys.stderr)
             self.run_list_section(section_id)
             return True
 
@@ -494,6 +498,9 @@ class MenuEngine:
         Returns:
             'back' if user pressed back, None on error
         """
+        import sys
+        print(f"DEBUG: run_list_section({section_id})", file=sys.stderr)
+
         section = self.skeleton.get_section(section_id)
         if not section:
             self.ui.msgbox(f"Section '{section_id}' not found in skeleton.")
@@ -507,10 +514,12 @@ class MenuEngine:
         state_prefix = section.get('state_prefix', section_id)
         item_template = section.get('item_template', {})
         title = section.get('title', section_id)
+        print(f"DEBUG: title={title}, state_prefix={state_prefix}", file=sys.stderr)
 
         while True:
             # Get current list items from state
             items = self._get_list_items(state_prefix)
+            print(f"DEBUG: items count={len(items)}", file=sys.stderr)
 
             # Build menu
             menu_items: List[Tuple[str, str]] = []
@@ -521,10 +530,12 @@ class MenuEngine:
                 menu_items.append((f"edit:{idx}", f"{item_name} [Edit]"))
 
             # Add options
-            menu_items.append(('add', '+ Add new'))
+            menu_items.append(('add', 'Add new fan'))
             if items:
-                menu_items.append(('delete', '- Delete item'))
+                menu_items.append(('delete', 'Delete a fan'))
             menu_items.append(('B', 'Back'))
+
+            print(f"DEBUG: menu_items={menu_items}", file=sys.stderr)
 
             # Show menu
             choice = self.ui.menu(
@@ -532,6 +543,8 @@ class MenuEngine:
                 menu_items,
                 title=title
             )
+
+            print(f"DEBUG: choice={choice}", file=sys.stderr)
 
             if choice is None or choice == 'B':
                 return 'back'

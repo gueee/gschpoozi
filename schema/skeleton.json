@@ -1765,7 +1765,7 @@
 
     "additional_fans": {
       "id": "additional_fans",
-      "title": "Additional Fans (Nevermore, RSCS, Exhaust, etc.)",
+      "title": "Additional Fans",
       "state_prefix": "fans.additional_fans",
       "description": "Configure additional fans like Nevermore filters, RSCS, exhaust fans, etc.",
       "is_list": true,

@@ -850,20 +850,28 @@ class MenuEngine:
         Returns:
             True if condition is met
         """
+        import re
         try:
-            # Simple evaluation for item-level conditions
             # Replace field references with values from item_data
+            # Sort keys by length (longest first) to avoid partial replacements
+            # e.g., replace 'pin_type' before 'pin'
             expr = condition
+            sorted_keys = sorted(item_data.keys(), key=len, reverse=True)
 
-            for key, value in item_data.items():
+            for key in sorted_keys:
+                value = item_data[key]
+                # Use word boundary regex to avoid partial matches
+                pattern = r'\b' + re.escape(key) + r'\b'
                 if isinstance(value, str):
-                    expr = expr.replace(key, f"'{value}'")
+                    expr = re.sub(pattern, f"'{value}'", expr)
                 elif value is None:
-                    expr = expr.replace(key, "None")
+                    expr = re.sub(pattern, "None", expr)
+                elif isinstance(value, bool):
+                    expr = re.sub(pattern, str(value), expr)
                 else:
-                    expr = expr.replace(key, str(value))
+                    expr = re.sub(pattern, str(value), expr)
 
             # Safe eval with limited context
-            return eval(expr, {"__builtins__": {}}, {})
+            return eval(expr, {"__builtins__": {}}, {"True": True, "False": False})
         except Exception:
             return True  # Default to showing field if condition evaluation fails

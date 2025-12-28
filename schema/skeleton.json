@@ -873,6 +873,40 @@
           "condition": "stepper_x.endstop_type == 'physical'"
         },
         {
+          "id": "endstop_pullup",
+          "type": "bool",
+          "label": "Enable Endstop Pull-up",
+          "state_key": "stepper_x.endstop_pullup",
+          "default": true,
+          "help": "Enable internal pull-up resistor (recommended for mechanical switches)",
+          "condition": "stepper_x.endstop_type == 'physical'"
+        },
+        {
+          "id": "endstop_invert",
+          "type": "bool",
+          "label": "Invert Endstop Logic",
+          "state_key": "stepper_x.endstop_invert",
+          "default": false,
+          "help": "Invert endstop signal (enable for NC switches, disable for NO switches)",
+          "condition": "stepper_x.endstop_type == 'physical'"
+        },
+        {
+          "id": "enable_invert",
+          "type": "bool",
+          "label": "Invert Enable Pin",
+          "state_key": "stepper_x.enable_invert",
+          "default": false,
+          "help": "Invert the motor enable signal (depends on driver board)"
+        },
+        {
+          "id": "dir_invert",
+          "type": "bool",
+          "label": "Invert Direction",
+          "state_key": "stepper_x.dir_invert",
+          "default": false,
+          "help": "Invert motor direction if it runs backwards"
+        },
+        {
           "id": "position_endstop",
           "type": "int",
           "label": "Position Endstop (mm)",
@@ -940,6 +974,22 @@
           "label": "Driver Type",
           "state_key": "stepper_x1.driver_type",
           "required": true
+        },
+        {
+          "id": "enable_invert",
+          "type": "bool",
+          "label": "Invert Enable Pin",
+          "state_key": "stepper_x1.enable_invert",
+          "default": false,
+          "help": "Invert the motor enable signal (depends on driver board)"
+        },
+        {
+          "id": "dir_invert",
+          "type": "bool",
+          "label": "Invert Direction",
+          "state_key": "stepper_x1.dir_invert",
+          "default": false,
+          "help": "Invert motor direction if it runs backwards"
         },
         {
           "id": "rotation_distance",
@@ -1016,6 +1066,40 @@
           "condition": "stepper_y.endstop_type == 'physical'"
         },
         {
+          "id": "endstop_pullup",
+          "type": "bool",
+          "label": "Enable Endstop Pull-up",
+          "state_key": "stepper_y.endstop_pullup",
+          "default": true,
+          "help": "Enable internal pull-up resistor (recommended for mechanical switches)",
+          "condition": "stepper_y.endstop_type == 'physical'"
+        },
+        {
+          "id": "endstop_invert",
+          "type": "bool",
+          "label": "Invert Endstop Logic",
+          "state_key": "stepper_y.endstop_invert",
+          "default": false,
+          "help": "Invert endstop signal (enable for NC switches, disable for NO switches)",
+          "condition": "stepper_y.endstop_type == 'physical'"
+        },
+        {
+          "id": "enable_invert",
+          "type": "bool",
+          "label": "Invert Enable Pin",
+          "state_key": "stepper_y.enable_invert",
+          "default": false,
+          "help": "Invert the motor enable signal (depends on driver board)"
+        },
+        {
+          "id": "dir_invert",
+          "type": "bool",
+          "label": "Invert Direction",
+          "state_key": "stepper_y.dir_invert",
+          "default": false,
+          "help": "Invert motor direction if it runs backwards"
+        },
+        {
           "id": "position_endstop",
           "type": "int",
           "label": "Position Endstop (mm)",
@@ -1083,6 +1167,22 @@
           "label": "Driver Type",
           "state_key": "stepper_y1.driver_type",
           "required": true
+        },
+        {
+          "id": "enable_invert",
+          "type": "bool",
+          "label": "Invert Enable Pin",
+          "state_key": "stepper_y1.enable_invert",
+          "default": false,
+          "help": "Invert the motor enable signal (depends on driver board)"
+        },
+        {
+          "id": "dir_invert",
+          "type": "bool",
+          "label": "Invert Direction",
+          "state_key": "stepper_y1.dir_invert",
+          "default": false,
+          "help": "Invert motor direction if it runs backwards"
         },
         {
           "id": "rotation_distance",
@@ -1171,6 +1271,40 @@
           "state_key": "stepper_z.endstop_port",
           "port_type": "endstop_ports",
           "condition": "stepper_z.endstop_type in ['physical_mainboard', 'physical_toolboard']"
+        },
+        {
+          "id": "endstop_pullup",
+          "type": "bool",
+          "label": "Enable Endstop Pull-up",
+          "state_key": "stepper_z.endstop_pullup",
+          "default": true,
+          "help": "Enable internal pull-up resistor (recommended for mechanical switches)",
+          "condition": "stepper_z.endstop_type in ['physical_mainboard', 'physical_toolboard']"
+        },
+        {
+          "id": "endstop_invert",
+          "type": "bool",
+          "label": "Invert Endstop Logic",
+          "state_key": "stepper_z.endstop_invert",
+          "default": false,
+          "help": "Invert endstop signal (enable for NC switches, disable for NO switches)",
+          "condition": "stepper_z.endstop_type in ['physical_mainboard', 'physical_toolboard']"
+        },
+        {
+          "id": "enable_invert",
+          "type": "bool",
+          "label": "Invert Enable Pin",
+          "state_key": "stepper_z.enable_invert",
+          "default": false,
+          "help": "Invert the motor enable signal (depends on driver board)"
+        },
+        {
+          "id": "dir_invert",
+          "type": "bool",
+          "label": "Invert Direction",
+          "state_key": "stepper_z.dir_invert",
+          "default": false,
+          "help": "Invert motor direction if it runs backwards"
         },
         {
           "id": "position_endstop",
@@ -1283,6 +1417,52 @@
           "default": "ATC Semitec 104NT-4-R025H42G"
         },
         {
+          "id": "pullup_resistor",
+          "type": "choice",
+          "label": "Thermistor Pull-up Resistor",
+          "state_key": "extruder.pullup_resistor",
+          "options": [
+            { "value": 4700, "label": "4700 ohm (standard)" },
+            { "value": 2200, "label": "2200 ohm" },
+            { "value": "custom", "label": "Custom value" }
+          ],
+          "default": 4700,
+          "help": "Internal pull-up resistor value for thermistor ADC input",
+          "condition": "extruder.sensor_type not in ['MAX31865', 'PT1000']"
+        },
+        {
+          "id": "pullup_resistor_custom",
+          "type": "int",
+          "label": "Custom Pull-up Value (ohms)",
+          "state_key": "extruder.pullup_resistor_custom",
+          "condition": "extruder.pullup_resistor == 'custom'",
+          "range": [1000, 10000]
+        },
+        {
+          "id": "heater_invert",
+          "type": "bool",
+          "label": "Invert Heater Pin",
+          "state_key": "extruder.heater_invert",
+          "default": false,
+          "help": "Invert heater output signal (rarely needed)"
+        },
+        {
+          "id": "enable_invert",
+          "type": "bool",
+          "label": "Invert Enable Pin",
+          "state_key": "extruder.enable_invert",
+          "default": false,
+          "help": "Invert the motor enable signal (depends on driver board)"
+        },
+        {
+          "id": "dir_invert",
+          "type": "bool",
+          "label": "Invert Direction",
+          "state_key": "extruder.dir_invert",
+          "default": false,
+          "help": "Invert motor direction for correct extrusion"
+        },
+        {
           "id": "nozzle_diameter",
           "type": "choice",
           "label": "Nozzle Diameter (mm)",
@@ -1355,6 +1535,35 @@
           "default": "Generic 3950"
         },
         {
+          "id": "pullup_resistor",
+          "type": "choice",
+          "label": "Thermistor Pull-up Resistor",
+          "state_key": "heater_bed.pullup_resistor",
+          "options": [
+            { "value": 4700, "label": "4700 ohm (standard)" },
+            { "value": 2200, "label": "2200 ohm" },
+            { "value": "custom", "label": "Custom value" }
+          ],
+          "default": 4700,
+          "help": "Internal pull-up resistor value for thermistor ADC input"
+        },
+        {
+          "id": "pullup_resistor_custom",
+          "type": "int",
+          "label": "Custom Pull-up Value (ohms)",
+          "state_key": "heater_bed.pullup_resistor_custom",
+          "condition": "heater_bed.pullup_resistor == 'custom'",
+          "range": [1000, 10000]
+        },
+        {
+          "id": "heater_invert",
+          "type": "bool",
+          "label": "Invert Heater Pin",
+          "state_key": "heater_bed.heater_invert",
+          "default": false,
+          "help": "Invert heater output signal (rarely needed)"
+        },
+        {
           "id": "max_temp",
           "type": "int",
           "label": "Max Temperature (C)",
@@ -1401,6 +1610,15 @@
               "state_key": "fans.part_cooling.port",
               "port_type": "fan_ports",
               "condition": "fans.part_cooling.enabled"
+            },
+            {
+              "id": "invert",
+              "type": "bool",
+              "label": "Invert Fan Pin",
+              "state_key": "fans.part_cooling.invert",
+              "default": false,
+              "help": "Invert fan PWM signal (rarely needed)",
+              "condition": "fans.part_cooling.enabled"
             }
           ]
         },
@@ -1434,6 +1652,15 @@
               "label": "Fan Port",
               "state_key": "fans.hotend.port",
               "port_type": "fan_ports",
+              "condition": "fans.hotend.enabled"
+            },
+            {
+              "id": "invert",
+              "type": "bool",
+              "label": "Invert Fan Pin",
+              "state_key": "fans.hotend.invert",
+              "default": false,
+              "help": "Invert fan PWM signal (rarely needed)",
               "condition": "fans.hotend.enabled"
             }
           ]

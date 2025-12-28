@@ -1562,7 +1562,7 @@
             {
               "id": "location",
               "type": "choice",
-              "label": "Location",
+              "label": "Fan Location",
               "state_key": "fans.part_cooling.location",
               "options": [
                 { "value": "mainboard", "label": "Mainboard" },
@@ -1572,20 +1572,54 @@
               "condition": "fans.part_cooling.enabled"
             },
             {
-              "id": "port",
+              "id": "pin_mainboard",
               "type": "port_select",
-              "label": "Fan Port",
-              "state_key": "fans.part_cooling.port",
+              "label": "Fan Port (Mainboard)",
+              "state_key": "fans.part_cooling.pin_mainboard",
               "port_type": "fan_ports",
+              "condition": "fans.part_cooling.enabled and fans.part_cooling.location == 'mainboard'"
+            },
+            {
+              "id": "pin_toolboard",
+              "type": "port_select",
+              "label": "Fan Port (Toolboard)",
+              "state_key": "fans.part_cooling.pin_toolboard",
+              "port_type": "fan_ports",
+              "condition": "fans.part_cooling.enabled and fans.part_cooling.location == 'toolboard'"
+            },
+            {
+              "id": "max_power",
+              "type": "float",
+              "label": "Max Power (0.0-1.0)",
+              "state_key": "fans.part_cooling.max_power",
+              "default": 1.0,
+              "range": [0.0, 1.0],
               "condition": "fans.part_cooling.enabled"
             },
             {
-              "id": "invert",
-              "type": "bool",
-              "label": "Invert Fan Pin",
-              "state_key": "fans.part_cooling.invert",
-              "default": false,
-              "help": "Invert fan PWM signal (rarely needed)",
+              "id": "kick_start_time",
+              "type": "float",
+              "label": "Kick Start Time (seconds)",
+              "state_key": "fans.part_cooling.kick_start_time",
+              "default": 0.5,
+              "help": "Time to run at full speed when starting",
+              "condition": "fans.part_cooling.enabled"
+            },
+            {
+              "id": "off_below",
+              "type": "float",
+              "label": "Off Below (0.0-1.0)",
+              "state_key": "fans.part_cooling.off_below",
+              "default": 0.1,
+              "help": "Turn off fan below this speed",
+              "condition": "fans.part_cooling.enabled"
+            },
+            {
+              "id": "cycle_time",
+              "type": "float",
+              "label": "PWM Cycle Time (seconds)",
+              "state_key": "fans.part_cooling.cycle_time",
+              "default": 0.010,
               "condition": "fans.part_cooling.enabled"
             }
           ]
@@ -1605,7 +1639,7 @@
             {
               "id": "location",
               "type": "choice",
-              "label": "Location",
+              "label": "Fan Location",
               "state_key": "fans.hotend.location",
               "options": [
                 { "value": "mainboard", "label": "Mainboard" },
@@ -1615,25 +1649,256 @@
               "condition": "fans.hotend.enabled"
             },
             {
-              "id": "port",
+              "id": "pin_mainboard",
               "type": "port_select",
-              "label": "Fan Port",
-              "state_key": "fans.hotend.port",
+              "label": "Fan Port (Mainboard)",
+              "state_key": "fans.hotend.pin_mainboard",
               "port_type": "fan_ports",
+              "condition": "fans.hotend.enabled and fans.hotend.location == 'mainboard'"
+            },
+            {
+              "id": "pin_toolboard",
+              "type": "port_select",
+              "label": "Fan Port (Toolboard)",
+              "state_key": "fans.hotend.pin_toolboard",
+              "port_type": "fan_ports",
+              "condition": "fans.hotend.enabled and fans.hotend.location == 'toolboard'"
+            },
+            {
+              "id": "heater",
+              "type": "text",
+              "label": "Heater to Monitor",
+              "state_key": "fans.hotend.heater",
+              "default": "extruder",
               "condition": "fans.hotend.enabled"
             },
             {
-              "id": "invert",
-              "type": "bool",
-              "label": "Invert Fan Pin",
-              "state_key": "fans.hotend.invert",
-              "default": false,
-              "help": "Invert fan PWM signal (rarely needed)",
+              "id": "heater_temp",
+              "type": "int",
+              "label": "Turn On Temperature (C)",
+              "state_key": "fans.hotend.heater_temp",
+              "default": 50,
+              "help": "Fan turns on when heater exceeds this temp",
               "condition": "fans.hotend.enabled"
+            },
+            {
+              "id": "fan_speed",
+              "type": "float",
+              "label": "Fan Speed (0.0-1.0)",
+              "state_key": "fans.hotend.fan_speed",
+              "default": 1.0,
+              "range": [0.0, 1.0],
+              "condition": "fans.hotend.enabled"
+            }
+          ]
+        },
+        {
+          "id": "controller",
+          "title": "Controller/Electronics Fan",
+          "klipper_section": "[controller_fan controller_fan]",
+          "fields": [
+            {
+              "id": "enabled",
+              "type": "bool",
+              "label": "Enable Controller Fan",
+              "state_key": "fans.controller.enabled",
+              "default": false
+            },
+            {
+              "id": "pin",
+              "type": "port_select",
+              "label": "Fan Port",
+              "state_key": "fans.controller.pin",
+              "port_type": "fan_ports",
+              "condition": "fans.controller.enabled"
+            },
+            {
+              "id": "kick_start_time",
+              "type": "float",
+              "label": "Kick Start Time (seconds)",
+              "state_key": "fans.controller.kick_start_time",
+              "default": 0.5,
+              "condition": "fans.controller.enabled"
+            },
+            {
+              "id": "stepper",
+              "type": "text",
+              "label": "Stepper to Monitor",
+              "state_key": "fans.controller.stepper",
+              "default": "stepper_x",
+              "help": "Fan activates when this stepper is active",
+              "condition": "fans.controller.enabled"
+            },
+            {
+              "id": "idle_timeout",
+              "type": "int",
+              "label": "Idle Timeout (seconds)",
+              "state_key": "fans.controller.idle_timeout",
+              "default": 60,
+              "condition": "fans.controller.enabled"
+            },
+            {
+              "id": "idle_speed",
+              "type": "float",
+              "label": "Idle Speed (0.0-1.0)",
+              "state_key": "fans.controller.idle_speed",
+              "default": 0.5,
+              "range": [0.0, 1.0],
+              "condition": "fans.controller.enabled"
             }
           ]
         }
       ]
+    },
+
+    "additional_fans": {
+      "id": "additional_fans",
+      "title": "Additional Fans (Nevermore, RSCS, Exhaust, etc.)",
+      "state_prefix": "fans.additional_fans",
+      "description": "Configure additional fans like Nevermore filters, RSCS, exhaust fans, etc.",
+      "is_list": true,
+      "item_template": {
+        "fields": [
+          {
+            "id": "name",
+            "type": "text",
+            "label": "Fan Name",
+            "state_key": "name",
+            "help": "e.g., nevermore, rscs, exhaust"
+          },
+          {
+            "id": "control_mode",
+            "type": "choice",
+            "label": "Control Mode",
+            "state_key": "control_mode",
+            "options": [
+              { "value": "manual", "label": "Manual (fan_generic)" },
+              { "value": "heater", "label": "Heater-controlled (heater_fan)" }
+            ],
+            "default": "manual"
+          },
+          {
+            "id": "pin_type",
+            "type": "choice",
+            "label": "Pin Type",
+            "state_key": "pin_type",
+            "options": [
+              { "value": "single", "label": "Single Pin" },
+              { "value": "multi_pin", "label": "Multi-Pin (combined outputs)" }
+            ],
+            "default": "single"
+          },
+          {
+            "id": "location",
+            "type": "choice",
+            "label": "Location",
+            "state_key": "location",
+            "options": [
+              { "value": "mainboard", "label": "Mainboard" },
+              { "value": "toolboard", "label": "Toolboard" }
+            ],
+            "default": "mainboard",
+            "condition": "pin_type == 'single'"
+          },
+          {
+            "id": "pin",
+            "type": "port_select",
+            "label": "Fan Port",
+            "state_key": "pin",
+            "port_type": "fan_ports",
+            "condition": "pin_type == 'single'"
+          },
+          {
+            "id": "multi_pin_name",
+            "type": "text",
+            "label": "Multi-Pin Group Name",
+            "state_key": "multi_pin_name",
+            "help": "Reference to a multi_pin group defined in advanced settings",
+            "condition": "pin_type == 'multi_pin'"
+          },
+          {
+            "id": "max_power",
+            "type": "float",
+            "label": "Max Power (0.0-1.0)",
+            "state_key": "max_power",
+            "default": 1.0,
+            "condition": "control_mode == 'manual'"
+          },
+          {
+            "id": "shutdown_speed",
+            "type": "float",
+            "label": "Shutdown Speed (0.0-1.0)",
+            "state_key": "shutdown_speed",
+            "default": 0,
+            "condition": "control_mode == 'manual'"
+          },
+          {
+            "id": "kick_start_time",
+            "type": "float",
+            "label": "Kick Start Time (seconds)",
+            "state_key": "kick_start_time",
+            "default": 0.1
+          },
+          {
+            "id": "off_below",
+            "type": "float",
+            "label": "Off Below (0.0-1.0)",
+            "state_key": "off_below",
+            "default": 0.1,
+            "condition": "control_mode == 'manual'"
+          },
+          {
+            "id": "heater",
+            "type": "text",
+            "label": "Heater to Monitor",
+            "state_key": "heater",
+            "default": "extruder",
+            "condition": "control_mode == 'heater'"
+          },
+          {
+            "id": "heater_temp",
+            "type": "int",
+            "label": "Turn On Temperature (C)",
+            "state_key": "heater_temp",
+            "default": 50,
+            "condition": "control_mode == 'heater'"
+          },
+          {
+            "id": "fan_speed",
+            "type": "float",
+            "label": "Fan Speed (0.0-1.0)",
+            "state_key": "fan_speed",
+            "default": 1.0,
+            "condition": "control_mode == 'heater'"
+          }
+        ]
+      }
+    },
+
+    "multi_pins": {
+      "id": "multi_pins",
+      "title": "Multi-Pin Groups",
+      "state_prefix": "advanced.multi_pins",
+      "description": "Combine multiple output pins into one (e.g., for dual-fan setups)",
+      "is_list": true,
+      "item_template": {
+        "fields": [
+          {
+            "id": "name",
+            "type": "text",
+            "label": "Group Name",
+            "state_key": "name",
+            "help": "e.g., dual_part_fan"
+          },
+          {
+            "id": "pins",
+            "type": "text",
+            "label": "Pins (comma-separated)",
+            "state_key": "pins",
+            "help": "e.g., PB5,PB6 or toolboard:PA0,toolboard:PA1"
+          }
+        ]
+      }
     },
 
     "leds": {

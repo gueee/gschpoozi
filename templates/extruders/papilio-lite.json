@@ -1,0 +1,12 @@
+{
+  "id": "papilio-lite",
+  "name": "Papilio Lite",
+  "manufacturer": "LDO",
+  "type": "direct_drive",
+  "gear_ratio": "5:1",
+  "rotation_distance": 5.7,
+  "microsteps": 16,
+  "full_steps_per_rotation": 200,
+  "pressure_advance": 0.025,
+  "notes": "Compact planetary extruder"
+}

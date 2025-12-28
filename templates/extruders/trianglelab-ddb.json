@@ -1,0 +1,12 @@
+{
+  "id": "trianglelab-ddb",
+  "name": "DDB Extruder",
+  "manufacturer": "TriangleLab",
+  "type": "direct_drive",
+  "gear_ratio": "5.65:1",
+  "rotation_distance": 4.637,
+  "microsteps": 16,
+  "full_steps_per_rotation": 200,
+  "pressure_advance": 0.03,
+  "notes": "Dual Drive Bowden-style geared extruder"
+}

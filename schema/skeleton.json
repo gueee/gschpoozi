@@ -1328,6 +1328,14 @@
           "required": true
         },
         {
+          "id": "driver_type",
+          "type": "exclusive_choice",
+          "group": "driver_types",
+          "label": "Driver Type",
+          "state_key": "extruder.driver_type",
+          "required": true
+        },
+        {
           "id": "heater_port",
           "type": "port_select",
           "label": "Heater Port",
@@ -1402,6 +1410,26 @@
           "state_key": "extruder.dir_invert",
           "default": false,
           "help": "Invert motor direction for correct extrusion"
+        },
+        {
+          "id": "rotation_distance",
+          "type": "float",
+          "label": "Rotation Distance (mm)",
+          "state_key": "extruder.rotation_distance",
+          "default": 22.6789511,
+          "help": "Distance filament moves per full motor rotation. Check your extruder docs or calibrate with the extruder calibration macro."
+        },
+        {
+          "id": "microsteps",
+          "type": "choice",
+          "label": "Microsteps",
+          "state_key": "extruder.microsteps",
+          "options": [
+            { "value": 16, "label": "16" },
+            { "value": 32, "label": "32" },
+            { "value": 64, "label": "64" }
+          ],
+          "default": 16
         },
         {
           "id": "nozzle_diameter",

@@ -1,0 +1,12 @@
+{
+  "id": "bowden-generic",
+  "name": "Generic Bowden (MK8 style)",
+  "manufacturer": "Generic",
+  "type": "bowden",
+  "gear_ratio": null,
+  "rotation_distance": 33.5,
+  "microsteps": 16,
+  "full_steps_per_rotation": 200,
+  "pressure_advance": 0.5,
+  "notes": "Standard MK8-style bowden extruder. High PA due to bowden tube."
+}

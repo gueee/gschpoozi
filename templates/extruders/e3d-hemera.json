@@ -1,0 +1,12 @@
+{
+  "id": "e3d-hemera",
+  "name": "Hemera",
+  "manufacturer": "E3D",
+  "type": "direct_drive",
+  "gear_ratio": "3.5:1",
+  "rotation_distance": 7.824,
+  "microsteps": 16,
+  "full_steps_per_rotation": 200,
+  "pressure_advance": 0.05,
+  "notes": "E3D integrated hotend/extruder"
+}

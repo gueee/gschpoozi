@@ -1,0 +1,12 @@
+{
+  "id": "vz-hextrudort-low",
+  "name": "VZ-Hextrudort Low",
+  "manufacturer": "VzBoT",
+  "type": "direct_drive",
+  "gear_ratio": "60:10",
+  "rotation_distance": 22.0,
+  "microsteps": 32,
+  "full_steps_per_rotation": 200,
+  "pressure_advance": 0.025,
+  "notes": "Low profile variant. Adjust rotation_distance based on your gear configuration."
+}

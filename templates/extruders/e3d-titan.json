@@ -1,0 +1,12 @@
+{
+  "id": "e3d-titan",
+  "name": "Titan",
+  "manufacturer": "E3D",
+  "type": "direct_drive",
+  "gear_ratio": "3:1",
+  "rotation_distance": 23.056,
+  "microsteps": 16,
+  "full_steps_per_rotation": 200,
+  "pressure_advance": 0.05,
+  "notes": "Versatile geared extruder"
+}

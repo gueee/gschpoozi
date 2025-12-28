@@ -1,0 +1,12 @@
+{
+  "id": "vz-hextrudort",
+  "name": "VZ-Hextrudort",
+  "manufacturer": "VzBoT",
+  "type": "direct_drive",
+  "gear_ratio": "50:10",
+  "rotation_distance": 22.0,
+  "microsteps": 32,
+  "full_steps_per_rotation": 200,
+  "pressure_advance": 0.025,
+  "notes": "Default for standard 50T/10T config. Adjust rotation_distance based on your gear configuration."
+}

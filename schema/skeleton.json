@@ -351,6 +351,18 @@
           "status_key": "mcu.main.board_type"
         },
         {
+          "id": "host_mcu",
+          "label": "Host MCU (RPi GPIO)",
+          "section": "host_mcu",
+          "status_key": "mcu.host.enabled"
+        },
+        {
+          "id": "additional_mcus",
+          "label": "Additional MCUs",
+          "description": "MMUs, filament buffers, etc.",
+          "section": "additional_mcus"
+        },
+        {
           "id": "printer",
           "label": "Printer Settings",
           "section": "printer",
@@ -444,10 +456,72 @@
           "status_key": "temperature_sensors.chamber.enabled"
         },
         {
+          "id": "additional_temp_sensors",
+          "label": "Additional Temperature Sensors",
+          "description": "BME280, AHT10, custom thermistors",
+          "section": "additional_temp_sensors"
+        },
+        {
           "id": "filament_sensors",
           "label": "Filament Sensors",
           "section": "filament_sensors",
           "status_key": "filament_sensors.runout.enabled"
+        }
+      ]
+    },
+
+    "klipper_setup": {
+      "id": "klipper_setup",
+      "title": "Klipper Setup",
+      "items": [
+        {
+          "id": "manage_components",
+          "label": "1. Manage Klipper Components",
+          "description": "Install/update Klipper, Moonraker, frontends",
+          "action": "manage_components"
+        },
+        {
+          "id": "can_setup",
+          "label": "2. CAN Interface Setup",
+          "description": "Configure CAN bus interfaces",
+          "action": "can_setup"
+        },
+        {
+          "id": "katapult_setup",
+          "label": "3. Katapult/Firmware Flashing",
+          "description": "DFU and CAN firmware flashing",
+          "action": "katapult_setup"
+        },
+        {
+          "id": "mmu_software",
+          "label": "4. MMU Software Installation",
+          "description": "Happy Hare, AFC-Klipper-Add-On",
+          "action": "install_mmu_software"
+        },
+        {
+          "id": "verify_services",
+          "label": "V. Verify Klipper Services",
+          "description": "Check service status",
+          "action": "verify_services"
+        }
+      ]
+    },
+
+    "tuning": {
+      "id": "tuning",
+      "title": "Tuning & Features",
+      "items": [
+        {
+          "id": "tuning_config",
+          "label": "General Settings",
+          "section": "tuning",
+          "status_key": "tuning.kalico_enabled"
+        },
+        {
+          "id": "input_shaper",
+          "label": "Input Shaper",
+          "section": "input_shaper",
+          "status_key": "input_shaper.enabled"
         }
       ]
     }
@@ -557,6 +631,147 @@
           ]
         }
       ]
+    },
+
+    "host_mcu": {
+      "id": "host_mcu",
+      "title": "Host MCU (Linux)",
+      "state_prefix": "mcu.host",
+      "klipper_section": "[mcu rpi]",
+      "help": "Enables GPIO access on the Raspberry Pi for sensors, fans, and other peripherals",
+      "fields": [
+        {
+          "id": "enabled",
+          "type": "bool",
+          "label": "Enable Host MCU",
+          "state_key": "mcu.host.enabled",
+          "default": false,
+          "help": "Required for RPi GPIO sensors, DS18B20, Neopixels on GPIO, etc."
+        },
+        {
+          "id": "serial",
+          "type": "text",
+          "label": "Serial Path",
+          "state_key": "mcu.host.serial",
+          "default": "/tmp/klipper_host_mcu",
+          "condition": "mcu.host.enabled",
+          "help": "Default Klipper linux MCU socket path"
+        }
+      ]
+    },
+
+    "additional_mcus": {
+      "id": "additional_mcus",
+      "title": "Additional MCUs",
+      "state_prefix": "mcu.additional",
+      "description": "MMUs, filament buffers, and other external MCUs",
+      "is_list": true,
+      "item_template": {
+        "fields": [
+          {
+            "id": "name",
+            "type": "text",
+            "label": "MCU Name",
+            "state_key": "name",
+            "help": "e.g., mmu, buffer, ercf (used in Klipper config as [mcu name])"
+          },
+          {
+            "id": "type",
+            "type": "choice",
+            "label": "MCU Type",
+            "state_key": "type",
+            "options": [
+              { "value": "mmu", "label": "MMU (Multi-Material Unit)" },
+              { "value": "filament_buffer", "label": "Filament Buffer" },
+              { "value": "generic", "label": "Generic MCU" }
+            ],
+            "default": "mmu"
+          },
+          {
+            "id": "mmu_type",
+            "type": "choice",
+            "label": "MMU System",
+            "state_key": "mmu_type",
+            "options": [
+              { "value": "ercf", "label": "ERCF (Enraged Rabbit)" },
+              { "value": "tradrack", "label": "TradRack" },
+              { "value": "box_turtle", "label": "Box Turtle" },
+              { "value": "night_owl", "label": "Night Owl" },
+              { "value": "3ms", "label": "3MS" },
+              { "value": "afc", "label": "AFC / Armored Turtle" },
+              { "value": "other", "label": "Other" }
+            ],
+            "default": "ercf",
+            "condition": "type == 'mmu'"
+          },
+          {
+            "id": "gate_count",
+            "type": "int",
+            "label": "Number of Gates/Filaments",
+            "state_key": "gate_count",
+            "default": 4,
+            "range": [2, 16],
+            "condition": "type == 'mmu'"
+          },
+          {
+            "id": "buffer_type",
+            "type": "choice",
+            "label": "Buffer Type",
+            "state_key": "buffer_type",
+            "options": [
+              { "value": "trad_rack_buffer", "label": "TradRack Buffer" },
+              { "value": "ercf_buffer", "label": "ERCF Buffer (Springy)" },
+              { "value": "afc_buffer", "label": "AFC Buffer" },
+              { "value": "generic", "label": "Generic" }
+            ],
+            "default": "trad_rack_buffer",
+            "condition": "type == 'filament_buffer'"
+          },
+          {
+            "id": "board",
+            "type": "choice",
+            "label": "Controller Board",
+            "state_key": "board",
+            "options": [
+              { "value": "btt_mmb", "label": "BTT MMB (MMU Board)" },
+              { "value": "btt_mmb_can", "label": "BTT MMB CAN" },
+              { "value": "fysetc_erb", "label": "Fysetc ERB (ERCF Board)" },
+              { "value": "mellow_easy_brd", "label": "Mellow EASY-BRD" },
+              { "value": "skr_pico", "label": "SKR Pico" },
+              { "value": "rp2040_zero", "label": "RP2040 Zero" },
+              { "value": "other", "label": "Other" }
+            ],
+            "default": "btt_mmb"
+          },
+          {
+            "id": "connection_type",
+            "type": "choice",
+            "label": "Connection Type",
+            "state_key": "connection_type",
+            "options": [
+              { "value": "USB", "label": "USB Serial" },
+              { "value": "CAN", "label": "CAN Bus" }
+            ],
+            "default": "USB"
+          },
+          {
+            "id": "serial",
+            "type": "serial_select",
+            "label": "Serial Port",
+            "state_key": "serial",
+            "auto_detect_pattern": "Klipper",
+            "condition": "connection_type == 'USB'"
+          },
+          {
+            "id": "canbus_uuid",
+            "type": "text",
+            "label": "CAN Bus UUID",
+            "state_key": "canbus_uuid",
+            "help": "Use 'python3 ~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0' to find",
+            "condition": "connection_type == 'CAN'"
+          }
+        ]
+      }
     },
 
     "printer": {
@@ -1944,8 +2159,39 @@
       "state_prefix": "temperature_sensors",
       "subsections": [
         {
+          "id": "mcu_sensors",
+          "title": "Built-in MCU Temperature Sensors",
+          "fields": [
+            {
+              "id": "mcu_main_enabled",
+              "type": "bool",
+              "label": "Enable Main MCU Temperature",
+              "state_key": "temperature_sensors.mcu_main.enabled",
+              "default": true,
+              "help": "Monitor main board MCU temperature"
+            },
+            {
+              "id": "host_enabled",
+              "type": "bool",
+              "label": "Enable Host (RPi) Temperature",
+              "state_key": "temperature_sensors.host.enabled",
+              "default": true,
+              "help": "Monitor Raspberry Pi CPU temperature"
+            },
+            {
+              "id": "toolboard_enabled",
+              "type": "bool",
+              "label": "Enable Toolboard MCU Temperature",
+              "state_key": "temperature_sensors.toolboard.enabled",
+              "default": false,
+              "condition": "mcu.toolboard.enabled",
+              "help": "Monitor toolboard MCU temperature"
+            }
+          ]
+        },
+        {
           "id": "chamber",
-          "title": "Chamber Sensor",
+          "title": "Chamber Temperature Sensor",
           "klipper_section": "[temperature_sensor chamber]",
           "fields": [
             {
@@ -1962,27 +2208,147 @@
               "state_key": "temperature_sensors.chamber.sensor_type",
               "options": [
                 { "value": "Generic 3950", "label": "Generic 3950 (NTC 100K)" },
+                { "value": "NTC 100K beta 3950", "label": "NTC 100K beta 3950" },
+                { "value": "ATC Semitec 104GT-2", "label": "ATC Semitec 104GT-2" },
                 { "value": "ATC Semitec 104NT-4-R025H42G", "label": "ATC Semitec 104NT-4" },
-                { "value": "DS18B20", "label": "DS18B20 (1-wire)" }
+                { "value": "PT1000", "label": "PT1000 (RTD)" },
+                { "value": "DS18B20", "label": "DS18B20 (1-wire digital)" }
               ],
               "default": "Generic 3950",
               "condition": "temperature_sensors.chamber.enabled"
             },
             {
-              "id": "location",
+              "id": "sensor_location",
               "type": "choice",
-              "label": "Location",
-              "state_key": "temperature_sensors.chamber.location",
+              "label": "Sensor Location",
+              "state_key": "temperature_sensors.chamber.sensor_location",
               "options": [
                 { "value": "mainboard", "label": "Mainboard" },
-                { "value": "toolboard", "label": "Toolboard", "condition": "mcu.toolboard.enabled" }
+                { "value": "rpi", "label": "Raspberry Pi GPIO" }
               ],
               "default": "mainboard",
               "condition": "temperature_sensors.chamber.enabled"
+            },
+            {
+              "id": "sensor_port_mainboard",
+              "type": "port_select",
+              "label": "Thermistor Port",
+              "state_key": "temperature_sensors.chamber.sensor_port_mainboard",
+              "port_type": "thermistor_ports",
+              "condition": "temperature_sensors.chamber.enabled and temperature_sensors.chamber.sensor_location == 'mainboard'"
+            },
+            {
+              "id": "sensor_pin_rpi",
+              "type": "text",
+              "label": "GPIO Pin",
+              "state_key": "temperature_sensors.chamber.sensor_pin_rpi",
+              "default": "gpio4",
+              "help": "GPIO pin for DS18B20 (e.g., gpio4)",
+              "condition": "temperature_sensors.chamber.enabled and temperature_sensors.chamber.sensor_location == 'rpi'"
+            },
+            {
+              "id": "pullup_resistor",
+              "type": "choice",
+              "label": "Pullup Resistor",
+              "state_key": "temperature_sensors.chamber.pullup_resistor",
+              "options": [
+                { "value": "4700", "label": "4.7k ohm (standard)" },
+                { "value": "2200", "label": "2.2k ohm (for PT1000)" },
+                { "value": "10000", "label": "10k ohm" },
+                { "value": "none", "label": "None (use board default)" }
+              ],
+              "default": "4700",
+              "condition": "temperature_sensors.chamber.enabled and temperature_sensors.chamber.sensor_type != 'DS18B20'"
             }
           ]
         }
       ]
+    },
+
+    "additional_temp_sensors": {
+      "id": "additional_temp_sensors",
+      "title": "Additional Temperature Sensors",
+      "state_prefix": "temperature_sensors.additional",
+      "description": "Add custom temperature sensors (BME280, AHT10, additional thermistors, etc.)",
+      "is_list": true,
+      "item_template": {
+        "fields": [
+          {
+            "id": "name",
+            "type": "text",
+            "label": "Sensor Name",
+            "state_key": "name",
+            "help": "e.g., enclosure, electronics_bay"
+          },
+          {
+            "id": "type",
+            "type": "choice",
+            "label": "Sensor Type",
+            "state_key": "type",
+            "options": [
+              { "value": "temperature_mcu", "label": "MCU Temperature" },
+              { "value": "Generic 3950", "label": "Generic 3950 (NTC 100K)" },
+              { "value": "NTC 100K beta 3950", "label": "NTC 100K beta 3950" },
+              { "value": "PT1000", "label": "PT1000 (RTD)" },
+              { "value": "DS18B20", "label": "DS18B20 (1-wire)" },
+              { "value": "BME280", "label": "BME280 (I2C - temp/pressure/humidity)" },
+              { "value": "AHT10", "label": "AHT10 (I2C - temp/humidity)" }
+            ],
+            "default": "Generic 3950"
+          },
+          {
+            "id": "mcu",
+            "type": "choice",
+            "label": "MCU to Monitor",
+            "state_key": "mcu",
+            "options": [
+              { "value": "mcu", "label": "Main MCU" },
+              { "value": "toolboard", "label": "Toolboard" },
+              { "value": "rpi", "label": "Raspberry Pi" }
+            ],
+            "default": "mcu",
+            "condition": "type == 'temperature_mcu'"
+          },
+          {
+            "id": "location",
+            "type": "choice",
+            "label": "Location",
+            "state_key": "location",
+            "options": [
+              { "value": "mainboard", "label": "Mainboard" },
+              { "value": "toolboard", "label": "Toolboard" },
+              { "value": "rpi", "label": "Raspberry Pi" }
+            ],
+            "default": "mainboard",
+            "condition": "type != 'temperature_mcu'"
+          },
+          {
+            "id": "sensor_pin",
+            "type": "text",
+            "label": "Sensor Pin",
+            "state_key": "sensor_pin",
+            "help": "Pin for thermistor or 1-wire sensor",
+            "condition": "type in ['Generic 3950', 'NTC 100K beta 3950', 'PT1000', 'DS18B20']"
+          },
+          {
+            "id": "i2c_address",
+            "type": "text",
+            "label": "I2C Address",
+            "state_key": "i2c_address",
+            "default": "0x76",
+            "help": "I2C address (BME280: 0x76 or 0x77, AHT10: 0x38)",
+            "condition": "type in ['BME280', 'AHT10']"
+          },
+          {
+            "id": "i2c_bus",
+            "type": "text",
+            "label": "I2C Bus",
+            "state_key": "i2c_bus",
+            "help": "e.g., i2c1_PB6_PB7 or i2c_rpi",
+            "condition": "type in ['BME280', 'AHT10']"
+          }
+        ]
+      }
     },
 
     "filament_sensors": {
@@ -1993,7 +2359,6 @@
         {
           "id": "runout",
           "title": "Runout Sensor",
-          "klipper_section": "[filament_switch_sensor runout]",
           "fields": [
             {
               "id": "enabled",
@@ -2003,18 +2368,243 @@
               "default": false
             },
             {
+              "id": "sensor_type",
+              "type": "choice",
+              "label": "Sensor Type",
+              "state_key": "filament_sensors.runout.sensor_type",
+              "options": [
+                { "value": "switch", "label": "Switch (runout only)" },
+                { "value": "motion", "label": "Motion (runout + jam detection)" }
+              ],
+              "default": "switch",
+              "condition": "filament_sensors.runout.enabled",
+              "help": "Switch sensors detect runout only. Motion sensors also detect jams/clogs."
+            },
+            {
+              "id": "sensor_model",
+              "type": "choice",
+              "label": "Sensor Model",
+              "state_key": "filament_sensors.runout.sensor_model",
+              "options": [
+                { "value": "btt_sfs_v1", "label": "BTT Smart Filament Sensor v1.0" },
+                { "value": "btt_sfs_v2", "label": "BTT Smart Filament Sensor v2.0" },
+                { "value": "biqu_motion", "label": "BIQU Filament Motion Sensor" },
+                { "value": "generic_switch", "label": "Generic Microswitch Sensor" },
+                { "value": "generic_optical", "label": "Generic Optical Sensor" },
+                { "value": "custom", "label": "Custom / Other" }
+              ],
+              "default": "generic_switch",
+              "condition": "filament_sensors.runout.enabled"
+            },
+            {
               "id": "location",
               "type": "choice",
               "label": "Location",
               "state_key": "filament_sensors.runout.location",
               "options": [
                 { "value": "mainboard", "label": "Mainboard" },
-                { "value": "toolboard", "label": "Toolboard", "condition": "mcu.toolboard.enabled" }
+                { "value": "toolboard", "label": "Toolboard" }
               ],
               "default": "mainboard",
               "condition": "filament_sensors.runout.enabled"
+            },
+            {
+              "id": "pin",
+              "type": "port_select",
+              "label": "Sensor Pin",
+              "state_key": "filament_sensors.runout.pin",
+              "port_type": "endstop_ports",
+              "condition": "filament_sensors.runout.enabled"
+            },
+            {
+              "id": "pin_pullup",
+              "type": "bool",
+              "label": "Enable Pullup Resistor",
+              "state_key": "filament_sensors.runout.pin_pullup",
+              "default": true,
+              "condition": "filament_sensors.runout.enabled",
+              "help": "Enable internal pullup resistor (^PIN)"
+            },
+            {
+              "id": "pin_invert",
+              "type": "bool",
+              "label": "Invert Pin Logic",
+              "state_key": "filament_sensors.runout.pin_invert",
+              "default": false,
+              "condition": "filament_sensors.runout.enabled",
+              "help": "Invert pin signal (!PIN)"
+            },
+            {
+              "id": "detection_length",
+              "type": "float",
+              "label": "Detection Length (mm)",
+              "state_key": "filament_sensors.runout.detection_length",
+              "default": 7.0,
+              "condition": "filament_sensors.runout.enabled and filament_sensors.runout.sensor_type == 'motion'",
+              "help": "Filament movement threshold before triggering jam detection"
+            },
+            {
+              "id": "pause_on_runout",
+              "type": "bool",
+              "label": "Pause on Runout",
+              "state_key": "filament_sensors.runout.pause_on_runout",
+              "default": true,
+              "condition": "filament_sensors.runout.enabled"
             }
           ]
+        }
+      ]
+    },
+
+    "input_shaper": {
+      "id": "input_shaper",
+      "title": "Input Shaper",
+      "state_prefix": "input_shaper",
+      "klipper_section": "[input_shaper]",
+      "subsections": [
+        {
+          "id": "config",
+          "title": "Input Shaper Configuration",
+          "fields": [
+            {
+              "id": "enabled",
+              "type": "bool",
+              "label": "Enable Input Shaper",
+              "state_key": "input_shaper.enabled",
+              "default": false,
+              "help": "Reduces ringing/ghosting artifacts on prints"
+            },
+            {
+              "id": "shaper_type_x",
+              "type": "choice",
+              "label": "Shaper Type X",
+              "state_key": "input_shaper.shaper_type_x",
+              "options": [
+                { "value": "mzv", "label": "MZV (recommended)" },
+                { "value": "ei", "label": "EI" },
+                { "value": "2hump_ei", "label": "2-hump EI" },
+                { "value": "3hump_ei", "label": "3-hump EI" },
+                { "value": "zv", "label": "ZV" },
+                { "value": "zvd", "label": "ZVD" }
+              ],
+              "default": "mzv",
+              "condition": "input_shaper.enabled"
+            },
+            {
+              "id": "shaper_freq_x",
+              "type": "float",
+              "label": "Shaper Frequency X (Hz)",
+              "state_key": "input_shaper.shaper_freq_x",
+              "default": 0,
+              "condition": "input_shaper.enabled",
+              "help": "Run resonance test to determine"
+            },
+            {
+              "id": "damping_ratio_x",
+              "type": "float",
+              "label": "Damping Ratio X",
+              "state_key": "input_shaper.damping_ratio_x",
+              "default": 0.1,
+              "condition": "input_shaper.enabled"
+            },
+            {
+              "id": "shaper_type_y",
+              "type": "choice",
+              "label": "Shaper Type Y",
+              "state_key": "input_shaper.shaper_type_y",
+              "options": [
+                { "value": "mzv", "label": "MZV (recommended)" },
+                { "value": "ei", "label": "EI" },
+                { "value": "2hump_ei", "label": "2-hump EI" },
+                { "value": "3hump_ei", "label": "3-hump EI" },
+                { "value": "zv", "label": "ZV" },
+                { "value": "zvd", "label": "ZVD" }
+              ],
+              "default": "mzv",
+              "condition": "input_shaper.enabled"
+            },
+            {
+              "id": "shaper_freq_y",
+              "type": "float",
+              "label": "Shaper Frequency Y (Hz)",
+              "state_key": "input_shaper.shaper_freq_y",
+              "default": 0,
+              "condition": "input_shaper.enabled",
+              "help": "Run resonance test to determine"
+            },
+            {
+              "id": "damping_ratio_y",
+              "type": "float",
+              "label": "Damping Ratio Y",
+              "state_key": "input_shaper.damping_ratio_y",
+              "default": 0.1,
+              "condition": "input_shaper.enabled"
+            }
+          ]
+        },
+        {
+          "id": "accelerometer",
+          "title": "Accelerometer",
+          "fields": [
+            {
+              "id": "accel_chip",
+              "type": "choice",
+              "label": "Accelerometer Type",
+              "state_key": "input_shaper.accel_chip",
+              "options": [
+                { "value": "none", "label": "None / Not configured" },
+                { "value": "adxl345", "label": "ADXL345" },
+                { "value": "lis2dw", "label": "LIS2DW" },
+                { "value": "mpu9250", "label": "MPU9250 / MPU6050" }
+              ],
+              "default": "none"
+            },
+            {
+              "id": "accel_location",
+              "type": "choice",
+              "label": "Accelerometer Location",
+              "state_key": "input_shaper.accel_location",
+              "options": [
+                { "value": "mainboard", "label": "Mainboard SPI" },
+                { "value": "toolboard", "label": "Toolboard SPI" },
+                { "value": "rpi", "label": "Raspberry Pi SPI" }
+              ],
+              "default": "toolboard",
+              "condition": "input_shaper.accel_chip != 'none'"
+            },
+            {
+              "id": "cs_pin",
+              "type": "text",
+              "label": "CS Pin",
+              "state_key": "input_shaper.cs_pin",
+              "help": "Chip select pin for SPI accelerometer",
+              "condition": "input_shaper.accel_chip != 'none' and input_shaper.accel_location != 'rpi'"
+            },
+            {
+              "id": "spi_bus",
+              "type": "text",
+              "label": "SPI Bus",
+              "state_key": "input_shaper.spi_bus",
+              "help": "e.g., spi1, spidev0.0",
+              "condition": "input_shaper.accel_chip != 'none'"
+            }
+          ]
+        }
+      ]
+    },
+
+    "tuning": {
+      "id": "tuning",
+      "title": "Tuning & Features",
+      "state_prefix": "tuning",
+      "fields": [
+        {
+          "id": "kalico_enabled",
+          "type": "bool",
+          "label": "Using Kalico (Klipper fork)",
+          "state_key": "tuning.kalico_enabled",
+          "default": false,
+          "help": "Enables Kalico-specific features like MPC temperature control"
         }
       ]
     }

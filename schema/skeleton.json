@@ -432,12 +432,6 @@
           "section": "additional_fans"
         },
         {
-          "id": "multi_pins",
-          "label": "Multi-Pin Groups",
-          "description": "Combine multiple output pins",
-          "section": "multi_pins"
-        },
-        {
           "id": "leds",
           "label": "LEDs",
           "section": "leds",

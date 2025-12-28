@@ -82,11 +82,7 @@ class FieldRenderer:
         condition = field.get('condition')
         if condition:
             state_dict = self.state.get_all()
-            import sys
-            field_id = field.get('id', 'unknown')
-            result = self.skeleton.evaluate_condition(condition, state_dict)
-            print(f"DEBUG render_field: {field_id}, condition='{condition}', state={state_dict.get('extruder', {})}, result={result}", file=sys.stderr)
-            if not result:
+            if not self.skeleton.evaluate_condition(condition, state_dict):
                 # Condition not met - skip this field silently
                 return 'skipped'
 

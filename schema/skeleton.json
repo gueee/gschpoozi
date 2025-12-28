@@ -1372,12 +1372,13 @@
           "label": "Thermistor Pull-up Resistor",
           "state_key": "extruder.pullup_resistor",
           "options": [
+            { "value": "none", "label": "None (use board default)" },
             { "value": 4700, "label": "4700 ohm (standard)" },
             { "value": 2200, "label": "2200 ohm" },
             { "value": "custom", "label": "Custom value" }
           ],
-          "default": 4700,
-          "help": "Internal pull-up resistor value for thermistor ADC input",
+          "default": "none",
+          "help": "Override pull-up resistor value for thermistor ADC input (most boards use 4700)",
           "condition": "extruder.sensor_type not in ['MAX31865', 'PT1000']"
         },
         {
@@ -1510,12 +1511,13 @@
           "label": "Thermistor Pull-up Resistor",
           "state_key": "heater_bed.pullup_resistor",
           "options": [
+            { "value": "none", "label": "None (use board default)" },
             { "value": 4700, "label": "4700 ohm (standard)" },
             { "value": 2200, "label": "2200 ohm" },
             { "value": "custom", "label": "Custom value" }
           ],
-          "default": 4700,
-          "help": "Internal pull-up resistor value for thermistor ADC input"
+          "default": "none",
+          "help": "Override pull-up resistor value for thermistor ADC input (most boards use 4700)"
         },
         {
           "id": "pullup_resistor_custom",

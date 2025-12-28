@@ -955,9 +955,12 @@
     "stepper_x1": {
       "id": "stepper_x1",
       "title": "Stepper X1 Configuration (AWD)",
+      "description": "X1 shares belt with X - only motor port and direction differ",
       "state_prefix": "stepper_x1",
       "klipper_section": "[stepper_x1]",
       "condition": "printer.awd_enabled",
+      "inherit_from": "stepper_x",
+      "inherited_fields": ["driver_type", "microsteps", "rotation_distance", "enable_invert"],
       "fields": [
         {
           "id": "motor_port",
@@ -968,50 +971,12 @@
           "required": true
         },
         {
-          "id": "driver_type",
-          "type": "exclusive_choice",
-          "group": "driver_types",
-          "label": "Driver Type",
-          "state_key": "stepper_x1.driver_type",
-          "required": true
-        },
-        {
-          "id": "enable_invert",
-          "type": "bool",
-          "label": "Invert Enable Pin",
-          "state_key": "stepper_x1.enable_invert",
-          "default": false,
-          "help": "Invert the motor enable signal (depends on driver board)"
-        },
-        {
           "id": "dir_invert",
           "type": "bool",
           "label": "Invert Direction",
           "state_key": "stepper_x1.dir_invert",
           "default": false,
-          "help": "Invert motor direction if it runs backwards"
-        },
-        {
-          "id": "rotation_distance",
-          "type": "float",
-          "label": "Rotation Distance (mm)",
-          "state_key": "stepper_x1.rotation_distance",
-          "default": 40,
-          "help": "For GT2-20T pulley: 40mm"
-        },
-        {
-          "id": "microsteps",
-          "type": "choice",
-          "label": "Microsteps",
-          "state_key": "stepper_x1.microsteps",
-          "options": [
-            { "value": 16, "label": "16" },
-            { "value": 32, "label": "32" },
-            { "value": 64, "label": "64" },
-            { "value": 128, "label": "128" },
-            { "value": 256, "label": "256" }
-          ],
-          "default": 32
+          "help": "Invert motor direction (usually needed for AWD)"
         }
       ]
     },
@@ -1021,6 +986,12 @@
       "title": "Stepper Y Configuration",
       "state_prefix": "stepper_y",
       "klipper_section": "[stepper_y]",
+      "copy_from_option": {
+        "source": "stepper_x",
+        "label": "Use same motor settings as Stepper X?",
+        "help": "CoreXY typically uses identical motors. Copy driver, microsteps, rotation distance from X.",
+        "fields": ["driver_type", "microsteps", "rotation_distance", "enable_invert", "homing_speed"]
+      },
       "fields": [
         {
           "id": "motor_port",
@@ -1036,7 +1007,8 @@
           "group": "driver_types",
           "label": "Driver Type",
           "state_key": "stepper_y.driver_type",
-          "required": true
+          "required": true,
+          "skip_if_copied": true
         },
         {
           "id": "endstop_type",
@@ -1089,7 +1061,8 @@
           "label": "Invert Enable Pin",
           "state_key": "stepper_y.enable_invert",
           "default": false,
-          "help": "Invert the motor enable signal (depends on driver board)"
+          "help": "Invert the motor enable signal (depends on driver board)",
+          "skip_if_copied": true
         },
         {
           "id": "dir_invert",
@@ -1118,7 +1091,8 @@
           "type": "int",
           "label": "Homing Speed (mm/s)",
           "state_key": "stepper_y.homing_speed",
-          "default": 50
+          "default": 50,
+          "skip_if_copied": true
         },
         {
           "id": "rotation_distance",
@@ -1126,7 +1100,8 @@
           "label": "Rotation Distance (mm)",
           "state_key": "stepper_y.rotation_distance",
           "default": 40,
-          "help": "For GT2-20T pulley: 40mm"
+          "help": "For GT2-20T pulley: 40mm",
+          "skip_if_copied": true
         },
         {
           "id": "microsteps",
@@ -1140,7 +1115,8 @@
             { "value": 128, "label": "128" },
             { "value": 256, "label": "256" }
           ],
-          "default": 32
+          "default": 32,
+          "skip_if_copied": true
         }
       ]
     },
@@ -1148,9 +1124,12 @@
     "stepper_y1": {
       "id": "stepper_y1",
       "title": "Stepper Y1 Configuration (AWD)",
+      "description": "Y1 shares belt with Y - only motor port and direction differ",
       "state_prefix": "stepper_y1",
       "klipper_section": "[stepper_y1]",
       "condition": "printer.awd_enabled",
+      "inherit_from": "stepper_y",
+      "inherited_fields": ["driver_type", "microsteps", "rotation_distance", "enable_invert"],
       "fields": [
         {
           "id": "motor_port",
@@ -1161,50 +1140,12 @@
           "required": true
         },
         {
-          "id": "driver_type",
-          "type": "exclusive_choice",
-          "group": "driver_types",
-          "label": "Driver Type",
-          "state_key": "stepper_y1.driver_type",
-          "required": true
-        },
-        {
-          "id": "enable_invert",
-          "type": "bool",
-          "label": "Invert Enable Pin",
-          "state_key": "stepper_y1.enable_invert",
-          "default": false,
-          "help": "Invert the motor enable signal (depends on driver board)"
-        },
-        {
           "id": "dir_invert",
           "type": "bool",
           "label": "Invert Direction",
           "state_key": "stepper_y1.dir_invert",
           "default": false,
-          "help": "Invert motor direction if it runs backwards"
-        },
-        {
-          "id": "rotation_distance",
-          "type": "float",
-          "label": "Rotation Distance (mm)",
-          "state_key": "stepper_y1.rotation_distance",
-          "default": 40,
-          "help": "For GT2-20T pulley: 40mm"
-        },
-        {
-          "id": "microsteps",
-          "type": "choice",
-          "label": "Microsteps",
-          "state_key": "stepper_y1.microsteps",
-          "options": [
-            { "value": 16, "label": "16" },
-            { "value": 32, "label": "32" },
-            { "value": 64, "label": "64" },
-            { "value": 128, "label": "128" },
-            { "value": 256, "label": "256" }
-          ],
-          "default": 32
+          "help": "Invert motor direction (usually needed for AWD)"
         }
       ]
     },

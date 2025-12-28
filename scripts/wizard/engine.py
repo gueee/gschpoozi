@@ -180,14 +180,42 @@ class MenuEngine:
             )
             return False
 
+        # Handle automatic inheritance (e.g., stepper_x1 inherits from stepper_x)
+        copied_fields = set()
+        inherit_from = section.get('inherit_from')
+        if inherit_from:
+            inherited_fields = section.get('inherited_fields', [])
+            self._copy_section_fields(inherit_from, section_id, inherited_fields)
+            copied_fields.update(inherited_fields)
+
+        # Handle optional copy (e.g., stepper_y can optionally copy from stepper_x)
+        copy_option = section.get('copy_from_option')
+        if copy_option:
+            source = copy_option.get('source')
+            label = copy_option.get('label', f'Copy settings from {source}?')
+            help_text = copy_option.get('help', '')
+            copy_fields = copy_option.get('fields', [])
+
+            prompt = label
+            if help_text:
+                prompt = f"{label}\n\n{help_text}"
+
+            if self.ui.yesno(prompt, title=section.get('title', section_id)):
+                self._copy_section_fields(source, section_id, copy_fields)
+                copied_fields.update(copy_fields)
+
         # Get fields for main section
         fields = self.skeleton.get_section_fields(section_id, state_dict)
 
         # Show section title
         title = section.get('title', section_id)
 
-        # Run through each field
+        # Run through each field (skip if copied)
         for field in fields:
+            # Skip fields that were copied
+            if field.get('skip_if_copied') and field.get('id') in copied_fields:
+                continue
+
             result = self.field_renderer.render_field(field)
             if result is None:
                 # User cancelled
@@ -351,6 +379,21 @@ class MenuEngine:
             selected_field = next((f for f in fields if f.get('id') == choice), None)
             if selected_field:
                 self.field_renderer.render_field(selected_field)
+
+    def _copy_section_fields(self, source_section: str, target_section: str, field_ids: List[str]) -> None:
+        """Copy field values from one section to another.
+
+        Args:
+            source_section: Source section ID (e.g., 'stepper_x')
+            target_section: Target section ID (e.g., 'stepper_y')
+            field_ids: List of field IDs to copy (e.g., ['driver_type', 'microsteps'])
+        """
+        for field_id in field_ids:
+            source_key = f"{source_section}.{field_id}"
+            target_key = f"{target_section}.{field_id}"
+            value = self._get_state_value(source_key)
+            if value is not None:
+                self.state.set(target_key, value)
 
     def _apply_implications(self) -> None:
         """Apply auto-set values based on current state."""

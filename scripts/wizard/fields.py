@@ -459,6 +459,14 @@ class FieldRenderer:
         port_type = field.get('port_type', 'motor_ports')
         current = self._get_state_value(state_key)
 
+        # Build a descriptive title from state_key (e.g., "stepper_x.motor_port" -> "Stepper X: Motor Port")
+        title = label
+        if '.' in state_key:
+            prefix = state_key.rsplit('.', 1)[0]
+            # Format prefix: stepper_x -> Stepper X, stepper_y1 -> Stepper Y1
+            section_name = prefix.replace('_', ' ').title()
+            title = f"{section_name}: {label}"
+
         # Get board data
         state_dict = self.state.get_all()
         location = self._determine_port_location(field, state_dict)
@@ -471,14 +479,14 @@ class FieldRenderer:
             board_data = self._load_board_data(board_type, 'boards')
 
         if not board_data:
-            self.ui.msgbox(f"Board not selected. Please configure MCU first.", title=label)
+            self.ui.msgbox(f"Board not selected. Please configure MCU first.", title=title)
             return None
 
         # Get ports of the requested type
         ports = board_data.get(port_type, {})
 
         if not ports:
-            self.ui.msgbox(f"No {port_type} available on selected board.", title=label)
+            self.ui.msgbox(f"No {port_type} available on selected board.", title=title)
             return None
 
         # Build selection items with conflict detection
@@ -498,7 +506,7 @@ class FieldRenderer:
             is_selected = (port_id == current)
             items.append((port_id, display, is_selected))
 
-        result = self.ui.radiolist(label, items, title=label)
+        result = self.ui.radiolist(label, items, title=title)
 
         if result is not None:
             self._set_state_value(state_key, result)

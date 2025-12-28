@@ -1379,7 +1379,7 @@
           ],
           "default": "none",
           "help": "Override pull-up resistor value for thermistor ADC input (most boards use 4700)",
-          "condition": "extruder.sensor_type not in ['MAX31865', 'PT1000']"
+          "condition": "extruder.sensor_type != 'MAX31865'"
         },
         {
           "id": "pullup_resistor_custom",

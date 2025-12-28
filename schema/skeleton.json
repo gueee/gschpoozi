@@ -758,15 +758,11 @@
             },
             {
               "id": "probe_count",
-              "type": "choice",
-              "label": "Probe Count",
+              "type": "text",
+              "label": "Probe Count (X,Y)",
               "state_key": "probe.bed_mesh.probe_count",
-              "options": [
-                { "value": "5,5", "label": "5x5 (25 points)" },
-                { "value": "7,7", "label": "7x7 (49 points)" },
-                { "value": "9,9", "label": "9x9 (81 points)" }
-              ],
-              "default": "5,5"
+              "default": "5,5",
+              "help": "Format: X,Y (e.g., 5,5 or 31,31). Eddy probes can use high counts like 25,25 or 31,31 for rapid scanning."
             }
           ]
         }

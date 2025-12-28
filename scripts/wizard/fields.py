@@ -139,15 +139,12 @@ class FieldRenderer:
 
     def _render_int(self, field: Dict[str, Any]) -> Optional[int]:
         """Render an integer input field with validation."""
-        import sys
         label = field.get('label', 'Enter number')
         state_key = field.get('state_key', '')
         default = field.get('default', 0)
         current = self._get_state_value(state_key)
         range_def = field.get('range', [])
         title = self._get_contextual_title(field)
-
-        print(f"DEBUG _render_int: field_id={field.get('id')}, current={current!r}, default={default!r}", file=sys.stderr)
 
         if current is not None:
             default = current
@@ -161,11 +158,8 @@ class FieldRenderer:
         if help_text:
             prompt = f"{label}\n\n{help_text}"
 
-        print(f"DEBUG _render_int: title={title!r}, prompt={prompt!r}, default_str={str(default)!r}", file=sys.stderr)
-
         while True:
             result = self.ui.inputbox(prompt, default=str(default), title=title)
-            print(f"DEBUG _render_int: inputbox returned {result!r}", file=sys.stderr)
 
             if result is None:
                 return None

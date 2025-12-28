@@ -1825,7 +1825,15 @@
             "type": "text",
             "label": "Multi-Pin Group Name",
             "state_key": "multi_pin_name",
-            "help": "Reference to a multi_pin group defined in advanced settings",
+            "help": "Name for this multi-pin group (e.g., rscs_fans)",
+            "condition": "pin_type == 'multi_pin'"
+          },
+          {
+            "id": "pins",
+            "type": "text",
+            "label": "Pins (comma-separated)",
+            "state_key": "pins",
+            "help": "e.g., PB5,PB6 or toolboard:PA0,toolboard:PA1",
             "condition": "pin_type == 'multi_pin'"
           },
           {

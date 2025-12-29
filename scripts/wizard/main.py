@@ -70,6 +70,9 @@ class GschpooziWizard:
                 'setup_host_mcu': self._setup_host_mcu,
                 'check_module': self._check_module,
                 'install_module': self._install_module,
+                'install_eddy_module': self._install_eddy_module,
+                'install_mmu_module': self._install_mmu_module,
+                'install_ks_mmu_addon': self._install_ks_mmu_addon,
             }
         )
 
@@ -822,6 +825,247 @@ class GschpooziWizard:
                 f"./install.sh",
                 title="Manual Installation Required"
             )
+
+    def _install_eddy_module(self) -> None:
+        """Install eddy current probe module (Beacon, Cartographer, BTT Eddy)."""
+        probe_type = self.state.get('mcu.eddy_probe.probe_type')
+        
+        if not probe_type or probe_type == 'none':
+            self.ui.msgbox("Please select a probe type first.", title="Info")
+            return
+        
+        module_info = {
+            'beacon': {
+                'name': 'Beacon',
+                'repo': 'https://github.com/beacon3d/beacon_klipper.git',
+                'install_dir': Path.home() / 'beacon_klipper',
+                'install_script': 'install.sh'
+            },
+            'cartographer': {
+                'name': 'Cartographer',
+                'repo': 'https://github.com/Cartographer3D/cartographer-klipper.git',
+                'install_dir': Path.home() / 'cartographer-klipper',
+                'install_script': 'install.sh'
+            },
+            'btt_eddy': {
+                'name': 'BTT Eddy',
+                'repo': None,  # Built into Klipper
+                'install_dir': None,
+                'install_script': None
+            }
+        }
+        
+        info = module_info.get(probe_type)
+        if not info:
+            self.ui.msgbox(f"Unknown probe type: {probe_type}", title="Error")
+            return
+        
+        if info['repo'] is None:
+            self.ui.msgbox(
+                f"{info['name']} support is built into Klipper.\n\n"
+                "No additional module installation required.",
+                title="Info"
+            )
+            return
+        
+        install_dir = info['install_dir']
+        
+        # Check if already installed
+        if install_dir and install_dir.exists():
+            if self.ui.yesno(
+                f"{info['name']} appears to be already installed.\n\n"
+                "Reinstall anyway?",
+                title="Already Installed"
+            ):
+                import shutil
+                try:
+                    shutil.rmtree(install_dir)
+                except Exception as e:
+                    self.ui.msgbox(f"Error removing existing installation: {e}", title="Error")
+                    return
+            else:
+                return
+        
+        # Confirm installation
+        if not self.ui.yesno(
+            f"Install {info['name']} module?\n\n"
+            f"This will clone from:\n{info['repo']}\n\n"
+            "Continue?",
+            title="Install Module"
+        ):
+            return
+        
+        # Clone repository
+        self.ui.infobox(f"Cloning {info['name']}...", title="Please Wait")
+        try:
+            result = subprocess.run(
+                ["git", "clone", info['repo'], str(install_dir)],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            if result.returncode != 0:
+                self.ui.msgbox(f"Clone failed:\n\n{result.stderr[:500]}", title="Error")
+                return
+        except Exception as e:
+            self.ui.msgbox(f"Error cloning repository: {e}", title="Error")
+            return
+        
+        # Run installation script
+        install_script = install_dir / info['install_script']
+        if install_script.exists():
+            self.ui.infobox(f"Running {info['name']} installation...", title="Please Wait")
+            try:
+                result = subprocess.run(
+                    ["bash", str(install_script)],
+                    cwd=install_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                if result.returncode == 0:
+                    self.ui.msgbox(f"{info['name']} installed successfully!", title="Success")
+                else:
+                    self.ui.msgbox(f"Installation failed:\n\n{result.stderr[:500]}", title="Error")
+            except Exception as e:
+                self.ui.msgbox(f"Error running installation: {e}", title="Error")
+        else:
+            self.ui.msgbox(
+                f"{info['name']} cloned.\n\n"
+                f"Run installation manually:\ncd {install_dir}\n./install.sh",
+                title="Manual Installation Required"
+            )
+
+    def _install_mmu_module(self) -> None:
+        """Install MMU software module (Happy Hare or AFC)."""
+        module_type = self.state.get('mcu.mmu.module_type')
+        
+        if not module_type:
+            self.ui.msgbox("Please select a software module first.", title="Info")
+            return
+        
+        module_info = {
+            'happy_hare': {
+                'name': 'Happy Hare',
+                'repo': 'https://github.com/moggieuk/Happy-Hare.git',
+                'install_dir': Path.home() / 'Happy-Hare',
+                'install_script': 'install.sh'
+            },
+            'afc': {
+                'name': 'AFC-Klipper-Add-On',
+                'repo': 'https://github.com/ArmoredTurtle/AFC-Klipper-Add-On.git',
+                'install_dir': Path.home() / 'AFC-Klipper-Add-On',
+                'install_script': 'install-afc.sh'
+            }
+        }
+        
+        info = module_info.get(module_type)
+        if not info:
+            self.ui.msgbox(f"Unknown module type: {module_type}", title="Error")
+            return
+        
+        install_dir = info['install_dir']
+        
+        # Check if already installed
+        if install_dir.exists():
+            if self.ui.yesno(
+                f"{info['name']} appears to be already installed.\n\n"
+                "Reinstall anyway?",
+                title="Already Installed"
+            ):
+                import shutil
+                try:
+                    shutil.rmtree(install_dir)
+                except Exception as e:
+                    self.ui.msgbox(f"Error removing existing installation: {e}", title="Error")
+                    return
+            else:
+                return
+        
+        # Confirm installation
+        if not self.ui.yesno(
+            f"Install {info['name']}?\n\n"
+            f"This will clone from:\n{info['repo']}\n\n"
+            "Continue?",
+            title="Install Module"
+        ):
+            return
+        
+        # Clone repository
+        self.ui.infobox(f"Cloning {info['name']}...", title="Please Wait")
+        try:
+            result = subprocess.run(
+                ["git", "clone", info['repo'], str(install_dir)],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            if result.returncode != 0:
+                self.ui.msgbox(f"Clone failed:\n\n{result.stderr[:500]}", title="Error")
+                return
+        except Exception as e:
+            self.ui.msgbox(f"Error cloning repository: {e}", title="Error")
+            return
+        
+        # Run installation script
+        install_script = install_dir / info['install_script']
+        if install_script.exists():
+            self.ui.infobox(f"Running {info['name']} installation...", title="Please Wait")
+            try:
+                result = subprocess.run(
+                    ["bash", str(install_script)],
+                    cwd=install_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                if result.returncode == 0:
+                    self.ui.msgbox(f"{info['name']} installed successfully!", title="Success")
+                else:
+                    self.ui.msgbox(f"Installation failed:\n\n{result.stderr[:500]}", title="Error")
+            except Exception as e:
+                self.ui.msgbox(f"Error running installation: {e}", title="Error")
+        else:
+            self.ui.msgbox(
+                f"{info['name']} cloned.\n\n"
+                f"Run installation manually:\ncd {install_dir}\n./{info['install_script']}",
+                title="Manual Installation Required"
+            )
+
+    def _install_ks_mmu_addon(self) -> None:
+        """Install KlipperScreen MMU add-on."""
+        module_type = self.state.get('mcu.mmu.module_type')
+        
+        addon_info = {
+            'happy_hare': {
+                'name': 'Happy Hare KlipperScreen',
+                'repo': 'https://github.com/moggieuk/Happy-Hare.git',
+                'note': 'KlipperScreen support is included with Happy Hare.\n\n'
+                        'After Happy Hare installation, the KlipperScreen\n'
+                        'panels should be available automatically.'
+            },
+            'afc': {
+                'name': 'AFC KlipperScreen',
+                'repo': 'https://github.com/ArmoredTurtle/AFC-Klipper-Add-On.git',
+                'note': 'AFC KlipperScreen add-on is included with AFC.\n\n'
+                        'After AFC installation, run the KlipperScreen\n'
+                        'setup from the AFC menu if not auto-installed.'
+            }
+        }
+        
+        info = addon_info.get(module_type)
+        if not info:
+            self.ui.msgbox(
+                "KlipperScreen add-on installation depends on the MMU module.\n\n"
+                "Please select and install an MMU module first.",
+                title="Info"
+            )
+            return
+        
+        self.ui.msgbox(
+            f"{info['name']} Add-on\n\n{info['note']}",
+            title="KlipperScreen Add-on"
+        )
 
 
 def main():

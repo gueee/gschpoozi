@@ -340,15 +340,16 @@
       ]
     },
 
-    "mcu_setup": {
-      "id": "mcu_setup",
-      "title": "2.1 MCU Setup",
+    "hardware_setup": {
+      "id": "hardware_setup",
+      "title": "Hardware Setup",
       "items": [
         {
           "id": "mcu",
-          "label": "2.1.1 Mainboard",
+          "label": "2.1 MCU Setup",
           "section": "mcu",
-          "status_key": "mcu.main.board_type"
+          "status_key": "mcu.main.board_type",
+          "description": "Mainboard, Host MCU, Additional MCUs"
         },
         {
           "id": "host_mcu",
@@ -357,23 +358,24 @@
           "status_key": "mcu.host.enabled"
         },
         {
-          "id": "additional_mcus",
-          "label": "2.1.3 Additional MCUs",
-          "description": "MMUs, filament buffers, etc.",
-          "section": "additional_mcus"
-        }
-      ]
-    },
-
-    "hardware_setup": {
-      "id": "hardware_setup",
-      "title": "Hardware Setup",
-      "items": [
+          "id": "eddy_probe",
+          "label": "2.1.3 Eddy Current Probe",
+          "description": "Beacon, Cartographer, BTT Eddy",
+          "section": "eddy_probe",
+          "status_key": "mcu.eddy_probe.probe_type"
+        },
         {
-          "id": "mcu_setup",
-          "label": "2.1 MCU Setup",
-          "section": "mcu_setup",
-          "description": "Mainboard, Host MCU, Additional MCUs"
+          "id": "mmu_buffers",
+          "label": "2.1.4 MMUs/Smart Buffers",
+          "description": "Box Turtle, TradRack, ERCF, etc.",
+          "section": "mmu_buffers",
+          "status_key": "mcu.mmu.type"
+        },
+        {
+          "id": "additional_mcus",
+          "label": "2.1.5 Additional MCUs",
+          "description": "Other generic MCUs",
+          "section": "additional_mcus"
         },
         {
           "id": "printer",
@@ -695,11 +697,138 @@
       ]
     },
 
+    "eddy_probe": {
+      "id": "eddy_probe",
+      "title": "2.1.3 Eddy Current Probe",
+      "state_prefix": "mcu.eddy_probe",
+      "description": "Configure Beacon, Cartographer, or BTT Eddy probes",
+      "fields": [
+        {
+          "id": "probe_type",
+          "type": "choice",
+          "label": "Probe Type",
+          "state_key": "mcu.eddy_probe.probe_type",
+          "options": [
+            { "value": "none", "label": "No Eddy Probe" },
+            { "value": "beacon", "label": "Beacon" },
+            { "value": "cartographer", "label": "Cartographer 3D" },
+            { "value": "btt_eddy", "label": "BTT Eddy" }
+          ],
+          "default": "none",
+          "required": true
+        },
+        {
+          "id": "device_id",
+          "type": "mcu_select",
+          "label": "Select Probe Device",
+          "state_key": "mcu.eddy_probe.device_id",
+          "help": "Query and select probe from USB/CAN devices",
+          "required": true,
+          "condition": "mcu.eddy_probe.probe_type != 'none'"
+        },
+        {
+          "id": "install_module",
+          "type": "action",
+          "label": "Install Probe Module",
+          "action": "install_eddy_module",
+          "help": "Install required Klipper module for this probe",
+          "condition": "mcu.eddy_probe.probe_type != 'none'"
+        }
+      ]
+    },
+
+    "mmu_buffers": {
+      "id": "mmu_buffers",
+      "title": "2.1.4 MMUs/Smart Buffers",
+      "state_prefix": "mcu.mmu",
+      "description": "Configure MMU systems and smart filament buffers",
+      "fields": [
+        {
+          "id": "enabled",
+          "type": "bool",
+          "label": "Enable MMU/Buffer",
+          "state_key": "mcu.mmu.enabled",
+          "default": false
+        },
+        {
+          "id": "type",
+          "type": "choice",
+          "label": "MMU/Buffer Type",
+          "state_key": "mcu.mmu.type",
+          "options": [
+            { "value": "box_turtle", "label": "Box Turtle (AFC)" },
+            { "value": "night_owl", "label": "Night Owl (AFC)" },
+            { "value": "tradrack", "label": "TradRack (Happy Hare)" },
+            { "value": "ercf", "label": "ERCF (Happy Hare)" },
+            { "value": "3ms", "label": "3MS" },
+            { "value": "prusa_mmu", "label": "Prusa MMU" },
+            { "value": "other", "label": "Other" }
+          ],
+          "default": "box_turtle",
+          "condition": "mcu.mmu.enabled"
+        },
+        {
+          "id": "device_id",
+          "type": "mcu_select",
+          "label": "Select MMU Device",
+          "state_key": "mcu.mmu.device_id",
+          "help": "Query and select MMU controller from USB/CAN devices",
+          "condition": "mcu.mmu.enabled"
+        },
+        {
+          "id": "gate_count",
+          "type": "int",
+          "label": "Number of Gates/Filaments",
+          "state_key": "mcu.mmu.gate_count",
+          "default": 4,
+          "range": [2, 16],
+          "condition": "mcu.mmu.enabled"
+        },
+        {
+          "id": "module_type",
+          "type": "choice",
+          "label": "Software Module",
+          "state_key": "mcu.mmu.module_type",
+          "options": [
+            { "value": "happy_hare", "label": "Happy Hare", "condition": "mcu.mmu.type in ['tradrack', 'ercf', 'prusa_mmu', 'other']" },
+            { "value": "afc", "label": "AFC-Klipper-Add-On", "condition": "mcu.mmu.type in ['box_turtle', 'night_owl', 'other']" }
+          ],
+          "help": "Select the software module to control your MMU",
+          "condition": "mcu.mmu.enabled"
+        },
+        {
+          "id": "install_module",
+          "type": "action",
+          "label": "Install MMU Module",
+          "action": "install_mmu_module",
+          "help": "Install the selected MMU software module",
+          "condition": "mcu.mmu.enabled"
+        },
+        {
+          "id": "klipperscreen_addon",
+          "type": "bool",
+          "label": "Install KlipperScreen Add-on",
+          "state_key": "mcu.mmu.klipperscreen_addon",
+          "default": false,
+          "help": "Install KlipperScreen add-on for MMU control",
+          "condition": "mcu.mmu.enabled"
+        },
+        {
+          "id": "install_ks_addon",
+          "type": "action",
+          "label": "Install KlipperScreen Add-on",
+          "action": "install_ks_mmu_addon",
+          "help": "Install KlipperScreen MMU add-on",
+          "condition": "mcu.mmu.enabled and mcu.mmu.klipperscreen_addon"
+        }
+      ]
+    },
+
     "additional_mcus": {
       "id": "additional_mcus",
-      "title": "2.1.3 Additional MCUs",
+      "title": "2.1.5 Additional MCUs",
       "state_prefix": "mcu.additional",
-      "description": "MMUs, filament buffers, and other external MCUs",
+      "description": "Other external MCUs (generic)",
       "is_list": true,
       "item_template": {
         "fields": [

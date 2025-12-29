@@ -59,14 +59,22 @@
             - Run make menuconfig
             - Compile (make)
             - Flash (make flash)
-        - 2.1.3 Additional MCUs
+        - 2.1.3 Eddy Current Probe
+          - Select Probe Type (Beacon, Cartographer, BTT Eddy)
+          - Select Probe Device (USB/CAN)
+          - Install Probe Module
+        - 2.1.4 MMUs/Smart Buffers
+          - Enable/Disable
+          - Select Type (Box Turtle, TradRack, ERCF, etc.)
+          - Select MMU Device
+          - Configure Gate Count
+          - Select Software Module (Happy Hare, AFC)
+          - Install MMU Module
+          - Optional KlipperScreen Add-on
+        - 2.1.5 Additional MCUs
           - Query Available Devices (USB + CAN)
           - Select MCU from List
-          - Identify Type (MMU, Buffer, Generic)
-          - Check Module Installation
-          - Install Module if Missing
-          - Configure KlipperScreen Add-ons
-          - Add Pins with Prefix (mmu:, buffer:, etc.)
+          - Generic MCU Configuration
       - Printer Settings
       - Stepper X
         - Stepper Config

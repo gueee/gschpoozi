@@ -1,0 +1,154 @@
+# Wizard Flow
+
+- Start Wizard
+  - MAIN MENU
+    - 1. KLIPPER SETUP
+      - Manage Components
+        - Klipper
+          - Install
+          - Update
+          - Remove
+        - Moonraker
+          - Install
+          - Update
+          - Remove
+        - Mainsail
+          - Install
+          - Update
+          - Remove
+        - Fluidd
+          - Install
+          - Update
+          - Remove
+        - KlipperScreen
+          - Install
+          - Update
+          - Remove
+        - Crowsnest
+          - Install
+          - Update
+          - Remove
+      - CAN Setup
+        - Check CAN Status
+        - Install can-utils
+        - Configure CAN Interface
+          - Bitrate Selection
+        - Query CAN Devices
+      - Katapult/Firmware
+        - DFU Flashing
+        - CAN Flashing
+        - Install Katapult
+      - MMU Software
+        - Happy Hare
+        - AFC-Klipper-Add-On
+      - Verify Services
+        - Check Klipper
+        - Check Moonraker
+        - Check Crowsnest
+        - Check KlipperScreen
+    - 2. HARDWARE SETUP
+      - 2.1 MCU Setup
+        - 2.1.1 Mainboard
+          - Board Type Selection
+          - Connection Type (CAN/USB)
+          - Query & Select Device ID
+          - Build Pin Registry (no prefix)
+        - 2.1.2 Host MCU
+          - Enable/Disable
+          - If Enabled:
+            - Run make menuconfig
+            - Compile (make)
+            - Flash (make flash)
+        - 2.1.3 Additional MCUs
+          - Query Available Devices (USB + CAN)
+          - Select MCU from List
+          - Identify Type (MMU, Buffer, Generic)
+          - Check Module Installation
+          - Install Module if Missing
+          - Configure KlipperScreen Add-ons
+          - Add Pins with Prefix (mmu:, buffer:, etc.)
+      - Printer Settings
+      - Stepper X
+        - Stepper Config
+        - TMC Driver
+      - Stepper X1 AWD
+        - X1 Config
+        - TMC Driver X1
+      - Stepper Y
+        - Stepper Config
+        - TMC Driver
+      - Stepper Y1 AWD
+        - Y1 Config
+        - TMC Driver Y1
+      - Stepper Z
+        - Z Motor Count
+        - Stepper Config
+        - TMC Driver
+      - Extruder
+        - Motor Location
+        - Extruder Type
+        - Extruder Config
+      - Heater Bed
+        - Heater Config
+        - Thermistor
+        - Temp Settings
+        - Bed Surface
+      - Probe
+        - Probe Type
+          - BLTouch
+          - Standard
+          - Beacon
+          - Cartographer
+        - Connection
+      - Homing
+        - Homing Method
+        - Safe Z Home
+        - Sensorless
+      - Bed Leveling
+        - Leveling Type
+          - Z Tilt
+          - QGL
+        - Bed Mesh
+      - Fans
+        - Part Cooling
+        - Hotend Fan
+        - Controller Fan
+        - Exhaust Fan
+      - Additional Fans
+        - Fan Menu
+          - Fan Config
+      - LEDs
+        - Toolhead LEDs
+        - Case Light
+        - LED Effects
+      - Temp Sensors
+        - MCU Temp
+        - Chamber Temp
+        - Additional
+      - Filament Sensors
+        - Runout Sensor
+        - Motion Sensor
+    - 3. MACROS
+      - START_PRINT
+      - END_PRINT
+      - PAUSE/RESUME
+      - Slicer G-code
+    - 4. TUNING & FEATURES
+      - TMC Autotune
+      - Input Shaper
+        - Shaper Config
+        - ADXL345
+        - Resonance Tester
+      - Pressure Advance
+      - Idle Timeout
+      - Virtual SD
+      - Save Variables
+      - Console Messages
+      - Exclude Object
+      - Arc Support
+      - Pause Resume
+      - KAMP
+    - G. GENERATE CONFIG
+      - Validate Config
+        - Generate Files
+          - Done

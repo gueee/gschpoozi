@@ -530,12 +530,12 @@
   "sections": {
     "mcu": {
       "id": "mcu",
-      "title": "MCU Configuration",
+      "title": "MCU Setup",
       "state_prefix": "mcu",
       "subsections": [
         {
           "id": "main",
-          "title": "Main Board",
+          "title": "2.1.1 Mainboard",
           "required": true,
           "klipper_section": "[mcu]",
           "fields": [
@@ -545,7 +545,8 @@
               "label": "Board Type",
               "state_key": "mcu.main.board_type",
               "source": "templates/boards/",
-              "required": true
+              "required": true,
+              "help": "Select your main controller board"
             },
             {
               "id": "connection_type",
@@ -553,18 +554,31 @@
               "label": "Connection Type",
               "state_key": "mcu.main.connection_type",
               "options": [
-                { "value": "USB", "label": "USB Serial" }
+                { "value": "USB", "label": "USB Serial" },
+                { "value": "CAN", "label": "CAN Bus" }
               ],
-              "default": "USB"
+              "default": "USB",
+              "required": true,
+              "help": "Choose USB Serial or CAN Bus connection"
             },
             {
               "id": "serial",
               "type": "serial_select",
-              "label": "Serial Port",
+              "label": "Serial Port (USB)",
               "state_key": "mcu.main.serial",
               "auto_detect_pattern": "Klipper",
               "required": true,
-              "condition": "mcu.main.connection_type == 'USB'"
+              "condition": "mcu.main.connection_type == 'USB'",
+              "help": "Select USB serial device from /dev/serial/by-id/"
+            },
+            {
+              "id": "canbus_uuid",
+              "type": "can_select",
+              "label": "CAN Bus UUID",
+              "state_key": "mcu.main.canbus_uuid",
+              "required": true,
+              "condition": "mcu.main.connection_type == 'CAN'",
+              "help": "Select CAN device UUID (query via canbus_query.py)"
             },
             {
               "id": "restart_method",
@@ -635,7 +649,7 @@
 
     "host_mcu": {
       "id": "host_mcu",
-      "title": "Host MCU (Linux)",
+      "title": "2.1.2 Host MCU",
       "state_prefix": "mcu.host",
       "klipper_section": "[mcu rpi]",
       "help": "Enables GPIO access on the Raspberry Pi for sensors, fans, and other peripherals",
@@ -647,6 +661,14 @@
           "state_key": "mcu.host.enabled",
           "default": false,
           "help": "Required for RPi GPIO sensors, DS18B20, Neopixels on GPIO, etc."
+        },
+        {
+          "id": "setup_host_mcu",
+          "type": "action",
+          "label": "Setup Host MCU Firmware",
+          "action": "setup_host_mcu",
+          "help": "Run make menuconfig, compile, and flash Host MCU firmware",
+          "condition": "mcu.host.enabled"
         },
         {
           "id": "serial",
@@ -662,18 +684,27 @@
 
     "additional_mcus": {
       "id": "additional_mcus",
-      "title": "Additional MCUs",
+      "title": "2.1.3 Additional MCUs",
       "state_prefix": "mcu.additional",
       "description": "MMUs, filament buffers, and other external MCUs",
       "is_list": true,
       "item_template": {
         "fields": [
           {
+            "id": "device_id",
+            "type": "mcu_select",
+            "label": "Select MCU Device",
+            "state_key": "device_id",
+            "help": "Query and select from available USB/CAN devices",
+            "required": true
+          },
+          {
             "id": "name",
             "type": "text",
             "label": "MCU Name",
             "state_key": "name",
-            "help": "e.g., mmu, buffer, ercf (used in Klipper config as [mcu name])"
+            "help": "e.g., mmu, buffer, ercf (used in Klipper config as [mcu name])",
+            "required": true
           },
           {
             "id": "type",
@@ -685,7 +716,8 @@
               { "value": "filament_buffer", "label": "Filament Buffer" },
               { "value": "generic", "label": "Generic MCU" }
             ],
-            "default": "mmu"
+            "default": "mmu",
+            "required": true
           },
           {
             "id": "mmu_type",
@@ -764,11 +796,36 @@
           },
           {
             "id": "canbus_uuid",
-            "type": "text",
+            "type": "can_select",
             "label": "CAN Bus UUID",
             "state_key": "canbus_uuid",
-            "help": "Use 'python3 ~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0' to find",
+            "help": "Select CAN device UUID from queried devices",
             "condition": "connection_type == 'CAN'"
+          },
+          {
+            "id": "module_check",
+            "type": "action",
+            "label": "Check Module Installation",
+            "action": "check_module",
+            "help": "Check if required module (Happy Hare, AFC, etc.) is installed",
+            "condition": "type == 'mmu'"
+          },
+          {
+            "id": "module_install",
+            "type": "action",
+            "label": "Install Module",
+            "action": "install_module",
+            "help": "Install required module if not present",
+            "condition": "type == 'mmu'"
+          },
+          {
+            "id": "klipperscreen_addon",
+            "type": "bool",
+            "label": "Install KlipperScreen Add-on",
+            "state_key": "klipperscreen_addon",
+            "default": false,
+            "help": "Install KlipperScreen add-on if applicable",
+            "condition": "type == 'mmu'"
           }
         ]
       }

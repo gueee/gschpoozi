@@ -11,6 +11,7 @@ This version uses a skeleton-driven architecture where:
 - FieldRenderer handles individual field types
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -66,6 +67,9 @@ class GschpooziWizard:
                 'katapult_setup': self._katapult_setup,
                 'install_mmu_software': self._install_mmu_software,
                 'verify_services': self._verify_services,
+                'setup_host_mcu': self._setup_host_mcu,
+                'check_module': self._check_module,
+                'install_module': self._install_module,
             }
         )
 
@@ -571,6 +575,253 @@ class GschpooziWizard:
             "Service Status:\n\n" + "\n".join(status_lines),
             title="Service Verification"
         )
+
+    def _setup_host_mcu(self) -> None:
+        """Automated Host MCU setup: menuconfig, make, flash."""
+        if not self.state.get('mcu.host.enabled'):
+            return
+
+        klipper_dir = Path.home() / "klipper"
+        if not klipper_dir.exists():
+            self.ui.msgbox(
+                "Klipper directory not found at ~/klipper\n\n"
+                "Please install Klipper first.",
+                title="Error"
+            )
+            return
+
+        # Confirm before proceeding
+        if not self.ui.yesno(
+            "This will configure and compile the Host MCU firmware.\n\n"
+            "Steps:\n"
+            "1. Run make menuconfig (select Linux process)\n"
+            "2. Compile firmware (make)\n"
+            "3. Flash firmware (make flash)\n\n"
+            "Continue?",
+            title="Host MCU Setup"
+        ):
+            return
+
+        # Step 1: menuconfig
+        self.ui.infobox("Running make menuconfig...\n\nSelect 'Linux process' and configure.", title="Please Wait")
+        try:
+            result = subprocess.run(
+                ["make", "menuconfig"],
+                cwd=klipper_dir,
+                env=dict(os.environ, TERM="xterm"),
+                timeout=300
+            )
+            if result.returncode != 0:
+                self.ui.msgbox("menuconfig failed. Check terminal output.", title="Error")
+                return
+        except subprocess.TimeoutExpired:
+            self.ui.msgbox("menuconfig timed out.", title="Error")
+            return
+        except Exception as e:
+            self.ui.msgbox(f"Error running menuconfig: {e}", title="Error")
+            return
+
+        # Step 2: Compile
+        self.ui.infobox("Compiling firmware...", title="Please Wait")
+        try:
+            result = subprocess.run(
+                ["make"],
+                cwd=klipper_dir,
+                capture_output=True,
+                text=True,
+                timeout=600
+            )
+            if result.returncode != 0:
+                self.ui.msgbox(
+                    f"Compilation failed:\n\n{result.stderr[:500]}",
+                    title="Error"
+                )
+                return
+        except subprocess.TimeoutExpired:
+            self.ui.msgbox("Compilation timed out.", title="Error")
+            return
+        except Exception as e:
+            self.ui.msgbox(f"Error compiling: {e}", title="Error")
+            return
+
+        # Step 3: Flash
+        if self.ui.yesno(
+            "Compilation successful!\n\n"
+            "Flash the firmware now?",
+            title="Flash Firmware"
+        ):
+            self.ui.infobox("Flashing firmware...", title="Please Wait")
+            try:
+                result = subprocess.run(
+                    ["make", "flash"],
+                    cwd=klipper_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                if result.returncode == 0:
+                    self.ui.msgbox("Host MCU firmware flashed successfully!", title="Success")
+                else:
+                    self.ui.msgbox(
+                        f"Flash failed:\n\n{result.stderr[:500]}",
+                        title="Error"
+                    )
+            except Exception as e:
+                self.ui.msgbox(f"Error flashing: {e}", title="Error")
+
+    def _check_module(self) -> None:
+        """Check if required module is installed."""
+        # Get current MCU context from state
+        additional_mcus = self.state.get('mcu.additional', [])
+        if not additional_mcus:
+            self.ui.msgbox("No additional MCUs configured.", title="Info")
+            return
+
+        # For now, check the last configured MCU
+        # In a real implementation, this would be passed as context
+        last_mcu = additional_mcus[-1] if isinstance(additional_mcus, list) else {}
+        mcu_type = last_mcu.get('type', '')
+        mmu_type = last_mcu.get('mmu_type', '')
+
+        module_name = None
+        module_path = None
+
+        if mcu_type == 'mmu':
+            if mmu_type in ['ercf', 'tradrack']:
+                module_name = "Happy Hare"
+                module_path = Path.home() / "Happy-Hare"
+            elif mmu_type in ['afc', 'box_turtle', 'night_owl']:
+                module_name = "AFC-Klipper-Add-On"
+                module_path = Path.home() / "AFC-Klipper-Add-On"
+
+        if not module_name:
+            self.ui.msgbox("No module required for this MCU type.", title="Info")
+            return
+
+        if module_path and module_path.exists():
+            self.ui.msgbox(
+                f"{module_name} is installed.\n\n"
+                f"Location: {module_path}",
+                title="Module Status"
+            )
+        else:
+            self.ui.msgbox(
+                f"{module_name} is NOT installed.\n\n"
+                f"Use 'Install Module' to install it.",
+                title="Module Status"
+            )
+
+    def _install_module(self) -> None:
+        """Install required module (Happy Hare, AFC, etc.)."""
+        # Get current MCU context from state
+        additional_mcus = self.state.get('mcu.additional', [])
+        if not additional_mcus:
+            self.ui.msgbox("No additional MCUs configured.", title="Info")
+            return
+
+        last_mcu = additional_mcus[-1] if isinstance(additional_mcus, list) else {}
+        mcu_type = last_mcu.get('type', '')
+        mmu_type = last_mcu.get('mmu_type', '')
+
+        module_name = None
+        repo_url = None
+        install_script = None
+        install_dir = None
+
+        if mcu_type == 'mmu':
+            if mmu_type in ['ercf', 'tradrack']:
+                module_name = "Happy Hare"
+                repo_url = "https://github.com/moggieuk/Happy-Hare.git"
+                install_dir = Path.home() / "Happy-Hare"
+                install_script = install_dir / "install.sh"
+            elif mmu_type in ['afc', 'box_turtle', 'night_owl']:
+                module_name = "AFC-Klipper-Add-On"
+                repo_url = "https://github.com/ArmoredTurtle/AFC-Klipper-Add-On.git"
+                install_dir = Path.home() / "AFC-Klipper-Add-On"
+                install_script = install_dir / "install-afc.sh"
+
+        if not module_name:
+            self.ui.msgbox("No module required for this MCU type.", title="Info")
+            return
+
+        # Check if already installed
+        if install_dir and install_dir.exists():
+            if self.ui.yesno(
+                f"{module_name} appears to be already installed.\n\n"
+                "Reinstall anyway?",
+                title="Already Installed"
+            ):
+                # Remove existing
+                import shutil
+                try:
+                    shutil.rmtree(install_dir)
+                except Exception as e:
+                    self.ui.msgbox(f"Error removing existing installation: {e}", title="Error")
+                    return
+            else:
+                return
+
+        # Confirm installation
+        if not self.ui.yesno(
+            f"Install {module_name}?\n\n"
+            f"This will:\n"
+            f"1. Clone repository from {repo_url}\n"
+            f"2. Run installation script\n\n"
+            "Continue?",
+            title="Install Module"
+        ):
+            return
+
+        # Clone repository
+        self.ui.infobox(f"Cloning {module_name}...", title="Please Wait")
+        try:
+            result = subprocess.run(
+                ["git", "clone", repo_url, str(install_dir)],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            if result.returncode != 0:
+                self.ui.msgbox(
+                    f"Clone failed:\n\n{result.stderr[:500]}",
+                    title="Error"
+                )
+                return
+        except Exception as e:
+            self.ui.msgbox(f"Error cloning repository: {e}", title="Error")
+            return
+
+        # Run installation script
+        if install_script and install_script.exists():
+            self.ui.infobox(f"Running {module_name} installation script...", title="Please Wait")
+            try:
+                result = subprocess.run(
+                    ["bash", str(install_script)],
+                    cwd=install_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                if result.returncode == 0:
+                    self.ui.msgbox(
+                        f"{module_name} installed successfully!",
+                        title="Success"
+                    )
+                else:
+                    self.ui.msgbox(
+                        f"Installation script failed:\n\n{result.stderr[:500]}",
+                        title="Error"
+                    )
+            except Exception as e:
+                self.ui.msgbox(f"Error running installation script: {e}", title="Error")
+        else:
+            self.ui.msgbox(
+                f"{module_name} cloned successfully.\n\n"
+                f"Please run the installation script manually:\n"
+                f"cd {install_dir}\n"
+                f"./install.sh",
+                title="Manual Installation Required"
+            )
 
 
 def main():

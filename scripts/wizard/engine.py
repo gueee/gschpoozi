@@ -221,6 +221,17 @@ class MenuEngine:
             if field.get('skip_if_copied') and field.get('id') in copied_fields:
                 continue
 
+            # Handle action fields
+            if field.get('type') == 'action':
+                action = field.get('action')
+                if action:
+                    handler = self.action_handlers.get(action)
+                    if handler:
+                        handler()
+                    else:
+                        self.ui.msgbox(f"Action '{action}' not implemented.", title="Error")
+                continue
+
             result = self.field_renderer.render_field(field)
             if result is None:
                 # User cancelled
@@ -240,6 +251,17 @@ class MenuEngine:
                 # self.ui.msgbox(f"Configuring: {sub_title}")
 
                 for field in sub_fields:
+                    # Handle action fields
+                    if field.get('type') == 'action':
+                        action = field.get('action')
+                        if action:
+                            handler = self.action_handlers.get(action)
+                            if handler:
+                                handler()
+                            else:
+                                self.ui.msgbox(f"Action '{action}' not implemented.", title="Error")
+                        continue
+
                     result = self.field_renderer.render_field(field)
                     if result is None:
                         return False

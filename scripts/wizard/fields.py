@@ -98,8 +98,11 @@ class FieldRenderer:
             'exclusive_choice': self._render_exclusive_choice,
             'multi_select': self._render_multi_select,
             'serial_select': self._render_serial_select,
+            'can_select': self._render_can_select,
+            'mcu_select': self._render_mcu_select,
             'port_select': self._render_port_select,
             'board_select': self._render_board_select,
+            'action': self._render_action,
         }
 
         renderer = renderers.get(field_type, self._render_text)
@@ -416,6 +419,147 @@ class FieldRenderer:
             self._set_state_value(state_key, result)
             return result
 
+        return None
+
+    def _render_can_select(self, field: Dict[str, Any]) -> Optional[str]:
+        """Render a CAN device UUID selection with auto-detection."""
+        label = field.get('label', 'Select CAN device')
+        state_key = field.get('state_key', '')
+        current = self._get_state_value(state_key)
+        title = self._get_contextual_title(field)
+
+        # Query CAN devices
+        devices = self._query_can_devices()
+
+        if not devices:
+            # Offer manual entry
+            result = self.ui.inputbox(
+                f"{label}\n\nNo CAN devices detected. Enter UUID manually:",
+                default=current or "",
+                title=title
+            )
+            if result:
+                self._set_state_value(state_key, result)
+                return result
+            return None
+
+        # Build selection items
+        items: List[Tuple[str, str, bool]] = []
+        for uuid, display_name in devices:
+            is_selected = (uuid == current)
+            items.append((uuid, display_name, is_selected))
+
+        # Add manual entry option
+        items.append(("manual", "Enter manually...", False))
+
+        result = self.ui.radiolist(label, items, title=title)
+
+        if result == "manual":
+            result = self.ui.inputbox(
+                f"{label}\n\nEnter CAN UUID:",
+                default=current or "",
+                title=title
+            )
+
+        if result and result != "manual":
+            self._set_state_value(state_key, result)
+            return result
+
+        return None
+
+    def _query_can_devices(self) -> List[Tuple[str, str]]:
+        """Query CAN bus for available devices.
+
+        Returns:
+            List of (uuid, display_name) tuples
+        """
+        devices = []
+        try:
+            import subprocess
+            from pathlib import Path
+
+            klipper_scripts = Path.home() / "klipper" / "scripts" / "canbus_query.py"
+            if not klipper_scripts.exists():
+                return devices
+
+            # Query can0 interface
+            result = subprocess.run(
+                ["python3", str(klipper_scripts), "can0"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                # Parse output: typically "Found canbus_uuid=xxxxx"
+                for line in result.stdout.strip().split('\n'):
+                    line = line.strip()
+                    if 'canbus_uuid=' in line:
+                        uuid = line.split('canbus_uuid=')[1].split()[0]
+                        display_name = f"CAN Device ({uuid[:8]}...)"
+                        devices.append((uuid, display_name))
+        except Exception:
+            # Silently fail if CAN query fails
+            pass
+
+        return devices
+
+    def _render_mcu_select(self, field: Dict[str, Any]) -> Optional[str]:
+        """Render MCU device selection (combines USB and CAN devices)."""
+        label = field.get('label', 'Select MCU device')
+        state_key = field.get('state_key', '')
+        current = self._get_state_value(state_key)
+        title = self._get_contextual_title(field)
+
+        # Query both USB and CAN devices
+        usb_devices = self._detect_serial_devices()
+        can_devices = self._query_can_devices()
+
+        if not usb_devices and not can_devices:
+            self.ui.msgbox(
+                "No devices detected (USB or CAN).\n\n"
+                "Make sure devices are connected and powered.",
+                title=title
+            )
+            return None
+
+        # Build selection items
+        items: List[Tuple[str, str, bool]] = []
+
+        # Add USB devices
+        for path, display_name in usb_devices:
+            is_selected = (path == current)
+            items.append((path, f"[USB] {display_name}", is_selected))
+
+        # Add CAN devices
+        for uuid, display_name in can_devices:
+            is_selected = (uuid == current)
+            items.append((uuid, f"[CAN] {display_name}", is_selected))
+
+        # Add manual entry option
+        items.append(("manual", "Enter manually...", False))
+
+        result = self.ui.radiolist(label, items, title=title)
+
+        if result == "manual":
+            result = self.ui.inputbox(
+                f"{label}\n\nEnter device path or UUID:",
+                default=current or "",
+                title=title
+            )
+
+        if result and result != "manual":
+            self._set_state_value(state_key, result)
+            return result
+
+        return None
+
+    def _render_action(self, field: Dict[str, Any]) -> Optional[str]:
+        """Render an action field (triggers an action handler)."""
+        action = field.get('action')
+        if action:
+            # Action will be handled by MenuEngine
+            return action
         return None
 
     def _detect_serial_devices(self, pattern: str = None) -> List[Tuple[str, str]]:

@@ -379,6 +379,86 @@
       ]
     },
 
+    "stepper_setup": {
+      "id": "stepper_setup",
+      "title": "2.3 Steppers & Extruders",
+      "items": [
+        {
+          "id": "stepper_x",
+          "label": "2.3.1 Stepper X",
+          "section": "stepper_x",
+          "status_key": "stepper_x.driver_type"
+        },
+        {
+          "id": "stepper_y",
+          "label": "2.3.2 Stepper Y",
+          "section": "stepper_y",
+          "status_key": "stepper_y.driver_type"
+        },
+        {
+          "id": "stepper_x1",
+          "label": "2.3.3 Stepper X1 (AWD)",
+          "section": "stepper_x1",
+          "status_key": "stepper_x1.driver_type",
+          "condition": "printer.awd_enabled"
+        },
+        {
+          "id": "stepper_y1",
+          "label": "2.3.4 Stepper Y1 (AWD)",
+          "section": "stepper_y1",
+          "status_key": "stepper_y1.driver_type",
+          "condition": "printer.awd_enabled"
+        },
+        {
+          "id": "stepper_z",
+          "label": "2.3.5 Stepper Z",
+          "section": "stepper_z",
+          "status_key": "stepper_z.z_motor_count"
+        },
+        {
+          "id": "stepper_z1",
+          "label": "2.3.6 Stepper Z1",
+          "section": "stepper_z1",
+          "status_key": "stepper_z1.driver_type",
+          "condition": "stepper_z.z_motor_count >= 2"
+        },
+        {
+          "id": "stepper_z2",
+          "label": "2.3.7 Stepper Z2",
+          "section": "stepper_z2",
+          "status_key": "stepper_z2.driver_type",
+          "condition": "stepper_z.z_motor_count >= 3"
+        },
+        {
+          "id": "stepper_z3",
+          "label": "2.3.8 Stepper Z3",
+          "section": "stepper_z3",
+          "status_key": "stepper_z3.driver_type",
+          "condition": "stepper_z.z_motor_count >= 4"
+        },
+        {
+          "id": "extruder",
+          "label": "2.3.9 Extruder",
+          "section": "extruder",
+          "status_key": "extruder.extruder_type"
+        },
+        {
+          "id": "extruder1",
+          "label": "2.3.10 Extruder 1",
+          "section": "extruder1",
+          "status_key": "extruder1.enabled",
+          "condition": "printer.extruder_count >= 2"
+        },
+        {
+          "id": "extruder2",
+          "label": "2.3.11 Extruder 2",
+          "section": "extruder2",
+          "status_key": "extruder2.enabled",
+          "condition": "printer.extruder_count >= 3"
+        }
+      ]
+    },
+
     "hardware_setup": {
       "id": "hardware_setup",
       "title": "2. Hardware Setup",
@@ -396,101 +476,69 @@
           "status_key": "printer.kinematics"
         },
         {
-          "id": "stepper_x",
-          "label": "2.3 Stepper X",
-          "section": "stepper_x",
-          "status_key": "stepper_x.driver_type"
-        },
-        {
-          "id": "stepper_x1",
-          "label": "2.4 Stepper X1 (AWD)",
-          "section": "stepper_x1",
-          "status_key": "stepper_x1.driver_type",
-          "condition": "printer.awd_enabled"
-        },
-        {
-          "id": "stepper_y",
-          "label": "2.5 Stepper Y",
-          "section": "stepper_y",
-          "status_key": "stepper_y.driver_type"
-        },
-        {
-          "id": "stepper_y1",
-          "label": "2.6 Stepper Y1 (AWD)",
-          "section": "stepper_y1",
-          "status_key": "stepper_y1.driver_type",
-          "condition": "printer.awd_enabled"
-        },
-        {
-          "id": "stepper_z",
-          "label": "2.7 Stepper Z",
-          "section": "stepper_z",
-          "status_key": "stepper_z.z_motor_count"
-        },
-        {
-          "id": "extruder",
-          "label": "2.8 Extruder",
-          "section": "extruder",
-          "status_key": "extruder.extruder_type"
+          "id": "stepper_setup",
+          "label": "2.3 Steppers & Extruders",
+          "section": "stepper_setup",
+          "description": "X, Y, Z motors and extruders"
         },
         {
           "id": "heater_bed",
-          "label": "2.9 Heater Bed",
+          "label": "2.4 Heater Bed",
           "section": "heater_bed",
           "status_key": "heater_bed.sensor_type"
         },
         {
           "id": "probe",
-          "label": "2.10 Probe",
+          "label": "2.5 Probe",
           "section": "probe",
           "status_key": "probe.probe_type"
         },
         {
           "id": "homing",
-          "label": "2.11 Homing",
+          "label": "2.6 Homing",
           "section": "homing",
           "status_key": "homing.homing_method"
         },
         {
           "id": "bed_leveling",
-          "label": "2.12 Bed Leveling",
+          "label": "2.7 Bed Leveling",
           "section": "bed_leveling",
           "status_key": "bed_leveling.leveling_type",
           "condition": "probe.probe_type != 'none'"
         },
         {
           "id": "fans",
-          "label": "2.13 Fans",
+          "label": "2.8 Fans",
           "section": "fans",
           "status_key": "fans.part_cooling.enabled"
         },
         {
           "id": "additional_fans",
-          "label": "2.14 Additional Fans",
+          "label": "2.9 Additional Fans",
           "description": "Nevermore, RSCS, Exhaust, etc.",
           "section": "additional_fans"
         },
         {
           "id": "leds",
-          "label": "2.15 LEDs",
+          "label": "2.10 LEDs",
           "section": "leds",
           "status_key": "leds.enabled"
         },
         {
           "id": "temperature_sensors",
-          "label": "2.16 Temperature Sensors",
+          "label": "2.11 Temperature Sensors",
           "section": "temperature_sensors",
           "status_key": "temperature_sensors.chamber.enabled"
         },
         {
           "id": "additional_temp_sensors",
-          "label": "2.17 Additional Temp Sensors",
+          "label": "2.12 Additional Temp Sensors",
           "description": "BME280, AHT10, custom thermistors",
           "section": "additional_temp_sensors"
         },
         {
           "id": "filament_sensors",
-          "label": "2.18 Filament Sensors",
+          "label": "2.13 Filament Sensors",
           "section": "filament_sensors",
           "status_key": "filament_sensors.runout.enabled"
         }

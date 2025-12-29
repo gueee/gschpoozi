@@ -4317,9 +4317,9 @@
           "type": "int",
           "label": "Load Speed (mm/s)",
           "state_key": "macros.load_speed",
-          "default": 300,
-          "range": [50, 1000],
-          "help": "Speed for loading filament"
+          "default": 5,
+          "range": [1, 20],
+          "help": "Speed for loading filament (5-10 typical)"
         },
         {
           "id": "load_prime",
@@ -4335,9 +4335,9 @@
           "type": "int",
           "label": "Load Prime Speed (mm/s)",
           "state_key": "macros.load_prime_speed",
-          "default": 150,
-          "range": [50, 500],
-          "help": "Speed for priming after load"
+          "default": 3,
+          "range": [1, 10],
+          "help": "Speed for priming after load (slower for clean prime)"
         },
         {
           "id": "unload_temp",
@@ -4362,9 +4362,9 @@
           "type": "int",
           "label": "Unload Speed (mm/s)",
           "state_key": "macros.unload_speed",
-          "default": 1800,
-          "range": [100, 3000],
-          "help": "Speed for unloading filament"
+          "default": 25,
+          "range": [5, 50],
+          "help": "Speed for unloading filament (can be faster than load)"
         },
         {
           "id": "unload_tip_shape",

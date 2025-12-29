@@ -3578,140 +3578,55 @@
 
     "input_shaper": {
       "id": "input_shaper",
-      "title": "Input Shaper",
+      "title": "Input Shaper / Accelerometer",
       "state_prefix": "input_shaper",
-      "klipper_section": "[input_shaper]",
-      "subsections": [
+      "help": "Shaper type and frequency are auto-calibrated via SHAPER_CALIBRATE macro",
+      "fields": [
         {
-          "id": "config",
-          "title": "Input Shaper Configuration",
-          "fields": [
-            {
-              "id": "enabled",
-              "type": "bool",
-              "label": "Enable Input Shaper",
-              "state_key": "input_shaper.enabled",
-              "default": false,
-              "help": "Reduces ringing/ghosting artifacts on prints"
-            },
-            {
-              "id": "shaper_type_x",
-              "type": "choice",
-              "label": "Shaper Type X",
-              "state_key": "input_shaper.shaper_type_x",
-              "options": [
-                { "value": "mzv", "label": "MZV (recommended)" },
-                { "value": "ei", "label": "EI" },
-                { "value": "2hump_ei", "label": "2-hump EI" },
-                { "value": "3hump_ei", "label": "3-hump EI" },
-                { "value": "zv", "label": "ZV" },
-                { "value": "zvd", "label": "ZVD" }
-              ],
-              "default": "mzv",
-              "condition": "input_shaper.enabled"
-            },
-            {
-              "id": "shaper_freq_x",
-              "type": "float",
-              "label": "Shaper Frequency X (Hz)",
-              "state_key": "input_shaper.shaper_freq_x",
-              "default": 0,
-              "condition": "input_shaper.enabled",
-              "help": "Run resonance test to determine"
-            },
-            {
-              "id": "damping_ratio_x",
-              "type": "float",
-              "label": "Damping Ratio X",
-              "state_key": "input_shaper.damping_ratio_x",
-              "default": 0.1,
-              "condition": "input_shaper.enabled"
-            },
-            {
-              "id": "shaper_type_y",
-              "type": "choice",
-              "label": "Shaper Type Y",
-              "state_key": "input_shaper.shaper_type_y",
-              "options": [
-                { "value": "mzv", "label": "MZV (recommended)" },
-                { "value": "ei", "label": "EI" },
-                { "value": "2hump_ei", "label": "2-hump EI" },
-                { "value": "3hump_ei", "label": "3-hump EI" },
-                { "value": "zv", "label": "ZV" },
-                { "value": "zvd", "label": "ZVD" }
-              ],
-              "default": "mzv",
-              "condition": "input_shaper.enabled"
-            },
-            {
-              "id": "shaper_freq_y",
-              "type": "float",
-              "label": "Shaper Frequency Y (Hz)",
-              "state_key": "input_shaper.shaper_freq_y",
-              "default": 0,
-              "condition": "input_shaper.enabled",
-              "help": "Run resonance test to determine"
-            },
-            {
-              "id": "damping_ratio_y",
-              "type": "float",
-              "label": "Damping Ratio Y",
-              "state_key": "input_shaper.damping_ratio_y",
-              "default": 0.1,
-              "condition": "input_shaper.enabled"
-            }
-          ]
+          "id": "accel_chip",
+          "type": "choice",
+          "label": "Accelerometer Type",
+          "state_key": "input_shaper.accel_chip",
+          "options": [
+            { "value": "none", "label": "None / Not configured" },
+            { "value": "beacon", "label": "Beacon (built-in accelerometer)" },
+            { "value": "cartographer", "label": "Cartographer (built-in accelerometer)" },
+            { "value": "btt_eddy", "label": "BTT Eddy (built-in accelerometer)" },
+            { "value": "adxl345", "label": "ADXL345" },
+            { "value": "lis2dw", "label": "LIS2DW" },
+            { "value": "mpu9250", "label": "MPU9250 / MPU6050" }
+          ],
+          "default": "none"
         },
         {
-          "id": "accelerometer",
-          "title": "Accelerometer",
-          "fields": [
-            {
-              "id": "accel_chip",
-              "type": "choice",
-              "label": "Accelerometer Type",
-              "state_key": "input_shaper.accel_chip",
-              "options": [
-                { "value": "none", "label": "None / Not configured" },
-                { "value": "adxl345", "label": "ADXL345" },
-                { "value": "lis2dw", "label": "LIS2DW" },
-                { "value": "mpu9250", "label": "MPU9250 / MPU6050" }
-              ],
-              "default": "none"
-            },
-            {
-              "id": "accel_location",
-              "type": "choice",
-              "label": "Accelerometer Location",
-              "state_key": "input_shaper.accel_location",
-              "options": [
-                { "value": "beacon", "label": "Beacon (built-in)" },
-                { "value": "cartographer", "label": "Cartographer (built-in)" },
-                { "value": "btt_eddy", "label": "BTT Eddy (built-in)" },
-                { "value": "toolboard", "label": "Toolboard SPI" },
-                { "value": "mainboard", "label": "Mainboard SPI" },
-                { "value": "rpi", "label": "Raspberry Pi SPI" }
-              ],
-              "default": "toolboard",
-              "condition": "input_shaper.accel_chip != 'none'"
-            },
-            {
-              "id": "cs_pin",
-              "type": "text",
-              "label": "CS Pin",
-              "state_key": "input_shaper.cs_pin",
-              "help": "Chip select pin for SPI accelerometer",
-              "condition": "input_shaper.accel_chip != 'none' and input_shaper.accel_location != 'rpi'"
-            },
-            {
-              "id": "spi_bus",
-              "type": "text",
-              "label": "SPI Bus",
-              "state_key": "input_shaper.spi_bus",
-              "help": "e.g., spi1, spidev0.0",
-              "condition": "input_shaper.accel_chip != 'none'"
-            }
-          ]
+          "id": "accel_location",
+          "type": "choice",
+          "label": "Accelerometer Location",
+          "state_key": "input_shaper.accel_location",
+          "options": [
+            { "value": "toolboard", "label": "Toolboard SPI" },
+            { "value": "mainboard", "label": "Mainboard SPI" },
+            { "value": "rpi", "label": "Raspberry Pi SPI" }
+          ],
+          "default": "toolboard",
+          "condition": "input_shaper.accel_chip in ['adxl345', 'lis2dw', 'mpu9250']",
+          "help": "Only needed for standalone accelerometers (not eddy probes)"
+        },
+        {
+          "id": "cs_pin",
+          "type": "text",
+          "label": "CS Pin",
+          "state_key": "input_shaper.cs_pin",
+          "help": "Chip select pin for SPI accelerometer",
+          "condition": "input_shaper.accel_chip in ['adxl345', 'lis2dw', 'mpu9250'] and input_shaper.accel_location != 'rpi'"
+        },
+        {
+          "id": "spi_bus",
+          "type": "text",
+          "label": "SPI Bus",
+          "state_key": "input_shaper.spi_bus",
+          "help": "e.g., spi1, spidev0.0",
+          "condition": "input_shaper.accel_chip in ['adxl345', 'lis2dw', 'mpu9250']"
         }
       ]
     },

@@ -340,16 +340,15 @@
       ]
     },
 
-    "hardware_setup": {
-      "id": "hardware_setup",
-      "title": "Hardware Setup",
+    "mcu_setup": {
+      "id": "mcu_setup",
+      "title": "2.1 MCU Setup",
       "items": [
         {
           "id": "mcu",
-          "label": "2.1 MCU Setup",
+          "label": "2.1.1 Mainboard",
           "section": "mcu",
-          "status_key": "mcu.main.board_type",
-          "description": "Mainboard, Host MCU, Additional MCUs"
+          "status_key": "mcu.main.board_type"
         },
         {
           "id": "host_mcu",
@@ -362,6 +361,19 @@
           "label": "2.1.3 Additional MCUs",
           "description": "MMUs, filament buffers, etc.",
           "section": "additional_mcus"
+        }
+      ]
+    },
+
+    "hardware_setup": {
+      "id": "hardware_setup",
+      "title": "Hardware Setup",
+      "items": [
+        {
+          "id": "mcu_setup",
+          "label": "2.1 MCU Setup",
+          "section": "mcu_setup",
+          "description": "Mainboard, Host MCU, Additional MCUs"
         },
         {
           "id": "printer",

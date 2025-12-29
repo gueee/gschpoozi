@@ -640,35 +640,10 @@
         {
           "id": "tmc_chopper",
           "label": "4.3 TMC Chopper Tuning",
-          "section": "tmc_chopper_menu",
-          "description": "Find optimal chopper parameters for TMC drivers",
-          "status_key": "tuning.chopper.enabled",
+          "section": "chopper_tuning",
+          "description": "Install chopper tuning macro framework",
+          "status_key": "tuning.chopper_tuning_enabled",
           "condition": "stepper_x.driver_type in ['TMC5160', 'TMC2240', 'TMC2209'] or stepper_y.driver_type in ['TMC5160', 'TMC2240', 'TMC2209']"
-        }
-      ]
-    },
-
-    "tmc_chopper_menu": {
-      "id": "tmc_chopper_menu",
-      "title": "4.3 TMC Chopper Tuning",
-      "items": [
-        {
-          "id": "chopper_settings",
-          "label": "4.3.1 Chopper Settings",
-          "section": "chopper_settings",
-          "status_key": "tuning.chopper.enabled"
-        },
-        {
-          "id": "chopper_params",
-          "label": "4.3.2 Tuning Parameters",
-          "section": "chopper_params",
-          "condition": "tuning.chopper.enabled"
-        },
-        {
-          "id": "chopper_safety",
-          "label": "4.3.3 Safety Limits",
-          "section": "chopper_safety",
-          "condition": "tuning.chopper.enabled"
         }
       ]
     },
@@ -3680,180 +3655,19 @@
       ]
     },
 
-    "chopper_settings": {
-      "id": "chopper_settings",
-      "title": "4.3.1 Chopper Tuning Settings",
-      "state_prefix": "tuning.chopper",
-      "help": "Find optimal TMC chopper parameters to reduce motor resonance. TMC5160/TMC2240 have TPFD, TMC2209 has TBL/TOFF only.",
+    "chopper_tuning": {
+      "id": "chopper_tuning",
+      "title": "4.3 TMC Chopper Tuning",
+      "state_prefix": "tuning",
+      "help": "Install macro framework to find optimal TMC chopper parameters. Run CHOPPER_TUNE after installation.",
       "fields": [
         {
-          "id": "enabled",
+          "id": "chopper_tuning_enabled",
           "type": "bool",
-          "label": "Enable Chopper Tuning",
-          "state_key": "tuning.chopper.enabled",
+          "label": "Install Chopper Tuning Macros",
+          "state_key": "tuning.chopper_tuning_enabled",
           "default": false,
-          "help": "Enable chopper tuning macros and infrastructure"
-        },
-        {
-          "id": "accelerometer_source",
-          "type": "choice",
-          "label": "Accelerometer Source",
-          "state_key": "tuning.chopper.accelerometer_source",
-          "options": [
-            { "value": "beacon", "label": "Beacon (built-in)" },
-            { "value": "cartographer", "label": "Cartographer (built-in)" },
-            { "value": "adxl345", "label": "ADXL345 (SPI/USB)" },
-            { "value": "lis2dw12", "label": "LIS2DW12 (toolboard)" }
-          ],
-          "default": "beacon",
-          "condition": "tuning.chopper.enabled",
-          "help": "Accelerometer for vibration measurement during tuning"
-        },
-        {
-          "id": "accelerometer_chip_name",
-          "type": "text",
-          "label": "Accelerometer Chip Name",
-          "state_key": "tuning.chopper.accelerometer_chip_name",
-          "default": "adxl345",
-          "condition": "tuning.chopper.enabled",
-          "help": "Klipper accelerometer chip name (from your config)"
-        },
-        {
-          "id": "tuning_axes",
-          "type": "choice",
-          "label": "Axes to Tune",
-          "state_key": "tuning.chopper.tuning_axes",
-          "options": [
-            { "value": "both", "label": "Both X and Y" },
-            { "value": "x", "label": "X axis only" },
-            { "value": "y", "label": "Y axis only" }
-          ],
-          "default": "both",
-          "condition": "tuning.chopper.enabled"
-        },
-        {
-          "id": "test_speed_min",
-          "type": "int",
-          "label": "Test Speed Min (mm/s)",
-          "state_key": "tuning.chopper.test_speed_min",
-          "default": 50,
-          "range": [10, 200],
-          "condition": "tuning.chopper.enabled",
-          "help": "Minimum speed for resonance sweep"
-        },
-        {
-          "id": "test_speed_max",
-          "type": "int",
-          "label": "Test Speed Max (mm/s)",
-          "state_key": "tuning.chopper.test_speed_max",
-          "default": 300,
-          "range": [100, 500],
-          "condition": "tuning.chopper.enabled",
-          "help": "Maximum speed for resonance sweep"
-        },
-        {
-          "id": "test_speed_step",
-          "type": "int",
-          "label": "Test Speed Step (mm/s)",
-          "state_key": "tuning.chopper.test_speed_step",
-          "default": 25,
-          "range": [10, 100],
-          "condition": "tuning.chopper.enabled",
-          "help": "Speed increment for resonance sweep"
-        },
-        {
-          "id": "enable_stall_detection",
-          "type": "bool",
-          "label": "Enable Stall Detection",
-          "state_key": "tuning.chopper.enable_stall_detection",
-          "default": true,
-          "condition": "tuning.chopper.enabled",
-          "help": "Enable DIAG pin stall detection for safety (requires diag0_pin)"
-        }
-      ]
-    },
-
-    "chopper_params": {
-      "id": "chopper_params",
-      "title": "4.3.2 Tuning Parameters",
-      "state_prefix": "tuning.chopper",
-      "help": "Parameter ranges to test during chopper tuning. More values = longer tuning time but better results.",
-      "fields": [
-        {
-          "id": "tpfd_values",
-          "type": "text",
-          "label": "TPFD Values (TMC5160/2240 only)",
-          "state_key": "tuning.chopper.tpfd_values",
-          "default": "0,4,8,12,15",
-          "help": "Passive fast decay, 0-15 comma-separated. Higher = less resonance but more heat."
-        },
-        {
-          "id": "tbl_values",
-          "type": "text",
-          "label": "TBL Values",
-          "state_key": "tuning.chopper.tbl_values",
-          "default": "0,1,2",
-          "help": "Comparator blanking time, 0-3 comma-separated. Higher = more noise immunity."
-        },
-        {
-          "id": "toff_values",
-          "type": "text",
-          "label": "TOFF Values",
-          "state_key": "tuning.chopper.toff_values",
-          "default": "1,2,3,4",
-          "help": "Off time, 1-15 comma-separated. Controls chopper frequency."
-        },
-        {
-          "id": "hstrt_values",
-          "type": "text",
-          "label": "HSTRT Values",
-          "state_key": "tuning.chopper.hstrt_values",
-          "default": "0,1,2,3,4,5,6,7",
-          "help": "Hysteresis start, 0-7 comma-separated. Controls current ripple."
-        },
-        {
-          "id": "hend_values",
-          "type": "text",
-          "label": "HEND Values",
-          "state_key": "tuning.chopper.hend_values",
-          "default": "0,3,6,9,12",
-          "help": "Hysteresis end, 0-15 comma-separated. Controls current ripple."
-        }
-      ]
-    },
-
-    "chopper_safety": {
-      "id": "chopper_safety",
-      "title": "4.3.3 Safety Limits",
-      "state_prefix": "tuning.chopper",
-      "help": "Safety thresholds during tuning. Tuning will abort if limits are exceeded.",
-      "fields": [
-        {
-          "id": "max_driver_temp",
-          "type": "int",
-          "label": "Max Driver Temperature (C)",
-          "state_key": "tuning.chopper.max_driver_temp",
-          "default": 100,
-          "range": [60, 150],
-          "help": "Maximum TMC driver temperature before aborting"
-        },
-        {
-          "id": "max_motor_temp",
-          "type": "int",
-          "label": "Max Motor Temperature (C)",
-          "state_key": "tuning.chopper.max_motor_temp",
-          "default": 80,
-          "range": [40, 120],
-          "help": "Maximum motor temperature before aborting (if sensor available)"
-        },
-        {
-          "id": "stall_sensitivity",
-          "type": "int",
-          "label": "StallGuard Sensitivity",
-          "state_key": "tuning.chopper.stall_sensitivity",
-          "default": 50,
-          "range": [0, 255],
-          "help": "StallGuard sensitivity (lower = more sensitive to stalls)"
+          "help": "Install CHOPPER_TUNE macro framework for finding optimal TPFD/TBL/TOFF/HSTRT/HEND values"
         }
       ]
     },

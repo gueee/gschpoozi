@@ -530,6 +530,11 @@ class MenuEngine:
         item_template = section.get('item_template', {})
         title = section.get('title', section_id)
 
+        # Derive item label from section title
+        item_label = self._derive_item_label_from_title(title)
+        add_label = f"Add new {item_label}"
+        delete_label = f"Delete {item_label}"
+
         while True:
             # Get current list items from state
             items = self._get_list_items(state_prefix)
@@ -542,10 +547,10 @@ class MenuEngine:
                 item_name = item.get('name', f"Item {idx + 1}")
                 menu_items.append((f"edit:{idx}", f"{item_name} [Edit]"))
 
-            # Add options
-            menu_items.append(('add', 'Add new fan'))
+            # Add options with dynamic labels
+            menu_items.append(('add', add_label))
             if items:
-                menu_items.append(('delete', 'Delete a fan'))
+                menu_items.append(('delete', delete_label))
             menu_items.append(('B', 'Back'))
 
             # Show menu
@@ -567,6 +572,44 @@ class MenuEngine:
             elif choice.startswith('edit:'):
                 idx = int(choice.split(':')[1])
                 self._edit_list_item(section_id, state_prefix, item_template, idx, items[idx])
+
+    def _derive_item_label_from_title(self, title: str) -> str:
+        """Derive a singular item label from section title.
+        
+        Examples:
+            "Additional MCUs" -> "MCU"
+            "Additional Fans" -> "fan"
+            "Additional Temperature Sensors" -> "sensor"
+            "2.1.3 Additional MCUs" -> "MCU"
+        
+        Args:
+            title: Section title
+            
+        Returns:
+            Singular item label (lowercase, except acronyms like MCU)
+        """
+        # Remove common prefixes
+        label = title
+        prefixes = ["Additional ", "2.1.3 ", "2.1.2 ", "2.1.1 ", "2.1 "]
+        for prefix in prefixes:
+            if label.startswith(prefix):
+                label = label[len(prefix):]
+                break
+        
+        # Handle special cases first
+        if label.endswith("MCUs"):
+            return "MCU"
+        
+        # Remove trailing "s" to get singular
+        if label.endswith("s") and len(label) > 1:
+            singular = label[:-1]
+            # Keep acronyms uppercase, lowercase everything else
+            if singular.isupper() and len(singular) > 1:
+                return singular
+            return singular.lower()
+        
+        # Return as-is, lowercase
+        return label.lower()
 
     def _get_list_items(self, state_prefix: str) -> List[Dict[str, Any]]:
         """Get list items from state.

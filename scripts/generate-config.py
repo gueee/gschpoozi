@@ -1859,6 +1859,116 @@ def generate_hardware_cfg(
         lines.append("")
     # If has_chamber_sensor but no pin, skip section - user must assign in Hardware Setup
 
+    # ─────────────────────────────────────────────────────────────────────────────
+    # BUILT-IN MCU TEMPERATURE SENSORS
+    # ─────────────────────────────────────────────────────────────────────────────
+    mcu_main_enabled = temp_sensors.get('mcu_main', {}).get('enabled', True) if isinstance(temp_sensors, dict) else True
+    host_enabled = temp_sensors.get('host', {}).get('enabled', True) if isinstance(temp_sensors, dict) else True
+    toolboard_temp_enabled = temp_sensors.get('toolboard', {}).get('enabled', False) if isinstance(temp_sensors, dict) else False
+
+    # Check if toolboard is configured
+    mcu_config = wizard_state.get('mcu', {})
+    toolboard_mcu = mcu_config.get('toolboard', {}) if isinstance(mcu_config, dict) else {}
+    has_toolboard = toolboard_mcu.get('enabled', False) if isinstance(toolboard_mcu, dict) else False
+
+    has_mcu_sensors = mcu_main_enabled or host_enabled or (has_toolboard and toolboard_temp_enabled)
+
+    if has_mcu_sensors:
+        lines.append("# " + "─" * 77)
+        lines.append("# MCU TEMPERATURE SENSORS")
+        lines.append("# " + "─" * 77)
+
+        # Host (Raspberry Pi) temperature
+        if host_enabled:
+            lines.append("[temperature_sensor raspberry_pi]")
+            lines.append("sensor_type: temperature_host")
+            lines.append("min_temp: 0")
+            lines.append("max_temp: 100")
+            lines.append("")
+
+        # Main MCU temperature
+        if mcu_main_enabled:
+            lines.append("[temperature_sensor mcu_temp]")
+            lines.append("sensor_type: temperature_mcu")
+            lines.append("min_temp: 0")
+            lines.append("max_temp: 100")
+            lines.append("")
+
+        # Toolboard MCU temperature
+        if has_toolboard and toolboard_temp_enabled:
+            lines.append("[temperature_sensor toolboard]")
+            lines.append("sensor_type: temperature_mcu")
+            lines.append("sensor_mcu: toolboard")
+            lines.append("min_temp: 0")
+            lines.append("max_temp: 100")
+            lines.append("")
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # ADDITIONAL TEMPERATURE SENSORS (user-defined)
+    # ─────────────────────────────────────────────────────────────────────────────
+    additional_sensors = temp_sensors.get('additional', []) if isinstance(temp_sensors, dict) else []
+
+    if additional_sensors:
+        lines.append("# " + "─" * 77)
+        lines.append("# ADDITIONAL TEMPERATURE SENSORS")
+        lines.append("# " + "─" * 77)
+
+        for sensor in additional_sensors:
+            if not isinstance(sensor, dict):
+                continue
+
+            sensor_name = sensor.get('name', '').strip()
+            sensor_type = sensor.get('type', 'Generic 3950')
+
+            if not sensor_name:
+                continue
+
+            # Sanitize name for Klipper (replace spaces with underscores)
+            safe_name = sensor_name.replace(' ', '_').lower()
+
+            lines.append(f"[temperature_sensor {safe_name}]")
+
+            if sensor_type == 'temperature_mcu':
+                # MCU temperature sensor
+                sensor_mcu = sensor.get('mcu', 'mcu')
+                lines.append("sensor_type: temperature_mcu")
+                if sensor_mcu and sensor_mcu != 'mcu':
+                    lines.append(f"sensor_mcu: {sensor_mcu}")
+            elif sensor_type in ['BME280', 'AHT10']:
+                # I2C sensors
+                lines.append(f"sensor_type: {sensor_type}")
+                i2c_address = sensor.get('i2c_address', '')
+                i2c_bus = sensor.get('i2c_bus', '')
+                location = sensor.get('location', 'mainboard')
+
+                if i2c_address:
+                    lines.append(f"i2c_address: {i2c_address}")
+                if i2c_bus:
+                    lines.append(f"i2c_bus: {i2c_bus}")
+                elif location == 'rpi':
+                    lines.append("i2c_mcu: rpi")
+                    lines.append("i2c_bus: i2c.1")
+            elif sensor_type == 'DS18B20':
+                # 1-wire digital sensor
+                lines.append("sensor_type: DS18B20")
+                sensor_pin = sensor.get('sensor_pin', '')
+                if sensor_pin:
+                    lines.append(f"sensor_pin: {sensor_pin}")
+                lines.append("ds18_report_time: 2.0")
+            else:
+                # Thermistor types (Generic 3950, NTC 100K beta 3950, PT1000)
+                lines.append(f"sensor_type: {sensor_type}")
+                sensor_pin = sensor.get('sensor_pin', '')
+                if sensor_pin:
+                    lines.append(f"sensor_pin: {sensor_pin}")
+                pullup = sensor.get('pullup_resistor', '')
+                if pullup and str(pullup).lower() != 'none':
+                    lines.append(f"pullup_resistor: {pullup}")
+
+            lines.append("min_temp: 0")
+            lines.append("max_temp: 100")
+            lines.append("")
+
     return "\n".join(lines)
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -207,10 +207,10 @@ class GschpooziWizard:
                 )
             else:
                 error = result.stderr or result.stdout or "Unknown error"
-                self.ui.msgbox(
-                    f"Generator failed:\n\n{error[:500]}",
-                    title="Error"
-                )
+                error_text = f"Generator failed:\n\n{error[:500]}"
+                line_count = error_text.count('\n') + 3
+                height = min(20, max(10, line_count))
+                self.ui.msgbox(error_text, title="Error", height=height)
 
         except subprocess.TimeoutExpired:
             self.ui.msgbox("Generator timed out", title="Error")

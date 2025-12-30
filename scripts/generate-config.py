@@ -29,13 +29,37 @@ PROFILES_DIR = TEMPLATES_DIR / "profiles"
 
 HARDWARE_STATE_FILE = REPO_ROOT / ".hardware-state.json"
 WIZARD_STATE_FILE = REPO_ROOT / ".wizard-state"
+# New wizard state location (preferred)
+GSCHPOOZI_STATE_FILE = Path.home() / "printer_data" / "config" / ".gschpoozi_state.json"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STATE LOADING
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def load_gschpoozi_state() -> Optional[Dict]:
+    """Load state from new wizard format (.gschpoozi_state.json)."""
+    if GSCHPOOZI_STATE_FILE.exists():
+        with open(GSCHPOOZI_STATE_FILE) as f:
+            return json.load(f)
+    return None
+
 def load_hardware_state() -> Dict:
-    """Load hardware state from JSON."""
+    """Load hardware state from JSON (legacy or extracted from wizard state)."""
+    # Try new wizard state first
+    gschpoozi_state = load_gschpoozi_state()
+    if gschpoozi_state:
+        config = gschpoozi_state.get('config', {})
+        mcu = config.get('mcu', {})
+        main = mcu.get('main', {})
+        # Extract board_id from new format
+        if main.get('board_type'):
+            return {
+                'board_id': main.get('board_type'),
+                'serial': main.get('serial'),
+                'connection_type': main.get('connection_type'),
+                'toolboard': mcu.get('toolboard', {}),
+            }
+    # Fallback to legacy file
     if HARDWARE_STATE_FILE.exists():
         with open(HARDWARE_STATE_FILE) as f:
             return json.load(f)
@@ -52,7 +76,12 @@ def load_profile(profile_id: str) -> Optional[Dict]:
     return None
 
 def load_wizard_state() -> Dict:
-    """Load wizard state from key=value file."""
+    """Load wizard state (new JSON format or legacy key=value)."""
+    # Try new wizard state first
+    gschpoozi_state = load_gschpoozi_state()
+    if gschpoozi_state:
+        return gschpoozi_state.get('config', {})
+    # Fallback to legacy file
     state = {}
     if WIZARD_STATE_FILE.exists():
         with open(WIZARD_STATE_FILE) as f:

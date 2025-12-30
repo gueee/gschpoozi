@@ -12,6 +12,7 @@ Complete guide to configuring your 3D printer with the gschpoozi wizard.
 - [Motion Configuration](#motion-configuration)
 - [Components Configuration](#components-configuration)
 - [Generated Config Files](#generated-config-files)
+- [TMC Chopper Tuning](#tmc-chopper-tuning)
 - [After Configuration](#after-configuration)
 - [Safety Checklist](#safety-checklist)
 - [Troubleshooting](#troubleshooting)
@@ -635,6 +636,106 @@ END_PRINT
 | `MATERIAL` | string | PLA | Filament type for tuning |
 | `MESH` | string | config | Mesh mode override: adaptive/full/saved/none |
 | `PURGE` | string | config | Purge style override: line/blob/adaptive/none |
+
+---
+
+## TMC Chopper Tuning
+
+If you have TMC5160 or TMC2240 drivers and an accelerometer configured, gschpoozi can generate macros to automatically tune your chopper parameters for reduced vibration.
+
+### What It Does
+
+TMC chopper tuning helps eliminate mid-range resonance and vibration by finding optimal values for:
+- **TPFD** - Passive Fast Decay (most impactful for mid-range resonance)
+- **TBL** - Comparator Blanking Time
+- **TOFF** - Off Time (affects chopper frequency)
+- **HSTRT/HEND** - Hysteresis parameters
+
+This is especially useful for:
+- High-voltage setups (48V)
+- High-performance motors (LDO, Moons, etc.)
+- Printers experiencing vibration at specific speeds (typically 45-100mm/s)
+
+### Requirements
+
+1. **TMC5160 or TMC2240 drivers** on X and/or Y axes
+2. **Accelerometer configured** (ADXL345, Beacon, Cartographer, etc.)
+3. **gcode_shell_command extension** installed in Klipper
+
+### Enabling Chopper Tuning
+
+In the wizard, navigate to **Tuning & Optimization > TMC Chopper Tuning** and:
+1. Enable chopper tuning macros
+2. Select safety level (high recommended for first run)
+3. Optionally configure DIAG0 pins for hardware stall detection
+
+### Usage
+
+After configuration and config generation:
+
+```gcode
+# Full auto-tune (recommended first run)
+TMC_CHOPPER_TUNE STEPPER=stepper_x
+
+# Find problem speeds only (diagnostic)
+TMC_CHOPPER_TUNE STEPPER=stepper_x MODE=find_resonance
+
+# Optimize at known problem speeds
+TMC_CHOPPER_TUNE STEPPER=stepper_x MODE=optimize SPEEDS="45,90"
+
+# Test specific parameters
+TMC_CHOPPER_TUNE STEPPER=stepper_x MODE=test TPFD=8 TBL=2 TOFF=3
+
+# For AWD setups (tests motor pairs separately)
+TMC_CHOPPER_TUNE_AWD PAIR=ALL
+
+# Analyze results and get recommendations
+CHOPPER_ANALYZE
+```
+
+### Understanding Results
+
+After running `CHOPPER_ANALYZE`, results are saved to:
+```
+~/printer_data/config/chopper_results/
+  - chopper_results.json      # Machine-readable data
+  - chopper_x_comparison.png  # Visual comparison graph
+  - chopper_x_config.txt      # Recommended config snippet
+```
+
+The config snippet shows the optimal parameters to add to your TMC driver section:
+```ini
+[tmc5160 stepper_x]
+driver_tpfd: 8
+driver_tbl: 2
+driver_toff: 3
+driver_hstrt: 5
+driver_hend: 3
+```
+
+### Safety Features
+
+The chopper tuning system includes several safety measures:
+
+| Feature | Description |
+|---------|-------------|
+| **Velocity limits** | Reduces max velocity/accel during testing (50%/70%/90% based on safety level) |
+| **Driver status checks** | Monitors for overtemperature, open loads, shorts |
+| **DIAG0 stall detection** | Optional hardware-level stall monitoring (if DIAG0 pins configured) |
+| **AWD pair isolation** | For AWD setups, tests one motor pair at a time to prevent fighting |
+
+### Installing gcode_shell_command
+
+The chopper analyzer requires the `gcode_shell_command` Klipper extension:
+
+```bash
+cd ~/klipper
+git clone https://github.com/dw-0/kiauh-plugins.git
+cp kiauh-plugins/gcode_shell_command.py ~/klipper/klippy/extras/
+sudo systemctl restart klipper
+```
+
+Or via KIAUH: Extensions > gcode_shell_command
 
 ---
 

@@ -657,9 +657,9 @@
           "id": "tmc_chopper",
           "label": "4.3 TMC Chopper Tuning",
           "section": "chopper_tuning",
-          "description": "Install chopper tuning macro framework",
+          "description": "Auto-tune TMC5160/TMC2240 chopper settings using accelerometer data",
           "status_key": "tuning.chopper_tuning_enabled",
-          "condition": "stepper_x.driver_type in ['TMC5160', 'TMC2240', 'TMC2209'] or stepper_y.driver_type in ['TMC5160', 'TMC2240', 'TMC2209']"
+          "condition": "input_shaper.accel_chip != 'none' and (stepper_x.driver_type in ['TMC5160', 'TMC2240'] or stepper_y.driver_type in ['TMC5160', 'TMC2240'])"
         },
         {
           "id": "tmc_autotune",
@@ -3764,15 +3764,45 @@
       "id": "chopper_tuning",
       "title": "4.3 TMC Chopper Tuning",
       "state_prefix": "tuning",
-      "help": "Install macro framework to find optimal TMC chopper parameters. Run CHOPPER_TUNE after installation.",
+      "help": "Auto-tune TMC5160/TMC2240 chopper parameters using accelerometer vibration data. Requires an accelerometer configured in Input Shaper section.",
       "fields": [
         {
           "id": "chopper_tuning_enabled",
           "type": "bool",
-          "label": "Install Chopper Tuning Macros",
+          "label": "Enable Chopper Tuning Macros",
           "state_key": "tuning.chopper_tuning_enabled",
           "default": false,
-          "help": "Install CHOPPER_TUNE macro framework for finding optimal TPFD/TBL/TOFF/HSTRT/HEND values"
+          "help": "Generate TMC_CHOPPER_TUNE macro for finding optimal TPFD/TBL/TOFF/HSTRT/HEND values"
+        },
+        {
+          "id": "chopper_safety_level",
+          "type": "choice",
+          "label": "Safety Level",
+          "state_key": "tuning.chopper_safety_level",
+          "options": [
+            { "value": "high", "label": "High (50% velocity limits)" },
+            { "value": "medium", "label": "Medium (70% velocity limits)" },
+            { "value": "low", "label": "Low (90% velocity limits)" }
+          ],
+          "default": "high",
+          "condition": "tuning.chopper_tuning_enabled",
+          "help": "Velocity/acceleration limits applied during tuning to reduce risk"
+        },
+        {
+          "id": "chopper_diag0_pin_x",
+          "type": "text",
+          "label": "DIAG0 Pin (stepper_x)",
+          "state_key": "tuning.chopper_diag0_pin_x",
+          "condition": "tuning.chopper_tuning_enabled",
+          "help": "Optional - enables hardware stall detection during tuning (e.g., PG6 or ^!PG6)"
+        },
+        {
+          "id": "chopper_diag0_pin_y",
+          "type": "text",
+          "label": "DIAG0 Pin (stepper_y)",
+          "state_key": "tuning.chopper_diag0_pin_y",
+          "condition": "tuning.chopper_tuning_enabled",
+          "help": "Optional - enables hardware stall detection during tuning (e.g., PG9 or ^!PG9)"
         }
       ]
     },

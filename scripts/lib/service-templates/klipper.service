@@ -13,7 +13,6 @@ WantedBy=multi-user.target
 [Service]
 Type=simple
 User=%USER%
-RemainAfterExit=yes
 WorkingDirectory=%HOME%/klipper
 EnvironmentFile=%HOME%/printer_data/systemd/klipper.env
 ExecStart=%HOME%/klippy-env/bin/python %HOME%/klipper/klippy/klippy.py ${KLIPPER_ARGS}

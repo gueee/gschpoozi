@@ -12,7 +12,6 @@ WantedBy=multi-user.target
 [Service]
 Type=simple
 User=%USER%
-RemainAfterExit=yes
 WorkingDirectory=%HOME%/moonraker
 EnvironmentFile=%HOME%/printer_data/systemd/moonraker.env
 ExecStart=%HOME%/moonraker-env/bin/python %HOME%/moonraker/moonraker/moonraker.py ${MOONRAKER_ARGS}

@@ -82,6 +82,34 @@ class WizardState:
                         cleaned.append(fan)
                     fans["additional_fans"] = cleaned
 
+            # Fix out-of-range filament load/unload speeds (migration from old configs)
+            macros = cfg.get("macros")
+            if isinstance(macros, dict):
+                # load_speed: range 1-100, default 5
+                if macros.get("load_speed") is not None:
+                    try:
+                        val = int(macros["load_speed"])
+                        if val > 100:
+                            macros["load_speed"] = 30  # sensible default
+                    except (ValueError, TypeError):
+                        pass
+                # load_prime_speed: range 1-50, default 3
+                if macros.get("load_prime_speed") is not None:
+                    try:
+                        val = int(macros["load_prime_speed"])
+                        if val > 50:
+                            macros["load_prime_speed"] = 5  # sensible default
+                    except (ValueError, TypeError):
+                        pass
+                # unload_speed: range 1-100, default 25
+                if macros.get("unload_speed") is not None:
+                    try:
+                        val = int(macros["unload_speed"])
+                        if val > 100:
+                            macros["unload_speed"] = 50  # sensible default
+                    except (ValueError, TypeError):
+                        pass
+
     def save(self) -> None:
         """Save state to disk."""
         self._state["wizard"]["last_modified"] = datetime.now().isoformat()

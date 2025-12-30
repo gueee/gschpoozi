@@ -128,11 +128,11 @@ tmc_stall_monitor:
     gcode:
         {% set stepper = params.STEPPER|default("unknown") %}
         {% if printer["gcode_macro _ON_STALL_DETECTED"].tuning_active %}
-            M118 STALL DETECTED on {stepper} - aborting chopper test!
+            M118 STALL DETECTED on {{stepper}} - aborting chopper test!
             SET_GCODE_VARIABLE MACRO=_CHOPPER_TUNE_STATE VARIABLE=last_result VALUE='"STALL"'
             _CHOPPER_ABORT
         {% else %}
-            M118 WARNING: Stall detected on {stepper} during print
+            M118 WARNING: Stall detected on {{stepper}} during print
             PAUSE
         {% endif %}
 ```
@@ -172,8 +172,8 @@ chopper_safety_limits:
         # Apply reduced limits
         {% set safe_vel = (printer.toolhead.max_velocity * pct)|int %}
         {% set safe_accel = (printer.toolhead.max_accel * pct)|int %}
-        SET_VELOCITY_LIMIT VELOCITY={safe_vel} ACCEL={safe_accel}
-        M118 Chopper tuning: Limits set to {safe_vel}mm/s, {safe_accel}mm/s2 ({pct * 100}%)
+        SET_VELOCITY_LIMIT VELOCITY={{safe_vel}} ACCEL={{safe_accel}}
+        M118 Chopper tuning: Limits set to {{safe_vel}}mm/s, {{safe_accel}}mm/s2 ({{pct * 100}}%)
 
     [gcode_macro _CHOPPER_RESTORE_LIMITS]
     gcode:
@@ -225,7 +225,7 @@ chopper_tune_macro:
         {% endif %}
 
         # Apply safety limits
-        SET_GCODE_VARIABLE MACRO=_CHOPPER_SAFETY_LIMITS VARIABLE=safety_level VALUE='"{safety}"'
+        SET_GCODE_VARIABLE MACRO=_CHOPPER_SAFETY_LIMITS VARIABLE=safety_level VALUE='"{{safety}}"'
         _CHOPPER_SAFETY_LIMITS
 
         # Enable stall detection if available
@@ -280,7 +280,7 @@ chopper_find_resonance:
         {% set max_speed = params.MAX_SPEED|default(150)|int %}
         {% set step = params.STEP|default(10)|int %}
 
-        M118 Sweeping {min_speed} to {max_speed} mm/s in {step}mm/s increments
+        M118 Sweeping {{min_speed}} to {{max_speed}} mm/s in {{step}}mm/s increments
 
         # Determine axis from stepper name
         {% set axis = "X" if "x" in stepper else "Y" %}
@@ -289,11 +289,11 @@ chopper_find_resonance:
         ACCELEROMETER_MEASURE CHIP={{ accelerometer.chip_name }}
 
         {% for speed in range(min_speed, max_speed + 1, step) %}
-            M118 Testing {speed} mm/s...
+            M118 Testing {{speed}} mm/s...
             # Move back and forth at this speed
-            G1 {axis}{printer.toolhead.axis_maximum[axis|lower] / 2 + distance} F{speed * 60}
-            G1 {axis}{printer.toolhead.axis_maximum[axis|lower] / 2 - distance} F{speed * 60}
-            G1 {axis}{printer.toolhead.axis_maximum[axis|lower] / 2} F{speed * 60}
+            G1 {{axis}}{{printer.toolhead.axis_maximum[axis|lower] / 2 + distance}} F{{speed * 60}}
+            G1 {{axis}}{{printer.toolhead.axis_maximum[axis|lower] / 2 - distance}} F{{speed * 60}}
+            G1 {{axis}}{{printer.toolhead.axis_maximum[axis|lower] / 2}} F{{speed * 60}}
             G4 P200  # Brief pause between tests
         {% endfor %}
 
@@ -332,7 +332,7 @@ chopper_optimize:
         {% set hend_values = [2, 3, 4, 5] %}
 
         M118 Starting parameter optimization
-        M118 Target speeds: {speeds} mm/s
+        M118 Target speeds: {{speeds}} mm/s
 
         # Phase A: Find best TPFD
         M118 --- Phase A: TPFD optimization ---
@@ -380,14 +380,14 @@ chopper_optimize:
             ACCELEROMETER_MEASURE CHIP={{ accelerometer.chip_name }}
 
             # Execute test movement
-            G1 {axis}{printer.toolhead.axis_maximum[axis|lower] / 2 + distance} F{speed|int * 60}
-            G1 {axis}{printer.toolhead.axis_maximum[axis|lower] / 2 - distance} F{speed|int * 60}
-            G1 {axis}{printer.toolhead.axis_maximum[axis|lower] / 2} F{speed|int * 60}
+            G1 {{axis}}{{printer.toolhead.axis_maximum[axis|lower] / 2 + distance}} F{{speed|int * 60}}
+            G1 {{axis}}{{printer.toolhead.axis_maximum[axis|lower] / 2 - distance}} F{{speed|int * 60}}
+            G1 {{axis}}{{printer.toolhead.axis_maximum[axis|lower] / 2}} F{{speed|int * 60}}
 
-            ACCELEROMETER_MEASURE CHIP={{ accelerometer.chip_name }} NAME={test_name}_s{speed}
+            ACCELEROMETER_MEASURE CHIP={{ accelerometer.chip_name }} NAME={{test_name}}_s{{speed}}
         {% endfor %}
 
-        M118 Tested: TPFD={tpfd} TBL={tbl} TOFF={toff} HSTRT={hstrt} HEND={hend}
+        M118 Tested: TPFD={{tpfd}} TBL={{tbl}} TOFF={{toff}} HSTRT={{hstrt}} HEND={{hend}}
 ```
 
 #### 3.4 Helper Macros
@@ -402,9 +402,9 @@ chopper_helpers:
         {% set y_center = printer.toolhead.axis_maximum.y / 2 %}
         {% set z_safe = 50 %}
 
-        G0 Z{z_safe} F1200
-        G0 X{x_center} Y{y_center} F6000
-        M118 At safe position: X{x_center} Y{y_center} Z{z_safe}
+        G0 Z{{z_safe}} F1200
+        G0 X{{x_center}} Y{{y_center}} F6000
+        M118 At safe position: X{{x_center}} Y{{y_center}} Z{{z_safe}}
 
     [gcode_macro _CHOPPER_CHECK_DRIVER]
     description: Check TMC driver for errors

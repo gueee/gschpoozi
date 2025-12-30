@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # gschpoozi Configuration Wizard - Bootstrap
-# 
+#
 # This script checks dependencies and launches the Python wizard.
 # https://github.com/gm-tc-collaborators/gschpoozi
 #
@@ -121,16 +121,16 @@ show_version() {
 
 check_dependencies() {
     local errors=0
-    
+
     echo "Checking dependencies..."
     echo ""
-    
+
     check_python || ((errors++))
     check_whiptail || ((errors++))
     check_wizard_files || ((errors++))
-    
+
     echo ""
-    
+
     if [[ $errors -gt 0 ]]; then
         print_error "${errors} dependency check(s) failed"
         return 1
@@ -193,21 +193,21 @@ main() {
             exit $?
             ;;
     esac
-    
+
     # Show header
     print_header
-    
+
     # Check dependencies
     if ! check_dependencies; then
         echo ""
         print_error "Please resolve the issues above and try again."
         exit 1
     fi
-    
+
     echo ""
     echo "Starting wizard..."
     echo ""
-    
+
     # Launch Python wizard
     cd "${REPO_ROOT}"
 

@@ -1991,6 +1991,7 @@
       "title": "Stepper Z1 Configuration",
       "state_prefix": "stepper_z1",
       "klipper_section": "[stepper_z1]",
+      "condition": "stepper_z.z_motor_count >= 2",
       "fields": [
         {
           "id": "motor_port",
@@ -2046,6 +2047,7 @@
       "title": "Stepper Z2 Configuration",
       "state_prefix": "stepper_z2",
       "klipper_section": "[stepper_z2]",
+      "condition": "stepper_z.z_motor_count >= 3",
       "fields": [
         {
           "id": "motor_port",
@@ -2101,6 +2103,7 @@
       "title": "Stepper Z3 Configuration",
       "state_prefix": "stepper_z3",
       "klipper_section": "[stepper_z3]",
+      "condition": "stepper_z.z_motor_count >= 4",
       "fields": [
         {
           "id": "motor_port",
@@ -4531,7 +4534,7 @@
           "label": "Load Speed (mm/s)",
           "state_key": "macros.load_speed",
           "default": 5,
-          "range": [1, 20],
+          "range": [1, 100],
           "help": "Speed for loading filament (5-10 typical)"
         },
         {
@@ -4549,7 +4552,7 @@
           "label": "Load Prime Speed (mm/s)",
           "state_key": "macros.load_prime_speed",
           "default": 3,
-          "range": [1, 10],
+          "range": [1, 50],
           "help": "Speed for priming after load (slower for clean prime)"
         },
         {
@@ -4576,7 +4579,7 @@
           "label": "Unload Speed (mm/s)",
           "state_key": "macros.unload_speed",
           "default": 25,
-          "range": [5, 50],
+          "range": [1, 100],
           "help": "Speed for unloading filament (can be faster than load)"
         },
         {
@@ -4698,6 +4701,12 @@
         "type": "error",
         "condition": "(extruder.location == 'toolboard' or fans.part_cooling.location == 'toolboard') and not mcu.toolboard.enabled",
         "message": "Toolboard features require a toolboard to be enabled."
+      },
+      {
+        "id": "tmc_autotune_motors_required",
+        "type": "error",
+        "condition": "tuning.tmc_autotune.enabled and (not tuning.tmc_autotune.motor_xy or not tuning.tmc_autotune.motor_z or not tuning.tmc_autotune.motor_extruder)",
+        "message": "TMC Autotune is enabled but motor selections are missing. Please select motors for XY, Z, and Extruder, or disable TMC Autotune."
       }
     ]
   },

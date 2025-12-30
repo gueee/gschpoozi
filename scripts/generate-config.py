@@ -3608,7 +3608,12 @@ def main():
 
     # Generate hardware.cfg (unless calibration-only or macros-only)
     if not args.calibration_only and not args.macros_only:
-        hardware_cfg = generate_hardware_cfg(wizard_state, hardware_state, board, toolboard)
+        try:
+            hardware_cfg = generate_hardware_cfg(wizard_state, hardware_state, board, toolboard)
+        except Exception as e:
+            import traceback
+            print(f"Error generating hardware.cfg:\n{traceback.format_exc()}", file=sys.stderr)
+            raise
 
         output_file = output_dir / "hardware.cfg"
         with open(output_file, 'w', encoding='utf-8') as f:

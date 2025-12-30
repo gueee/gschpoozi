@@ -232,17 +232,19 @@
 
     "field": {
       "type": "object",
-      "required": ["id", "type", "label", "state_key"],
+      "required": ["id", "type", "label"],
       "properties": {
         "id": { "type": "string" },
         "type": {
           "type": "string",
-          "enum": ["text", "int", "float", "bool", "choice", "exclusive_choice", "multi_select", "serial_select", "port_select", "board_select"]
+          "enum": ["text", "int", "float", "bool", "choice", "exclusive_choice", "multi_select", "serial_select", "can_select", "mcu_select", "port_select", "multi_port_select", "board_select", "action"]
         },
         "label": { "type": "string" },
         "state_key": { "type": "string" },
+        "action": { "type": "string" },
         "group": { "type": "string" },
         "source": { "type": "string" },
+        "grouped_by": { "type": "string" },
         "required": { "type": "boolean" },
         "default": {},
         "condition": { "type": "string" },

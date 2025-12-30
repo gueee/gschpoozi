@@ -171,8 +171,10 @@ class MenuEngine:
 
         # Auto-detect list sections and delegate
         if section.get('is_list'):
-            self.run_list_section(section_id)
-            return True
+            result = self.run_list_section(section_id)
+            # run_list_section returns 'back' when user presses back (normal completion)
+            # or None on error. Map 'back' to True (completed), None to False (error/cancelled)
+            return result == 'back'
 
         state_dict = self.state.get_all()
 
@@ -1074,7 +1076,8 @@ class MenuEngine:
                 # Use word boundary regex to avoid partial matches
                 pattern = r'\b' + re.escape(key) + r'\b'
                 if isinstance(value, str):
-                    expr = re.sub(pattern, f"'{value}'", expr)
+                    # Use repr() to properly escape quotes and special characters
+                    expr = re.sub(pattern, repr(value), expr)
                 elif value is None:
                     expr = re.sub(pattern, "None", expr)
                 elif isinstance(value, bool):

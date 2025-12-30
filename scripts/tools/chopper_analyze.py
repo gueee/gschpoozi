@@ -420,34 +420,45 @@ def generate_comparison_graph(result: dict, output_path: str) -> None:
 
 
 def generate_config_snippet(result: dict) -> str:
-    """Generate Klipper config snippet with recommended settings."""
+    """Generate Klipper config snippet with recommended settings.
+
+    Detects driver type from result dict or defaults to tmc5160.
+    Driver type should be stored in result['driver_type'] (e.g., 'TMC5160', 'TMC2240').
+    """
     if not result.get('recommendations'):
         return ""
 
     rec = result['recommendations']
     axis = result['axis'].lower()
+    stepper_name = f"stepper_{axis}"
 
-    snippet = f"""
-# ═══════════════════════════════════════════════════════════════════════════════
+    # Detect driver type from result, default to tmc5160
+    driver_type = result.get('driver_type', 'TMC5160').lower()
+    if driver_type not in ('tmc5160', 'tmc2240'):
+        driver_type = 'tmc5160'  # Default fallback
+
+    snippet = f"""# ═══════════════════════════════════════════════════════════════════════════════
 # TMC Chopper Tuning Results - {result['axis']} Axis
 # Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 # Vibration improvement: {rec.get('improvement', 0):.1f}%
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Add these to your [tmc5160 stepper_{axis}] or [tmc2240 stepper_{axis}] section:
-#
-# driver_tpfd: {rec.get('tpfd', 0)}
-# driver_tbl: {rec.get('tbl', 2)}
-# driver_toff: {rec.get('toff', 3)}
-# driver_hstrt: {rec.get('hstrt', 5)}
-# driver_hend: {rec.get('hend', 3)}
-#
-# Or use SET_TMC_FIELD to apply at runtime:
-# SET_TMC_FIELD STEPPER=stepper_{axis} FIELD=tpfd VALUE={rec.get('tpfd', 0)}
-# SET_TMC_FIELD STEPPER=stepper_{axis} FIELD=tbl VALUE={rec.get('tbl', 2)}
-# SET_TMC_FIELD STEPPER=stepper_{axis} FIELD=toff VALUE={rec.get('toff', 3)}
-# SET_TMC_FIELD STEPPER=stepper_{axis} FIELD=hstrt VALUE={rec.get('hstrt', 5)}
-# SET_TMC_FIELD STEPPER=stepper_{axis} FIELD=hend VALUE={rec.get('hend', 3)}
+# Copy these settings to your existing [{driver_type} {stepper_name}] section:
+# (Do not create a duplicate section - add these parameters to your existing one)
+
+[{driver_type} {stepper_name}]
+driver_tpfd: {rec.get('tpfd', 0)}
+driver_tbl: {rec.get('tbl', 2)}
+driver_toff: {rec.get('toff', 3)}
+driver_hstrt: {rec.get('hstrt', 5)}
+driver_hend: {rec.get('hend', 3)}
+
+# Alternative: Apply at runtime using SET_TMC_FIELD (no config restart needed):
+# SET_TMC_FIELD STEPPER={stepper_name} FIELD=tpfd VALUE={rec.get('tpfd', 0)}
+# SET_TMC_FIELD STEPPER={stepper_name} FIELD=tbl VALUE={rec.get('tbl', 2)}
+# SET_TMC_FIELD STEPPER={stepper_name} FIELD=toff VALUE={rec.get('toff', 3)}
+# SET_TMC_FIELD STEPPER={stepper_name} FIELD=hstrt VALUE={rec.get('hstrt', 5)}
+# SET_TMC_FIELD STEPPER={stepper_name} FIELD=hend VALUE={rec.get('hend', 3)}
 """
     return snippet
 

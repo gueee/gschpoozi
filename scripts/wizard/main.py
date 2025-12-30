@@ -361,7 +361,7 @@ class GschpooziWizard:
                         f.write(f"STDERR:\n{result.stderr}\n")
                 except Exception:
                     pass
-                
+
                 # Show first 1000 chars (increased from 500)
                 error_text = f"Generator failed:\n\n{error[:1000]}"
                 if len(error) > 1000:

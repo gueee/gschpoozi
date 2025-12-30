@@ -338,7 +338,7 @@ EOF
     return 0
 }
 
-# Create Moonraker environment file (matches official Moonraker installer format)
+# Create Moonraker environment file
 create_moonraker_env() {
     local env_file="${PRINTER_DATA}/systemd/moonraker.env"
 
@@ -349,8 +349,7 @@ create_moonraker_env() {
 
     status_msg "Creating Moonraker environment file..."
     cat > "$env_file" << EOF
-MOONRAKER_DATA_PATH="${PRINTER_DATA}"
-MOONRAKER_ARGS="-m moonraker"
+MOONRAKER_ARGS="-d ${PRINTER_DATA}"
 EOF
 
     ok_msg "Created $env_file"
@@ -763,9 +762,6 @@ do_install_moonraker() {
 
     # Ensure printer_data directories exist
     create_printer_data_dirs
-
-    # Create moonraker-admin group (required for polkit permissions)
-    create_moonraker_group
 
     # Create environment file
     create_moonraker_env

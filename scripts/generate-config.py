@@ -281,22 +281,47 @@ def generate_hardware_cfg(
 ) -> str:
     """Generate hardware.cfg content."""
 
+    # Support both old (hardware_state.port_assignments) and new (wizard_state.stepper_x.motor_port) formats
     assignments = hardware_state.get('port_assignments', {})
-    board_name = hardware_state.get('board_name', 'Unknown')
+    board_name = hardware_state.get('board_name', board.get('name', 'Unknown'))
+    
+    # Helper to get stepper config from new format
+    def get_stepper_config(stepper_name: str) -> Dict:
+        return wizard_state.get(stepper_name, {})
+    
+    # Helper to get port from new or old format
+    def get_stepper_port(stepper_name: str, default: str) -> str:
+        config = get_stepper_config(stepper_name)
+        return config.get('motor_port') or assignments.get(stepper_name, default)
+    
+    # Helper to get endstop from new or old format
+    def get_endstop_port(stepper_name: str, default: str = '') -> str:
+        config = get_stepper_config(stepper_name)
+        return config.get('endstop_port') or assignments.get(f'endstop_{stepper_name.split("_")[-1]}', default)
+    
+    # MCU config from new format
+    mcu_config = wizard_state.get('mcu', {})
+    main_mcu = mcu_config.get('main', {})
+    toolboard_mcu = mcu_config.get('toolboard', {})
 
     # Load motor mapping for direction inversion settings
     motor_mapping = load_motor_mapping()
 
-    # Get values from wizard state
-    kinematics = wizard_state.get('kinematics', 'corexy')
-    bed_x = wizard_state.get('bed_size_x', '300')
-    bed_y = wizard_state.get('bed_size_y', '300')
-    bed_z = wizard_state.get('bed_size_z', '350')
-    z_count = int(wizard_state.get('z_stepper_count', '1'))
-    hotend_therm = wizard_state.get('hotend_thermistor', 'Generic 3950')
-    hotend_pullup = wizard_state.get('hotend_pullup_resistor', '')
-    bed_therm = wizard_state.get('bed_thermistor', 'Generic 3950')
-    bed_pullup = wizard_state.get('bed_pullup_resistor', '')
+    # Get values from wizard state - support both old and new formats
+    printer_config = wizard_state.get('printer', {})
+    stepper_z_config = wizard_state.get('stepper_z', {})
+    extruder_cfg = wizard_state.get('extruder', {})
+    heater_bed_cfg = wizard_state.get('heater_bed', {})
+    
+    kinematics = printer_config.get('kinematics') or wizard_state.get('kinematics', 'corexy')
+    bed_x = printer_config.get('bed_size_x') or wizard_state.get('bed_size_x', '300')
+    bed_y = printer_config.get('bed_size_y') or wizard_state.get('bed_size_y', '300')
+    bed_z = printer_config.get('bed_size_z') or wizard_state.get('bed_size_z', '350')
+    z_count = int(stepper_z_config.get('z_motor_count') or wizard_state.get('z_stepper_count', '1'))
+    hotend_therm = extruder_cfg.get('sensor_type') or wizard_state.get('hotend_thermistor', 'Generic 3950')
+    hotend_pullup = extruder_cfg.get('pullup_resistor') or wizard_state.get('hotend_pullup_resistor', '')
+    bed_therm = heater_bed_cfg.get('sensor_type') or wizard_state.get('bed_thermistor', 'Generic 3950')
+    bed_pullup = heater_bed_cfg.get('pullup_resistor') or wizard_state.get('bed_pullup_resistor', '')
 
     # Get per-axis stepper settings (step angle, microsteps, rotation distance)
     # Use 'or' to handle empty strings in wizard state
@@ -338,8 +363,8 @@ def generate_hardware_cfg(
     lines.append("# " + "─" * 77)
     lines.append("[mcu]")
 
-    # MCU serial - check wizard_state first, then hardware_state
-    mcu_serial = wizard_state.get('mcu_serial') or hardware_state.get('mcu_serial')
+    # MCU serial - new format: mcu.main.serial, old format: wizard_state.mcu_serial
+    mcu_serial = main_mcu.get('serial') or wizard_state.get('mcu_serial') or hardware_state.get('mcu_serial')
     if mcu_serial:
         lines.append(f"serial: {mcu_serial}")
     else:
@@ -350,22 +375,23 @@ def generate_hardware_cfg(
 
     # Toolboard MCU if present
     if toolboard:
-        tb_name = hardware_state.get('toolboard_name', 'Toolboard')
-        # Get toolboard connection from wizard/hardware state first, fallback to board definition
-        tb_connection = (wizard_state.get('toolboard_connection') or
+        tb_name = toolboard_mcu.get('board_type') or hardware_state.get('toolboard_name', 'Toolboard')
+        # Get toolboard connection from new format first, then old format, then board definition
+        tb_connection = (toolboard_mcu.get('connection_type') or 
+                        wizard_state.get('toolboard_connection') or
                         hardware_state.get('toolboard_connection') or
                         toolboard.get('connection', 'USB')).upper()
         lines.append(f"[mcu toolboard]")
 
         if tb_connection == 'CAN':
-            canbus_uuid = wizard_state.get('toolboard_canbus_uuid') or hardware_state.get('toolboard_canbus_uuid')
+            canbus_uuid = toolboard_mcu.get('canbus_uuid') or wizard_state.get('toolboard_canbus_uuid') or hardware_state.get('toolboard_canbus_uuid')
             if canbus_uuid:
                 lines.append(f"canbus_uuid: {canbus_uuid}")
             else:
                 lines.append("canbus_uuid: SET_YOUR_CANBUS_UUID_HERE")
                 lines.append("# ^^^ Run: ~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0")
         else:
-            tb_serial = wizard_state.get('toolboard_serial') or hardware_state.get('toolboard_serial')
+            tb_serial = toolboard_mcu.get('serial') or wizard_state.get('toolboard_serial') or hardware_state.get('toolboard_serial')
             if tb_serial:
                 lines.append(f"serial: {tb_serial}")
             else:
@@ -394,7 +420,7 @@ def generate_hardware_cfg(
     lines.append("# STEPPERS")
     lines.append("# " + "─" * 77)
 
-    x_port = assignments.get('stepper_x', 'MOTOR_0')
+    x_port = get_stepper_port('stepper_x', 'MOTOR_0')
     x_pins = get_motor_pins(board, x_port)
     validate_motor_pins(x_pins, 'stepper_x', x_port)
     x_dir_pin = apply_dir_invert(x_pins['dir_pin'], 'stepper_x', motor_mapping, hardware_state)
@@ -409,14 +435,17 @@ def generate_hardware_cfg(
 
     # Endstop - check for toolboard, sensorless, or physical on mainboard
     tb_assignments = hardware_state.get('toolboard_assignments', {}) if toolboard else {}
-    x_endstop_tb = tb_assignments.get('endstop_x', '')
-    x_endstop = assignments.get('endstop_x', '')
+    stepper_x_config = get_stepper_config('stepper_x')
+    x_endstop_location = stepper_x_config.get('endstop_location') or stepper_x_config.get('endstop_source', '')
+    x_endstop_tb = stepper_x_config.get('endstop_port_toolboard') or tb_assignments.get('endstop_x', '')
+    x_endstop = stepper_x_config.get('endstop_port') or assignments.get('endstop_x', '')
 
-    if x_endstop_tb and x_endstop_tb not in ('', 'none'):
+    x_endstop_type = stepper_x_config.get('endstop_type', '')
+    if x_endstop_location == 'toolboard' and x_endstop_tb and x_endstop_tb not in ('', 'none'):
         # X endstop on toolboard
         endstop_pin = get_endstop_pin(toolboard, x_endstop_tb)
         lines.append(f"endstop_pin: ^toolboard:{endstop_pin}  # {x_endstop_tb} on toolboard")
-    elif x_endstop == 'sensorless':
+    elif x_endstop_type == 'sensorless' or x_endstop == 'sensorless':
         lines.append(f"endstop_pin: tmc2209_stepper_x:virtual_endstop  # Sensorless homing")
     elif x_endstop:
         endstop_pin = get_endstop_pin(board, x_endstop)
@@ -440,7 +469,7 @@ def generate_hardware_cfg(
     lines.append("")
 
     # Stepper Y
-    y_port = assignments.get('stepper_y', 'MOTOR_1')
+    y_port = get_stepper_port('stepper_y', 'MOTOR_1')
     y_pins = get_motor_pins(board, y_port)
     validate_motor_pins(y_pins, 'stepper_y', y_port)
     y_dir_pin = apply_dir_invert(y_pins['dir_pin'], 'stepper_y', motor_mapping, hardware_state)
@@ -453,8 +482,10 @@ def generate_hardware_cfg(
     if y_full_steps != '200':
         lines.append(f"full_steps_per_rotation: {y_full_steps}  # 0.9° stepper")
 
-    y_endstop = assignments.get('endstop_y', '')
-    if y_endstop == 'sensorless':
+    stepper_y_config = get_stepper_config('stepper_y')
+    y_endstop_type = stepper_y_config.get('endstop_type', '')
+    y_endstop = stepper_y_config.get('endstop_port') or assignments.get('endstop_y', '')
+    if y_endstop_type == 'sensorless' or y_endstop == 'sensorless':
         lines.append(f"endstop_pin: tmc2209_stepper_y:virtual_endstop  # Sensorless homing")
     elif y_endstop:
         endstop_pin = get_endstop_pin(board, y_endstop)
@@ -479,7 +510,7 @@ def generate_hardware_cfg(
 
     # AWD: Add X1 and Y1 steppers
     if kinematics == 'corexy-awd':
-        x1_port = assignments.get('stepper_x1', 'MOTOR_2')
+        x1_port = get_stepper_port('stepper_x1', 'MOTOR_2')
         x1_pins = get_motor_pins(board, x1_port)
         validate_motor_pins(x1_pins, 'stepper_x1', x1_port)
         x1_dir_pin = apply_dir_invert(x1_pins['dir_pin'], 'stepper_x1', motor_mapping, hardware_state)
@@ -493,7 +524,7 @@ def generate_hardware_cfg(
             lines.append(f"full_steps_per_rotation: {x_full_steps}  # 0.9° stepper")
         lines.append("")
 
-        y1_port = assignments.get('stepper_y1', 'MOTOR_3')
+        y1_port = get_stepper_port('stepper_y1', 'MOTOR_3')
         y1_pins = get_motor_pins(board, y1_port)
         validate_motor_pins(y1_pins, 'stepper_y1', y1_port)
         y1_dir_pin = apply_dir_invert(y1_pins['dir_pin'], 'stepper_y1', motor_mapping, hardware_state)
@@ -511,7 +542,7 @@ def generate_hardware_cfg(
     for z_idx in range(z_count):
         suffix = "" if z_idx == 0 else str(z_idx)
         z_key = f"stepper_z{suffix}" if suffix else "stepper_z"
-        z_port = assignments.get(z_key, f'MOTOR_{2 + z_idx}')
+        z_port = get_stepper_port(z_key, f'MOTOR_{2 + z_idx}')
         z_pins = get_motor_pins(board, z_port)
         validate_motor_pins(z_pins, z_key, z_port)
         z_dir_pin = apply_dir_invert(z_pins['dir_pin'], z_key, motor_mapping, hardware_state)
@@ -547,7 +578,8 @@ def generate_hardware_cfg(
                 lines.append("homing_retract_dist: 5")
             elif probe_type == 'endstop':
                 # Physical Z endstop - check for assignment
-                z_endstop = assignments.get('endstop_z', '')
+                stepper_z_config = get_stepper_config('stepper_z')
+                z_endstop = stepper_z_config.get('endstop_port') or assignments.get('endstop_z', '')
                 if z_endstop:
                     z_endstop_pin = get_endstop_pin(board, z_endstop)
                     lines.append(f"endstop_pin: ^{z_endstop_pin}  # {z_endstop}")
@@ -619,22 +651,22 @@ def generate_hardware_cfg(
 
     # Stepper Y TMC
     driver_y_type = wizard_state.get('driver_Y', default_driver)
-    y_port = assignments.get('stepper_y', 'MOTOR_1')
-    y_pins_tmc = get_motor_pins(board, y_port)
+    y_port_tmc = get_stepper_port('stepper_y', 'MOTOR_1')
+    y_pins_tmc = get_motor_pins(board, y_port_tmc)
     if driver_y_type and (y_pins_tmc.get('uart_pin') or y_pins_tmc.get('cs_pin')):
         lines.extend(generate_tmc_section('stepper_y', driver_y_type, y_pins_tmc))
 
     # AWD: X1 and Y1 TMC
     if kinematics == 'corexy-awd':
         driver_x1_type = wizard_state.get('driver_X1', default_driver)
-        x1_port = assignments.get('stepper_x1', 'MOTOR_2')
-        x1_pins_tmc = get_motor_pins(board, x1_port)
+        x1_port_tmc = get_stepper_port('stepper_x1', 'MOTOR_2')
+        x1_pins_tmc = get_motor_pins(board, x1_port_tmc)
         if driver_x1_type and (x1_pins_tmc.get('uart_pin') or x1_pins_tmc.get('cs_pin')):
             lines.extend(generate_tmc_section('stepper_x1', driver_x1_type, x1_pins_tmc))
 
         driver_y1_type = wizard_state.get('driver_Y1', default_driver)
-        y1_port = assignments.get('stepper_y1', 'MOTOR_3')
-        y1_pins_tmc = get_motor_pins(board, y1_port)
+        y1_port_tmc = get_stepper_port('stepper_y1', 'MOTOR_3')
+        y1_pins_tmc = get_motor_pins(board, y1_port_tmc)
         if driver_y1_type and (y1_pins_tmc.get('uart_pin') or y1_pins_tmc.get('cs_pin')):
             lines.extend(generate_tmc_section('stepper_y1', driver_y1_type, y1_pins_tmc))
 
@@ -645,22 +677,24 @@ def generate_hardware_cfg(
         driver_key = f"driver_Z{suffix}" if suffix else "driver_Z"
         driver_z_type = wizard_state.get(driver_key, default_driver)
         z_port_name = f"stepper_z{suffix}" if suffix else "stepper_z"
-        z_port_tmc = assignments.get(z_port_name, f'MOTOR_{4 + z_idx}')
+        z_port_tmc = get_stepper_port(z_port_name, f'MOTOR_{4 + z_idx}')
         z_pins_tmc = get_motor_pins(board, z_port_tmc)
         if driver_z_type and (z_pins_tmc.get('uart_pin') or z_pins_tmc.get('cs_pin')):
             lines.extend(generate_tmc_section(stepper_name, driver_z_type, z_pins_tmc, "0.8"))
 
     # Extruder TMC (on mainboard or toolboard)
     driver_e_type = wizard_state.get('driver_E', default_driver)
+    extruder_config_tmc = wizard_state.get('extruder', {})
+    extruder_motor_loc = extruder_config_tmc.get('motor_location') or extruder_config_tmc.get('location', '')
     tb_extruder = hardware_state.get('toolboard_assignments', {}).get('extruder', '') if toolboard else ''
-    extruder_on_tb = toolboard and tb_extruder not in ('', 'none')
+    extruder_on_tb = toolboard and (extruder_motor_loc == 'toolboard' or tb_extruder not in ('', 'none'))
     if extruder_on_tb:
-        e_port_tmc = hardware_state.get('toolboard_assignments', {}).get('extruder', 'EXTRUDER')
+        e_port_tmc = extruder_config_tmc.get('motor_port_toolboard') or extruder_config_tmc.get('motor_port') or hardware_state.get('toolboard_assignments', {}).get('extruder', 'EXTRUDER')
         e_pins_tmc = get_motor_pins(toolboard, e_port_tmc)
         if driver_e_type and (e_pins_tmc.get('uart_pin') or e_pins_tmc.get('cs_pin')):
             lines.extend(generate_tmc_section('extruder', driver_e_type, e_pins_tmc, "0.5", "toolboard"))
     else:
-        e_port_tmc = assignments.get('extruder', 'MOTOR_5')
+        e_port_tmc = extruder_config_tmc.get('motor_port') or assignments.get('extruder', 'MOTOR_5')
         e_pins_tmc = get_motor_pins(board, e_port_tmc)
         if driver_e_type and (e_pins_tmc.get('uart_pin') or e_pins_tmc.get('cs_pin')):
             lines.extend(generate_tmc_section('extruder', driver_e_type, e_pins_tmc, "0.5"))

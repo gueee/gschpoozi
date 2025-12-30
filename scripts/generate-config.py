@@ -273,6 +273,22 @@ def apply_dir_invert(dir_pin: str, stepper_name: str, motor_mapping: Dict, hardw
     return dir_pin
 
 
+def get_probe_type_from_state(wizard_state: Dict) -> str:
+    """Get probe type from wizard state, handling nested and flat formats.
+
+    Checks in order:
+    1. wizard_state['probe']['probe_type'] (nested format)
+    2. wizard_state['probe.probe_type'] (flat dot notation)
+    3. wizard_state['probe_type'] (legacy format)
+    """
+    # Try nested format first: wizard_state['probe']['probe_type']
+    probe_config = wizard_state.get('probe', {})
+    if isinstance(probe_config, dict) and probe_config.get('probe_type'):
+        return probe_config.get('probe_type', '')
+    # Try flat format: wizard_state['probe.probe_type']
+    return wizard_state.get('probe.probe_type', '') or wizard_state.get('probe_type', '')
+
+
 def generate_hardware_cfg(
     wizard_state: Dict,
     hardware_state: Dict,
@@ -298,6 +314,20 @@ def generate_hardware_cfg(
     def get_endstop_port(stepper_name: str, default: str = '') -> str:
         config = get_stepper_config(stepper_name)
         return config.get('endstop_port') or assignments.get(f'endstop_{stepper_name.split("_")[-1]}', default)
+
+    # Helper to get probe config (uses global helper)
+    def get_probe_type() -> str:
+        return get_probe_type_from_state(wizard_state)
+
+    # Helper to get endstop pin prefix based on pullup setting
+    def get_endstop_prefix(stepper_name: str) -> str:
+        config = get_stepper_config(stepper_name)
+        # Default is True (pull-up enabled) per skeleton.json
+        pullup = config.get('endstop_pullup', True)
+        # Handle string 'true'/'false' values
+        if isinstance(pullup, str):
+            pullup = pullup.lower() == 'true'
+        return '^' if pullup else ''
 
     # MCU config from new format
     mcu_config = wizard_state.get('mcu', {})
@@ -441,15 +471,16 @@ def generate_hardware_cfg(
     x_endstop = stepper_x_config.get('endstop_port') or assignments.get('endstop_x', '')
 
     x_endstop_type = stepper_x_config.get('endstop_type', '')
+    x_pullup = get_endstop_prefix('stepper_x')
     if x_endstop_location == 'toolboard' and x_endstop_tb and x_endstop_tb not in ('', 'none'):
         # X endstop on toolboard
         endstop_pin = get_endstop_pin(toolboard, x_endstop_tb)
-        lines.append(f"endstop_pin: ^toolboard:{endstop_pin}  # {x_endstop_tb} on toolboard")
+        lines.append(f"endstop_pin: {x_pullup}toolboard:{endstop_pin}  # {x_endstop_tb} on toolboard")
     elif x_endstop_type == 'sensorless' or x_endstop == 'sensorless':
         lines.append(f"endstop_pin: tmc2209_stepper_x:virtual_endstop  # Sensorless homing")
     elif x_endstop:
         endstop_pin = get_endstop_pin(board, x_endstop)
-        lines.append(f"endstop_pin: ^{endstop_pin}  # {x_endstop}")
+        lines.append(f"endstop_pin: {x_pullup}{endstop_pin}  # {x_endstop}")
     # If no endstop assigned, Klipper will error - user must configure in Hardware Setup
 
     # Homing position - use configured values or defaults based on home direction
@@ -485,11 +516,12 @@ def generate_hardware_cfg(
     stepper_y_config = get_stepper_config('stepper_y')
     y_endstop_type = stepper_y_config.get('endstop_type', '')
     y_endstop = stepper_y_config.get('endstop_port') or assignments.get('endstop_y', '')
+    y_pullup = get_endstop_prefix('stepper_y')
     if y_endstop_type == 'sensorless' or y_endstop == 'sensorless':
         lines.append(f"endstop_pin: tmc2209_stepper_y:virtual_endstop  # Sensorless homing")
     elif y_endstop:
         endstop_pin = get_endstop_pin(board, y_endstop)
-        lines.append(f"endstop_pin: ^{endstop_pin}  # {y_endstop}")
+        lines.append(f"endstop_pin: {y_pullup}{endstop_pin}  # {y_endstop}")
     # If no endstop assigned, Klipper will error - user must configure in Hardware Setup
 
     # Homing position - use configured values or defaults based on home direction
@@ -560,31 +592,33 @@ def generate_hardware_cfg(
         if z_idx == 0:
             # Use correct virtual endstop based on probe type
             # All probes register as 'probe' chip, NOT their MCU name
-            probe_type = wizard_state.get('probe_type', '')
-            if probe_type == 'beacon':
-                # Beacon registers as 'probe' chip (NOT 'beacon' - that's the MCU)
-                lines.append("endstop_pin: probe:z_virtual_endstop")
-                lines.append("homing_retract_dist: 0  # Beacon requires this")
-            elif probe_type == 'cartographer':
-                # Cartographer registers as 'probe' chip
-                lines.append("endstop_pin: probe:z_virtual_endstop")
-                lines.append("homing_retract_dist: 0  # Cartographer requires this")
-            elif probe_type == 'btt-eddy':
-                # BTT Eddy registers as 'probe' chip
+            probe_type = get_probe_type()
+            stepper_z_cfg = get_stepper_config('stepper_z')
+            z_endstop_type = stepper_z_cfg.get('endstop_type', '')
+
+            if probe_type in ('beacon', 'cartographer', 'btt-eddy', 'btt_eddy'):
+                # Eddy current probes require homing_retract_dist: 0
                 lines.append("endstop_pin: probe:z_virtual_endstop")
                 lines.append("homing_retract_dist: 0  # Eddy probe requires this")
-            elif probe_type in ('bltouch', 'klicky', 'inductive'):
+            elif probe_type in ('bltouch', 'klicky', 'inductive', 'tap'):
+                # Contact/touch probes use virtual endstop with retract
                 lines.append("endstop_pin: probe:z_virtual_endstop")
                 lines.append("homing_retract_dist: 5")
-            elif probe_type == 'endstop':
+            elif probe_type == 'none' or z_endstop_type in ('physical_mainboard', 'physical_toolboard', 'physical'):
                 # Physical Z endstop - check for assignment
-                stepper_z_config = get_stepper_config('stepper_z')
-                z_endstop = stepper_z_config.get('endstop_port') or assignments.get('endstop_z', '')
+                z_endstop = stepper_z_cfg.get('endstop_port') or assignments.get('endstop_z', '')
+                z_pullup = get_endstop_prefix('stepper_z')
                 if z_endstop:
                     z_endstop_pin = get_endstop_pin(board, z_endstop)
-                    lines.append(f"endstop_pin: ^{z_endstop_pin}  # {z_endstop}")
-                # If no assignment, Klipper will error - user must configure
+                    lines.append(f"endstop_pin: {z_pullup}{z_endstop_pin}  # {z_endstop}")
+                else:
+                    # No Z endstop configured but probe_type is 'none' - provide placeholder
+                    lines.append("endstop_pin: # TODO: Configure Z endstop in wizard")
                 lines.append("position_endstop: 0  # Adjust after homing")
+                lines.append("homing_retract_dist: 5")
+            else:
+                # Unknown probe type but something is set - assume probe-based homing
+                lines.append("endstop_pin: probe:z_virtual_endstop")
                 lines.append("homing_retract_dist: 5")
             lines.append("position_min: -5")
             lines.append(f"position_max: {bed_z}")
@@ -1335,7 +1369,7 @@ def generate_hardware_cfg(
         lines.append("")
 
     # Probe configuration
-    probe_type = wizard_state.get('probe_type', '')
+    probe_type = get_probe_type_from_state(wizard_state)
     probe_mode = wizard_state.get('probe_mode', 'proximity')  # Default to proximity
     # Get probe serial/CAN - check wizard state first, then hardware state as fallback
     probe_serial = wizard_state.get('probe_serial') or hardware_state.get('probe_serial')
@@ -2896,7 +2930,7 @@ def generate_macros_config_cfg(wizard_state: Dict) -> str:
     bed_y = int(wizard_state.get('bed_size_y', '300'))
     bed_z = int(wizard_state.get('bed_size_z', '350'))
     z_count = int(wizard_state.get('z_stepper_count', '1'))
-    probe_type = wizard_state.get('probe_type', 'none')
+    probe_type = get_probe_type_from_state(wizard_state) or 'none'
 
     # Determine leveling method
     leveling_method = "none"
@@ -3065,7 +3099,7 @@ def generate_macros_cfg(wizard_state: Dict) -> str:
     # Get configuration from wizard state
     bed_x = int(wizard_state.get('bed_size_x', '300'))
     bed_y = int(wizard_state.get('bed_size_y', '300'))
-    probe_type = wizard_state.get('probe_type', 'none')
+    probe_type = get_probe_type_from_state(wizard_state) or 'none'
     z_count = int(wizard_state.get('z_stepper_count', '1'))
 
     lines = []

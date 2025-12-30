@@ -673,7 +673,7 @@ class SkeletonValidator:
                     errors.append(result.message)
 
         return {
-            'valid': len(errors) == 0,
+            'valid': len(errors) == 0 and len(incomplete_sections) == 0,
             'errors': errors,
             'warnings': warnings,
             'incomplete_sections': incomplete_sections

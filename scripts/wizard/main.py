@@ -129,13 +129,14 @@ class GschpooziWizard:
 
         if not result['valid']:
             error_text = "Cannot generate config - please fix these issues:\n\n"
-            
+
             # Show field validation errors
-            for e in result['errors'][:5]:  # Limit to 5 errors
-                error_text += f"- {e}\n"
-            if len(result['errors']) > 5:
-                error_text += f"\n...and {len(result['errors']) - 5} more errors"
-            
+            if result['errors']:
+                for e in result['errors'][:5]:  # Limit to 5 errors
+                    error_text += f"- {e}\n"
+                if len(result['errors']) > 5:
+                    error_text += f"\n...and {len(result['errors']) - 5} more errors"
+
             # Show incomplete sections if no field errors (or in addition)
             if result['incomplete_sections']:
                 if result['errors']:
@@ -145,11 +146,12 @@ class GschpooziWizard:
                     error_text += f"- {section}\n"
                 if len(result['incomplete_sections']) > 5:
                     error_text += f"\n...and {len(result['incomplete_sections']) - 5} more sections"
-            
-            # If still empty, show generic message
+
+            # If still empty, show generic message with debug info
             if not result['errors'] and not result['incomplete_sections']:
-                error_text += "Unknown validation error. Please check your configuration."
-            
+                error_text += "Unknown validation error.\n"
+                error_text += f"Debug: valid={result['valid']}, errors={len(result['errors'])}, incomplete={len(result['incomplete_sections'])}"
+
             self.ui.msgbox(error_text, title="Validation Failed")
             return
 

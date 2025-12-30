@@ -99,7 +99,7 @@
         "description": { "type": "string" },
         "ui_widget": {
           "type": "string",
-          "enum": ["inputbox", "yesno", "radiolist", "checklist", "serial_picker", "port_picker", "board_picker"]
+          "enum": ["inputbox", "yesno", "radiolist", "checklist", "serial_picker", "can_picker", "mcu_picker", "port_picker", "multi_port_picker", "board_picker", "action_button"]
         },
         "validation": { "type": "string" }
       }

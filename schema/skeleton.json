@@ -49,6 +49,22 @@
     "board_select": {
       "description": "Board selection from templates",
       "ui_widget": "board_picker"
+    },
+    "can_select": {
+      "description": "CAN device with auto-detection",
+      "ui_widget": "can_picker"
+    },
+    "mcu_select": {
+      "description": "MCU device selection (USB or CAN)",
+      "ui_widget": "mcu_picker"
+    },
+    "multi_port_select": {
+      "description": "Multiple port selection with conflict detection",
+      "ui_widget": "multi_port_picker"
+    },
+    "action": {
+      "description": "Action button to trigger wizard functions",
+      "ui_widget": "action_button"
     }
   },
 

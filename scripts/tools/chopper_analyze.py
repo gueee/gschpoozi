@@ -1,4 +1,4 @@
-? cause we #!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 TMC Chopper Tuning Analyzer
 
@@ -440,6 +440,11 @@ def analyze_parameter_sweep(csv_dir: str, axis: str = 'x') -> dict:
     for csv_path in files:
         params = parse_filename_params(csv_path)
         if params['axis'] and params['axis'].lower() != axis.lower():
+            continue
+
+        # Skip files where essential parameters couldn't be parsed
+        if params['tpfd'] is None or params['tbl'] is None or params['toff'] is None:
+            print(f"  Skipping {os.path.basename(csv_path)}: could not parse parameters from filename")
             continue
 
         data = parse_accel_csv(csv_path)

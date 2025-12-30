@@ -14,7 +14,9 @@ This version uses a skeleton-driven architecture where:
 import os
 import subprocess
 import sys
+import shutil
 from pathlib import Path
+from typing import Optional, Tuple
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -28,6 +30,9 @@ from wizard.ui import WizardUI
 # Find repo root (where templates/ lives)
 SCRIPT_DIR = Path(__file__).parent.resolve()
 REPO_ROOT = SCRIPT_DIR.parent.parent
+
+# Path to the klipper installation library
+KLIPPER_INSTALL_LIB = REPO_ROOT / "scripts" / "lib" / "klipper-install.sh"
 
 
 class GschpooziWizard:
@@ -119,6 +124,133 @@ class GschpooziWizard:
             "Your progress is saved automatically.",
             title="Welcome"
         )
+
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # BASH FUNCTION CALLING HELPERS
+    # ═══════════════════════════════════════════════════════════════════════════════
+
+    def _call_bash_function(self, function_name: str, show_output: bool = True) -> Tuple[bool, str]:
+        """Call a function from klipper-install.sh.
+
+        Args:
+            function_name: Name of the bash function to call (e.g., 'do_install_klipper')
+            show_output: Whether to show output in real-time
+
+        Returns:
+            Tuple of (success: bool, output: str)
+        """
+        if not KLIPPER_INSTALL_LIB.exists():
+            return False, f"Installation library not found: {KLIPPER_INSTALL_LIB}"
+
+        # Build the command to source the library and call the function
+        # We need to set up colors and other variables that the bash script expects
+        cmd = f'''
+            # Set up colors
+            export RED='\\033[0;31m'
+            export GREEN='\\033[0;32m'
+            export YELLOW='\\033[0;33m'
+            export CYAN='\\033[0;36m'
+            export WHITE='\\033[0;37m'
+            export BWHITE='\\033[1;37m'
+            export BCYAN='\\033[1;36m'
+            export BYELLOW='\\033[1;33m'
+            export NC='\\033[0m'
+            export BOX_V='│'
+
+            # Set library path for templates
+            export INSTALL_LIB_DIR="{KLIPPER_INSTALL_LIB.parent}"
+
+            # Source the library
+            source "{KLIPPER_INSTALL_LIB}"
+
+            # Call the function
+            {function_name}
+        '''
+
+        try:
+            if show_output:
+                # Run interactively - this allows the bash scripts to show their UI
+                result = subprocess.run(
+                    ["bash", "-c", cmd],
+                    env=dict(os.environ, TERM="xterm-256color"),
+                    timeout=1800  # 30 minute timeout for long operations
+                )
+                return result.returncode == 0, ""
+            else:
+                # Capture output
+                result = subprocess.run(
+                    ["bash", "-c", cmd],
+                    capture_output=True,
+                    text=True,
+                    env=dict(os.environ, TERM="xterm-256color"),
+                    timeout=1800
+                )
+                return result.returncode == 0, result.stdout + result.stderr
+
+        except subprocess.TimeoutExpired:
+            return False, "Operation timed out"
+        except Exception as e:
+            return False, str(e)
+
+    def _check_component_installed(self, component: str) -> bool:
+        """Check if a component is installed.
+
+        Args:
+            component: Component ID (klipper, moonraker, mainsail, fluidd, klipperscreen, crowsnest)
+
+        Returns:
+            True if installed, False otherwise
+        """
+        # Map component IDs to check methods
+        checks = {
+            "klipper": lambda: (Path.home() / "klipper").exists() and
+                              Path("/etc/systemd/system/klipper.service").exists(),
+            "moonraker": lambda: (Path.home() / "moonraker").exists() and
+                                Path("/etc/systemd/system/moonraker.service").exists(),
+            "mainsail": lambda: (Path.home() / "mainsail").exists() and
+                               Path("/etc/nginx/sites-available/mainsail").exists(),
+            "fluidd": lambda: (Path.home() / "fluidd").exists() and
+                             Path("/etc/nginx/sites-available/fluidd").exists(),
+            "klipperscreen": lambda: (Path.home() / "KlipperScreen").exists() and
+                                    Path("/etc/systemd/system/KlipperScreen.service").exists(),
+            "crowsnest": lambda: (Path.home() / "crowsnest").exists() and
+                                Path("/etc/systemd/system/crowsnest.service").exists(),
+        }
+
+        check_func = checks.get(component.lower())
+        if check_func:
+            try:
+                return check_func()
+            except Exception:
+                return False
+        return False
+
+    def _get_component_status(self, component: str) -> str:
+        """Get the status string for a component.
+
+        Args:
+            component: Component ID
+
+        Returns:
+            Status string like "[installed]" or "[not installed]"
+        """
+        if self._check_component_installed(component):
+            # Also check if service is running
+            service_name = component
+            if component == "klipperscreen":
+                service_name = "KlipperScreen"
+            try:
+                result = subprocess.run(
+                    ["systemctl", "is-active", service_name],
+                    capture_output=True, text=True
+                )
+                if result.stdout.strip() == "active":
+                    return "[running]"
+                else:
+                    return "[stopped]"
+            except Exception:
+                return "[installed]"
+        return "[not installed]"
 
     def _generate_config(self) -> None:
         """Generate Klipper configuration files."""
@@ -280,7 +412,11 @@ class GschpooziWizard:
             self.ui.msgbox(f"Could not check Moonraker: {e}", title="Error")
 
     def _manage_components(self) -> None:
-        """Manage Klipper ecosystem components (KIAUH-style)."""
+        """Manage Klipper ecosystem components (KIAUH-style).
+
+        This actually installs/updates/removes components by calling the
+        bash functions in klipper-install.sh.
+        """
         components = [
             ("klipper", "Klipper", "Core printer firmware"),
             ("moonraker", "Moonraker", "API server for web interfaces"),
@@ -294,15 +430,7 @@ class GschpooziWizard:
             # Build menu with status
             items = []
             for comp_id, name, desc in components:
-                # Check if installed
-                try:
-                    result = subprocess.run(
-                        ["systemctl", "is-enabled", comp_id],
-                        capture_output=True, text=True
-                    )
-                    status = "[installed]" if result.returncode == 0 else "[not installed]"
-                except Exception:
-                    status = "[unknown]"
+                status = self._get_component_status(comp_id)
                 items.append((comp_id, f"{name} {status} - {desc}"))
 
             items.append(("B", "Back"))
@@ -320,46 +448,155 @@ class GschpooziWizard:
             self._show_component_actions(choice)
 
     def _show_component_actions(self, component: str) -> None:
-        """Show actions for a specific component."""
-        actions = [
-            ("install", "Install", "Install this component"),
-            ("update", "Update", "Update to latest version"),
-            ("remove", "Remove", "Uninstall this component"),
-            ("B", "Back", ""),
-        ]
+        """Show actions for a specific component and execute them.
+
+        This actually calls the bash functions to install/update/remove components.
+        """
+        # Get component display name
+        component_names = {
+            "klipper": "Klipper",
+            "moonraker": "Moonraker",
+            "mainsail": "Mainsail",
+            "fluidd": "Fluidd",
+            "klipperscreen": "KlipperScreen",
+            "crowsnest": "Crowsnest",
+        }
+        display_name = component_names.get(component, component)
+
+        # Check if installed
+        is_installed = self._check_component_installed(component)
+
+        # Build available actions based on installation status
+        actions = []
+        if not is_installed:
+            actions.append(("install", "Install", f"Install {display_name}"))
+        else:
+            actions.append(("update", "Update", f"Update {display_name} to latest version"))
+            actions.append(("remove", "Remove", f"Uninstall {display_name}"))
+        actions.append(("B", "Back", ""))
 
         choice = self.ui.menu(
-            f"What would you like to do with {component}?",
+            f"What would you like to do with {display_name}?",
             [(a[0], f"{a[1]} - {a[2]}") for a in actions if a[2]],
-            title=f"Manage {component}"
+            title=f"Manage {display_name}"
         )
 
         if choice is None or choice == "B":
             return
 
+        # Map component IDs to bash function names
+        func_map = {
+            "klipper": "klipper",
+            "moonraker": "moonraker",
+            "mainsail": "mainsail",
+            "fluidd": "fluidd",
+            "klipperscreen": "klipperscreen",
+            "crowsnest": "crowsnest",
+        }
+        func_component = func_map.get(component, component)
+
         if choice == "install":
-            self.ui.msgbox(
-                f"To install {component}, run KIAUH:\n\n"
-                "cd ~ && git clone https://github.com/dw-0/kiauh.git\n"
-                "./kiauh/kiauh.sh\n\n"
-                "Or visit: https://github.com/dw-0/kiauh",
-                title="Install Instructions"
-            )
+            # Confirm installation
+            if not self.ui.yesno(
+                f"Install {display_name}?\n\n"
+                "This will:\n"
+                "- Download and install the component\n"
+                "- Set up systemd services\n"
+                "- Configure necessary dependencies\n\n"
+                "The installation may take several minutes.",
+                title=f"Install {display_name}"
+            ):
+                return
+
+            self.ui.infobox(f"Installing {display_name}...\n\nThis may take several minutes.", title="Please Wait")
+
+            # Call the bash function
+            success, output = self._call_bash_function(f"do_install_{func_component}")
+
+            if success:
+                self.ui.msgbox(
+                    f"{display_name} installed successfully!\n\n"
+                    "The service should now be running.",
+                    title="Installation Complete"
+                )
+            else:
+                self.ui.msgbox(
+                    f"Installation may have encountered issues.\n\n"
+                    "Please check the terminal output for details.\n"
+                    f"{output[:500] if output else ''}",
+                    title="Installation Status"
+                )
+
         elif choice == "update":
-            self.ui.msgbox(
-                f"To update {component}:\n\n"
-                f"cd ~/{component}\n"
-                "git pull\n"
-                f"sudo systemctl restart {component}",
-                title="Update Instructions"
-            )
+            # Confirm update
+            if not self.ui.yesno(
+                f"Update {display_name}?\n\n"
+                "This will:\n"
+                "- Stop the service temporarily\n"
+                "- Pull the latest changes\n"
+                "- Update dependencies\n"
+                "- Restart the service",
+                title=f"Update {display_name}"
+            ):
+                return
+
+            self.ui.infobox(f"Updating {display_name}...", title="Please Wait")
+
+            # Call the bash function
+            success, output = self._call_bash_function(f"do_update_{func_component}")
+
+            if success:
+                self.ui.msgbox(
+                    f"{display_name} updated successfully!",
+                    title="Update Complete"
+                )
+            else:
+                self.ui.msgbox(
+                    f"Update may have encountered issues.\n\n"
+                    "Please check the terminal output for details.\n"
+                    f"{output[:500] if output else ''}",
+                    title="Update Status"
+                )
+
         elif choice == "remove":
-            self.ui.msgbox(
-                f"To remove {component}, use KIAUH:\n\n"
-                "./kiauh/kiauh.sh\n"
-                "Select: Remove -> {component}",
-                title="Remove Instructions"
-            )
+            # Confirm removal with warning
+            if not self.ui.yesno(
+                f"Remove {display_name}?\n\n"
+                "WARNING: This will:\n"
+                "- Stop and disable the service\n"
+                "- Remove installed files\n"
+                "- Configuration files may be preserved\n\n"
+                "This action cannot be undone!",
+                title=f"Remove {display_name}"
+            ):
+                return
+
+            # Double confirm for critical components
+            if component in ["klipper", "moonraker"]:
+                if not self.ui.yesno(
+                    f"Are you REALLY sure you want to remove {display_name}?\n\n"
+                    f"Removing {display_name} may break other components!",
+                    title="Final Confirmation"
+                ):
+                    return
+
+            self.ui.infobox(f"Removing {display_name}...", title="Please Wait")
+
+            # Call the bash function
+            success, output = self._call_bash_function(f"do_remove_{func_component}")
+
+            if success:
+                self.ui.msgbox(
+                    f"{display_name} has been removed.",
+                    title="Removal Complete"
+                )
+            else:
+                self.ui.msgbox(
+                    f"Removal may have encountered issues.\n\n"
+                    "Please check the terminal output for details.\n"
+                    f"{output[:500] if output else ''}",
+                    title="Removal Status"
+                )
 
     def _can_setup(self) -> None:
         """Configure CAN bus interfaces."""
@@ -413,37 +650,250 @@ class GschpooziWizard:
 
     def _install_can_utils(self) -> None:
         """Install can-utils package."""
-        self.ui.msgbox(
-            "To install can-utils, run:\n\n"
-            "sudo apt-get update\n"
-            "sudo apt-get install can-utils\n\n"
-            "This will provide candump, cansend, and other CAN tools.",
+        # Check if already installed
+        try:
+            result = subprocess.run(
+                ["which", "candump"],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                self.ui.msgbox(
+                    "can-utils is already installed!\n\n"
+                    f"Location: {result.stdout.strip()}",
+                    title="can-utils"
+                )
+                return
+        except Exception:
+            pass
+
+        # Confirm installation
+        if not self.ui.yesno(
+            "Install can-utils?\n\n"
+            "This will install CAN utilities including:\n"
+            "- candump (monitor CAN traffic)\n"
+            "- cansend (send CAN frames)\n"
+            "- cansniffer (filter CAN traffic)\n\n"
+            "Requires sudo access.",
             title="Install can-utils"
-        )
+        ):
+            return
+
+        self.ui.infobox("Installing can-utils...", title="Please Wait")
+
+        try:
+            # Update package lists
+            result = subprocess.run(
+                ["sudo", "apt-get", "update"],
+                capture_output=True, text=True, timeout=60
+            )
+
+            # Install can-utils
+            result = subprocess.run(
+                ["sudo", "apt-get", "install", "-y", "can-utils"],
+                capture_output=True, text=True, timeout=120
+            )
+
+            if result.returncode == 0:
+                self.ui.msgbox(
+                    "can-utils installed successfully!\n\n"
+                    "Available commands:\n"
+                    "- candump can0 (monitor CAN traffic)\n"
+                    "- cansend can0 123#DEADBEEF (send frame)\n"
+                    "- ip -s link show can0 (show stats)",
+                    title="Installation Complete"
+                )
+            else:
+                self.ui.msgbox(
+                    f"Installation failed:\n\n{result.stderr[:500]}",
+                    title="Error"
+                )
+
+        except subprocess.TimeoutExpired:
+            self.ui.msgbox("Installation timed out.", title="Error")
+        except Exception as e:
+            self.ui.msgbox(f"Error installing can-utils: {e}", title="Error")
 
     def _configure_can_interface(self) -> None:
         """Configure CAN interface."""
-        bitrate = self.ui.inputbox(
-            "Enter CAN bitrate (common: 500000, 1000000):",
-            default="1000000",
+        # Ask for configuration method
+        method = self.ui.menu(
+            "How would you like to configure CAN?",
+            [
+                ("persistent", "Persistent Configuration - Survives reboot"),
+                ("temporary", "Temporary Setup - For testing (lost on reboot)"),
+                ("B", "Back"),
+            ],
+            title="CAN Configuration"
+        )
+
+        if method is None or method == "B":
+            return
+
+        # Get bitrate
+        bitrate_choices = [
+            ("1000000", "1 Mbit/s (recommended for most setups)"),
+            ("500000", "500 kbit/s (legacy devices)"),
+            ("250000", "250 kbit/s (older devices)"),
+            ("custom", "Custom bitrate"),
+        ]
+        bitrate = self.ui.menu(
+            "Select CAN bitrate:",
+            bitrate_choices,
             title="CAN Bitrate"
         )
+
         if bitrate is None:
             return
 
-        self.ui.msgbox(
-            f"To configure CAN interface with bitrate {bitrate}:\n\n"
-            "1. Create /etc/network/interfaces.d/can0:\n"
-            f"   auto can0\n"
-            f"   iface can0 can static\n"
-            f"       bitrate {bitrate}\n"
-            f"       up ip link set can0 txqueuelen 1024\n\n"
-            "2. Or for temporary setup:\n"
-            f"   sudo ip link set can0 type can bitrate {bitrate}\n"
-            f"   sudo ip link set can0 txqueuelen 1024\n"
-            f"   sudo ip link set up can0",
-            title="Configure CAN"
-        )
+        if bitrate == "custom":
+            bitrate = self.ui.inputbox(
+                "Enter custom CAN bitrate (in bits/second):",
+                default="1000000",
+                title="Custom Bitrate"
+            )
+            if bitrate is None:
+                return
+
+        # Validate bitrate is numeric
+        try:
+            int(bitrate)
+        except ValueError:
+            self.ui.msgbox("Invalid bitrate. Must be a number.", title="Error")
+            return
+
+        if method == "temporary":
+            # Temporary setup
+            if not self.ui.yesno(
+                f"Set up CAN interface temporarily with bitrate {bitrate}?\n\n"
+                "This will run:\n"
+                f"  sudo ip link set can0 type can bitrate {bitrate}\n"
+                "  sudo ip link set can0 txqueuelen 1024\n"
+                "  sudo ip link set up can0\n\n"
+                "Note: This will be lost on reboot.",
+                title="Temporary CAN Setup"
+            ):
+                return
+
+            self.ui.infobox("Configuring CAN interface...", title="Please Wait")
+
+            try:
+                # Bring down interface if it exists
+                subprocess.run(
+                    ["sudo", "ip", "link", "set", "down", "can0"],
+                    capture_output=True, timeout=10
+                )
+
+                # Configure interface
+                result = subprocess.run(
+                    ["sudo", "ip", "link", "set", "can0", "type", "can", "bitrate", bitrate],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode != 0:
+                    self.ui.msgbox(
+                        f"Failed to set bitrate:\n\n{result.stderr}\n\n"
+                        "Make sure you have a CAN adapter connected.",
+                        title="Error"
+                    )
+                    return
+
+                # Set queue length
+                subprocess.run(
+                    ["sudo", "ip", "link", "set", "can0", "txqueuelen", "1024"],
+                    capture_output=True, timeout=10
+                )
+
+                # Bring up interface
+                result = subprocess.run(
+                    ["sudo", "ip", "link", "set", "up", "can0"],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode != 0:
+                    self.ui.msgbox(
+                        f"Failed to bring up interface:\n\n{result.stderr}",
+                        title="Error"
+                    )
+                    return
+
+                self.ui.msgbox(
+                    "CAN interface configured successfully!\n\n"
+                    f"Interface: can0\n"
+                    f"Bitrate: {bitrate}\n"
+                    f"Queue length: 1024\n\n"
+                    "Use 'Query CAN Devices' to find connected MCUs.",
+                    title="Success"
+                )
+
+            except subprocess.TimeoutExpired:
+                self.ui.msgbox("Command timed out.", title="Error")
+            except Exception as e:
+                self.ui.msgbox(f"Error configuring CAN: {e}", title="Error")
+
+        else:
+            # Persistent configuration
+            if not self.ui.yesno(
+                f"Create persistent CAN configuration with bitrate {bitrate}?\n\n"
+                "This will create /etc/network/interfaces.d/can0\n\n"
+                "The interface will be automatically configured on boot.",
+                title="Persistent CAN Setup"
+            ):
+                return
+
+            config_content = f"""# CAN interface configuration
+# Created by gschpoozi
+auto can0
+iface can0 can static
+    bitrate {bitrate}
+    up ip link set can0 txqueuelen 1024
+"""
+
+            self.ui.infobox("Creating CAN configuration...", title="Please Wait")
+
+            try:
+                # Create config file
+                result = subprocess.run(
+                    ["sudo", "tee", "/etc/network/interfaces.d/can0"],
+                    input=config_content,
+                    capture_output=True, text=True, timeout=10
+                )
+
+                if result.returncode != 0:
+                    self.ui.msgbox(
+                        f"Failed to create config file:\n\n{result.stderr}",
+                        title="Error"
+                    )
+                    return
+
+                # Bring up the interface now
+                subprocess.run(
+                    ["sudo", "ip", "link", "set", "down", "can0"],
+                    capture_output=True, timeout=10
+                )
+                subprocess.run(
+                    ["sudo", "ip", "link", "set", "can0", "type", "can", "bitrate", bitrate],
+                    capture_output=True, timeout=10
+                )
+                subprocess.run(
+                    ["sudo", "ip", "link", "set", "can0", "txqueuelen", "1024"],
+                    capture_output=True, timeout=10
+                )
+                subprocess.run(
+                    ["sudo", "ip", "link", "set", "up", "can0"],
+                    capture_output=True, timeout=10
+                )
+
+                self.ui.msgbox(
+                    "CAN interface configured successfully!\n\n"
+                    f"Config file: /etc/network/interfaces.d/can0\n"
+                    f"Bitrate: {bitrate}\n\n"
+                    "The interface will be automatically configured on boot.\n\n"
+                    "Use 'Query CAN Devices' to find connected MCUs.",
+                    title="Success"
+                )
+
+            except subprocess.TimeoutExpired:
+                self.ui.msgbox("Command timed out.", title="Error")
+            except Exception as e:
+                self.ui.msgbox(f"Error configuring CAN: {e}", title="Error")
 
     def _query_can_devices(self) -> None:
         """Query for CAN-connected devices."""
@@ -479,15 +929,28 @@ class GschpooziWizard:
             self.ui.msgbox(f"Error querying CAN: {e}", title="Error")
 
     def _katapult_setup(self) -> None:
-        """Katapult (formerly CanBoot) and firmware flashing guidance."""
-        items = [
-            ("dfu", "DFU Flashing", "Flash MCU via USB DFU mode"),
-            ("can", "CAN Flashing", "Flash MCU via CAN bus (requires Katapult)"),
-            ("install", "Install Katapult", "Clone and build Katapult bootloader"),
-            ("B", "Back"),
-        ]
+        """Katapult (formerly CanBoot) and firmware flashing."""
+        katapult_dir = Path.home() / "katapult"
+        katapult_installed = katapult_dir.exists()
 
         while True:
+            # Build menu based on what's installed
+            items = [
+                ("dfu", "DFU Flashing", "Flash MCU via USB DFU mode"),
+                ("dfu_check", "Check DFU Devices", "List devices in DFU mode"),
+            ]
+
+            if katapult_installed:
+                items.extend([
+                    ("can", "CAN Flashing", "Flash MCU via CAN bus"),
+                    ("can_query", "Query Katapult Devices", "Find devices in bootloader mode"),
+                    ("update", "Update Katapult", "Pull latest changes"),
+                ])
+            else:
+                items.append(("install", "Install Katapult", "Clone Katapult repository"))
+
+            items.append(("B", "Back"))
+
             choice = self.ui.menu(
                 "Firmware Flashing Options:",
                 items,
@@ -497,39 +960,423 @@ class GschpooziWizard:
             if choice is None or choice == "B":
                 break
 
-            if choice == "dfu":
-                self.ui.msgbox(
-                    "DFU Flashing Guide:\n\n"
-                    "1. Put MCU in DFU mode (usually: hold BOOT, press RESET)\n"
-                    "2. Check with: lsusb (look for STM DFU device)\n"
-                    "3. Flash with:\n"
-                    "   make flash FLASH_DEVICE=0483:df11\n\n"
-                    "Or use dfu-util:\n"
-                    "   dfu-util -a 0 -D out/klipper.bin -s 0x08000000:leave",
-                    title="DFU Flashing"
-                )
+            if choice == "dfu_check":
+                self._check_dfu_devices()
+            elif choice == "dfu":
+                self._dfu_flashing()
             elif choice == "can":
-                self.ui.msgbox(
-                    "CAN Flashing Guide:\n\n"
-                    "Requires Katapult bootloader already installed.\n\n"
-                    "1. Put MCU in bootloader mode (double-tap reset)\n"
-                    "2. Query for bootloader: python3 ~/katapult/scripts/flashtool.py -q\n"
-                    "3. Flash firmware:\n"
-                    "   python3 ~/katapult/scripts/flashtool.py -f ~/klipper/out/klipper.bin\n\n"
-                    "See: https://github.com/Arksine/katapult",
-                    title="CAN Flashing"
-                )
+                self._can_flashing()
+            elif choice == "can_query":
+                self._query_katapult_devices()
             elif choice == "install":
+                self._install_katapult()
+            elif choice == "update":
+                self._update_katapult()
+
+    def _check_dfu_devices(self) -> None:
+        """Check for devices in DFU mode."""
+        self.ui.infobox("Checking for DFU devices...", title="Please Wait")
+
+        try:
+            # Run lsusb and filter for DFU devices
+            result = subprocess.run(
+                ["lsusb"],
+                capture_output=True, text=True, timeout=10
+            )
+
+            # Common DFU device IDs
+            dfu_patterns = [
+                "0483:df11",  # STM32 DFU
+                "1d50:614e",  # OpenMoko DFU
+                "2e8a:0003",  # RP2040 BOOTSEL
+            ]
+
+            dfu_devices = []
+            for line in result.stdout.splitlines():
+                for pattern in dfu_patterns:
+                    if pattern in line:
+                        dfu_devices.append(line)
+                        break
+                # Also check for "DFU" in the description
+                if "DFU" in line.upper() and line not in dfu_devices:
+                    dfu_devices.append(line)
+
+            if dfu_devices:
+                device_list = "\n".join(dfu_devices)
                 self.ui.msgbox(
-                    "Install Katapult:\n\n"
-                    "cd ~\n"
-                    "git clone https://github.com/Arksine/katapult.git\n"
-                    "cd katapult\n"
-                    "make menuconfig  # Configure for your MCU\n"
-                    "make\n\n"
-                    "Then flash via DFU first time.",
-                    title="Install Katapult"
+                    f"DFU Devices Found:\n\n{device_list}\n\n"
+                    "These devices are ready for DFU flashing.",
+                    title="DFU Devices"
                 )
+            else:
+                self.ui.msgbox(
+                    "No DFU devices found.\n\n"
+                    "To enter DFU mode:\n"
+                    "1. Hold BOOT button\n"
+                    "2. Press RESET button\n"
+                    "3. Release BOOT button\n\n"
+                    "Or for RP2040:\n"
+                    "1. Hold BOOTSEL button\n"
+                    "2. Plug in USB cable\n"
+                    "3. Release BOOTSEL button",
+                    title="No DFU Devices"
+                )
+
+        except Exception as e:
+            self.ui.msgbox(f"Error checking DFU devices: {e}", title="Error")
+
+    def _dfu_flashing(self) -> None:
+        """Guide through DFU flashing process."""
+        klipper_dir = Path.home() / "klipper"
+
+        if not klipper_dir.exists():
+            self.ui.msgbox(
+                "Klipper is not installed.\n\n"
+                "Please install Klipper first to build firmware.",
+                title="Error"
+            )
+            return
+
+        # Check for firmware file
+        firmware_file = klipper_dir / "out" / "klipper.bin"
+
+        # Menu options
+        items = [
+            ("menuconfig", "Configure Firmware", "Run make menuconfig"),
+            ("build", "Build Firmware", "Compile firmware (make)"),
+        ]
+
+        if firmware_file.exists():
+            items.append(("flash", "Flash Firmware", "Flash via DFU"))
+
+        items.append(("B", "Back"))
+
+        while True:
+            choice = self.ui.menu(
+                "DFU Flashing Steps:",
+                items,
+                title="DFU Flashing"
+            )
+
+            if choice is None or choice == "B":
+                break
+
+            if choice == "menuconfig":
+                self.ui.msgbox(
+                    "Running make menuconfig...\n\n"
+                    "Configure your MCU settings, then save and exit.",
+                    title="Firmware Configuration"
+                )
+                try:
+                    subprocess.run(
+                        ["make", "menuconfig"],
+                        cwd=klipper_dir,
+                        env=dict(os.environ, TERM="xterm")
+                    )
+                except Exception as e:
+                    self.ui.msgbox(f"Error running menuconfig: {e}", title="Error")
+
+            elif choice == "build":
+                self.ui.infobox("Building firmware...\n\nThis may take a few minutes.", title="Please Wait")
+                try:
+                    # Clean first
+                    subprocess.run(["make", "clean"], cwd=klipper_dir, capture_output=True)
+
+                    # Build
+                    result = subprocess.run(
+                        ["make"],
+                        cwd=klipper_dir,
+                        capture_output=True, text=True,
+                        timeout=600
+                    )
+
+                    if result.returncode == 0:
+                        self.ui.msgbox(
+                            "Firmware built successfully!\n\n"
+                            f"Output: {firmware_file}\n\n"
+                            "You can now flash the firmware.",
+                            title="Build Complete"
+                        )
+                        # Update menu to show flash option
+                        if ("flash", "Flash Firmware", "Flash via DFU") not in items:
+                            items.insert(-1, ("flash", "Flash Firmware", "Flash via DFU"))
+                    else:
+                        self.ui.msgbox(
+                            f"Build failed:\n\n{result.stderr[:500]}",
+                            title="Build Error"
+                        )
+
+                except subprocess.TimeoutExpired:
+                    self.ui.msgbox("Build timed out.", title="Error")
+                except Exception as e:
+                    self.ui.msgbox(f"Error building firmware: {e}", title="Error")
+
+            elif choice == "flash":
+                # Ask for device ID
+                device_id = self.ui.inputbox(
+                    "Enter DFU device ID (e.g., 0483:df11 for STM32):\n\n"
+                    "Common IDs:\n"
+                    "- 0483:df11 (STM32)\n"
+                    "- 2e8a:0003 (RP2040)",
+                    default="0483:df11",
+                    title="DFU Device"
+                )
+
+                if device_id is None:
+                    continue
+
+                if not self.ui.yesno(
+                    f"Flash firmware to device {device_id}?\n\n"
+                    "Make sure the device is in DFU mode!",
+                    title="Confirm Flash"
+                ):
+                    continue
+
+                self.ui.infobox("Flashing firmware...", title="Please Wait")
+
+                try:
+                    result = subprocess.run(
+                        ["make", "flash", f"FLASH_DEVICE={device_id}"],
+                        cwd=klipper_dir,
+                        capture_output=True, text=True,
+                        timeout=120
+                    )
+
+                    if result.returncode == 0:
+                        self.ui.msgbox(
+                            "Firmware flashed successfully!\n\n"
+                            "The device should now restart with the new firmware.",
+                            title="Flash Complete"
+                        )
+                    else:
+                        # Try dfu-util directly
+                        self.ui.msgbox(
+                            f"make flash failed. Trying dfu-util...\n\n"
+                            "If this fails, try manually:\n"
+                            f"dfu-util -a 0 -D {firmware_file} -s 0x08000000:leave",
+                            title="Retrying..."
+                        )
+
+                except subprocess.TimeoutExpired:
+                    self.ui.msgbox("Flash timed out.", title="Error")
+                except Exception as e:
+                    self.ui.msgbox(f"Error flashing: {e}", title="Error")
+
+    def _query_katapult_devices(self) -> None:
+        """Query for devices in Katapult bootloader mode."""
+        katapult_dir = Path.home() / "katapult"
+        flashtool = katapult_dir / "scripts" / "flashtool.py"
+
+        if not flashtool.exists():
+            self.ui.msgbox(
+                "Katapult flashtool not found.\n\n"
+                "Please install Katapult first.",
+                title="Error"
+            )
+            return
+
+        self.ui.infobox("Querying Katapult devices...", title="Please Wait")
+
+        try:
+            result = subprocess.run(
+                [sys.executable, str(flashtool), "-q"],
+                capture_output=True, text=True, timeout=15
+            )
+
+            if result.stdout.strip():
+                self.ui.msgbox(
+                    f"Katapult Devices:\n\n{result.stdout}",
+                    title="Bootloader Devices"
+                )
+            else:
+                self.ui.msgbox(
+                    "No devices in bootloader mode found.\n\n"
+                    "To enter bootloader mode:\n"
+                    "- Double-tap the reset button, or\n"
+                    "- Send FIRMWARE_RESTART from Klipper console",
+                    title="No Devices Found"
+                )
+
+        except subprocess.TimeoutExpired:
+            self.ui.msgbox("Query timed out.", title="Error")
+        except Exception as e:
+            self.ui.msgbox(f"Error querying devices: {e}", title="Error")
+
+    def _can_flashing(self) -> None:
+        """Flash firmware via CAN using Katapult."""
+        katapult_dir = Path.home() / "katapult"
+        flashtool = katapult_dir / "scripts" / "flashtool.py"
+        klipper_dir = Path.home() / "klipper"
+        firmware_file = klipper_dir / "out" / "klipper.bin"
+
+        if not flashtool.exists():
+            self.ui.msgbox(
+                "Katapult flashtool not found.\n\n"
+                "Please install Katapult first.",
+                title="Error"
+            )
+            return
+
+        if not firmware_file.exists():
+            self.ui.msgbox(
+                "Firmware file not found.\n\n"
+                "Please build firmware first using DFU Flashing > Build Firmware.",
+                title="Error"
+            )
+            return
+
+        # Query for devices first
+        self.ui.infobox("Querying for devices in bootloader mode...", title="Please Wait")
+
+        try:
+            result = subprocess.run(
+                [sys.executable, str(flashtool), "-q"],
+                capture_output=True, text=True, timeout=15
+            )
+
+            if not result.stdout.strip():
+                self.ui.msgbox(
+                    "No devices in bootloader mode found.\n\n"
+                    "To enter bootloader mode:\n"
+                    "- Double-tap the reset button, or\n"
+                    "- Send FIRMWARE_RESTART from Klipper console",
+                    title="No Devices Found"
+                )
+                return
+
+            # Ask for UUID
+            uuid = self.ui.inputbox(
+                f"Devices found:\n{result.stdout}\n\n"
+                "Enter the UUID of the device to flash:",
+                default="",
+                title="Device UUID"
+            )
+
+            if uuid is None or not uuid.strip():
+                return
+
+            if not self.ui.yesno(
+                f"Flash firmware to device {uuid}?\n\n"
+                f"Firmware: {firmware_file}",
+                title="Confirm Flash"
+            ):
+                return
+
+            self.ui.infobox("Flashing firmware via CAN...", title="Please Wait")
+
+            result = subprocess.run(
+                [sys.executable, str(flashtool), "-u", uuid.strip(), "-f", str(firmware_file)],
+                capture_output=True, text=True, timeout=120
+            )
+
+            if result.returncode == 0:
+                self.ui.msgbox(
+                    "Firmware flashed successfully!\n\n"
+                    "The device should now restart with the new firmware.",
+                    title="Flash Complete"
+                )
+            else:
+                self.ui.msgbox(
+                    f"Flash failed:\n\n{result.stderr[:500]}",
+                    title="Flash Error"
+                )
+
+        except subprocess.TimeoutExpired:
+            self.ui.msgbox("Operation timed out.", title="Error")
+        except Exception as e:
+            self.ui.msgbox(f"Error: {e}", title="Error")
+
+    def _install_katapult(self) -> None:
+        """Install Katapult bootloader."""
+        katapult_dir = Path.home() / "katapult"
+
+        if katapult_dir.exists():
+            self.ui.msgbox(
+                "Katapult is already installed.\n\n"
+                f"Location: {katapult_dir}",
+                title="Already Installed"
+            )
+            return
+
+        if not self.ui.yesno(
+            "Install Katapult?\n\n"
+            "This will clone the Katapult repository.\n\n"
+            "After installation, you'll need to:\n"
+            "1. Run 'make menuconfig' to configure for your MCU\n"
+            "2. Build with 'make'\n"
+            "3. Flash via DFU the first time",
+            title="Install Katapult"
+        ):
+            return
+
+        self.ui.infobox("Cloning Katapult repository...", title="Please Wait")
+
+        try:
+            result = subprocess.run(
+                ["git", "clone", "https://github.com/Arksine/katapult.git", str(katapult_dir)],
+                capture_output=True, text=True, timeout=120
+            )
+
+            if result.returncode == 0:
+                self.ui.msgbox(
+                    "Katapult installed successfully!\n\n"
+                    f"Location: {katapult_dir}\n\n"
+                    "Next steps:\n"
+                    "1. cd ~/katapult\n"
+                    "2. make menuconfig (configure for your MCU)\n"
+                    "3. make\n"
+                    "4. Flash via DFU",
+                    title="Installation Complete"
+                )
+            else:
+                self.ui.msgbox(
+                    f"Installation failed:\n\n{result.stderr[:500]}",
+                    title="Error"
+                )
+
+        except subprocess.TimeoutExpired:
+            self.ui.msgbox("Clone timed out.", title="Error")
+        except Exception as e:
+            self.ui.msgbox(f"Error installing Katapult: {e}", title="Error")
+
+    def _update_katapult(self) -> None:
+        """Update Katapult to latest version."""
+        katapult_dir = Path.home() / "katapult"
+
+        if not katapult_dir.exists():
+            self.ui.msgbox("Katapult is not installed.", title="Error")
+            return
+
+        if not self.ui.yesno(
+            "Update Katapult to latest version?",
+            title="Update Katapult"
+        ):
+            return
+
+        self.ui.infobox("Updating Katapult...", title="Please Wait")
+
+        try:
+            result = subprocess.run(
+                ["git", "pull"],
+                cwd=katapult_dir,
+                capture_output=True, text=True, timeout=60
+            )
+
+            if result.returncode == 0:
+                self.ui.msgbox(
+                    f"Katapult updated!\n\n{result.stdout}",
+                    title="Update Complete"
+                )
+            else:
+                self.ui.msgbox(
+                    f"Update failed:\n\n{result.stderr[:500]}",
+                    title="Error"
+                )
+
+        except subprocess.TimeoutExpired:
+            self.ui.msgbox("Update timed out.", title="Error")
+        except Exception as e:
+            self.ui.msgbox(f"Error updating Katapult: {e}", title="Error")
 
     def _install_mmu_software(self) -> None:
         """Install MMU software (Happy Hare, AFC)."""

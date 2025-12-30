@@ -1,0 +1,7 @@
+﻿git : fatal: path 'schema/skeleton.json' exists on disk, but not in 'origin/main'
+At C:\Users\gueee\AppData\Local\Temp\ps-script-111d6d70-e197-40de-aa75-6524e767488e.ps1:94 char:34
++ ... cts\gschpoozi; git show origin/main:schema/skeleton.json 2>&1 | Out-F ...
++                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (fatal: path 'sc...n 'origin/main':String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

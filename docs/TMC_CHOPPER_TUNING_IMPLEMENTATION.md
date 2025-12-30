@@ -286,7 +286,7 @@ chopper_find_resonance:
         {% set axis = "X" if "x" in stepper else "Y" %}
         {% set distance = 50 %}  # Movement distance for each test
 
-        ACCELEROMETER_MEASURE CHIP={{ accelerometer.chip_name }}
+        ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip | default('adxl345') }}
 
         {% for speed in range(min_speed, max_speed + 1, step) %}
             M118 Testing {{speed}} mm/s...
@@ -297,7 +297,7 @@ chopper_find_resonance:
             G4 P200  # Brief pause between tests
         {% endfor %}
 
-        ACCELEROMETER_MEASURE CHIP={{ accelerometer.chip_name }} NAME=resonance_sweep
+        ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip | default('adxl345') }} NAME=resonance_sweep
 
         M118 Resonance sweep complete
         M118 Run: RUN_SHELL_COMMAND CMD=chopper_analyze PARAMS="find_resonance"
@@ -377,14 +377,14 @@ chopper_optimize:
             {% set axis = "X" if "x" in stepper else "Y" %}
             {% set distance = 40 %}
 
-            ACCELEROMETER_MEASURE CHIP={{ accelerometer.chip_name }}
+            ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip | default('adxl345') }}
 
             # Execute test movement
             G1 {{axis}}{{printer.toolhead.axis_maximum[axis|lower] / 2 + distance}} F{{speed|int * 60}}
             G1 {{axis}}{{printer.toolhead.axis_maximum[axis|lower] / 2 - distance}} F{{speed|int * 60}}
             G1 {{axis}}{{printer.toolhead.axis_maximum[axis|lower] / 2}} F{{speed|int * 60}}
 
-            ACCELEROMETER_MEASURE CHIP={{ accelerometer.chip_name }} NAME={{test_name}}_s{{speed}}
+            ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip | default('adxl345') }} NAME={{test_name}}_s{{speed}}
         {% endfor %}
 
         M118 Tested: TPFD={{tpfd}} TBL={{tbl}} TOFF={{toff}} HSTRT={{hstrt}} HEND={{hend}}

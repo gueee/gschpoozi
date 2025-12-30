@@ -252,7 +252,7 @@ gcode:
     {% set center = printer.toolhead.axis_maximum[axis|lower] / 2 %}
 
     # Start accelerometer measurement
-    ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip_name | default('adxl345') }}
+    ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip | default('adxl345') }}
 
     {% for speed in range(min_speed, max_speed + 1, step) %}
         M118 Testing {{'{'}}speed{{'}'}} mm/s...
@@ -263,7 +263,7 @@ gcode:
     {% endfor %}
 
     # Stop measurement and save
-    ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip_name | default('adxl345') }} NAME=resonance_sweep_{{'{'}}axis|lower{{'}'}}
+    ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip | default('adxl345') }} NAME=resonance_sweep_{{'{'}}axis|lower{{'}'}}
 
     M118 Resonance sweep complete for {{'{'}}axis{{'}'}} axis
     M118 Run: CHOPPER_ANALYZE --mode find_resonance
@@ -341,7 +341,7 @@ gcode:
         {% set speed_int = speed|int %}
 
         # Start measurement
-        ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip_name | default('adxl345') }}
+        ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip | default('adxl345') }}
 
         # Execute test movement
         G1 {{'{'}}axis{{'}'}}{{'{'}}center + distance{{'}'}} F{{'{'}}speed_int * 60{{'}'}}
@@ -349,7 +349,7 @@ gcode:
         G1 {{'{'}}axis{{'}'}}{{'{'}}center{{'}'}} F{{'{'}}speed_int * 60{{'}'}}
 
         # Stop and save with encoded filename
-        ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip_name | default('adxl345') }} NAME={{'{'}}test_name{{'}'}}_s{{'{'}}speed_int{{'}'}}
+        ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip | default('adxl345') }} NAME={{'{'}}test_name{{'}'}}_s{{'{'}}speed_int{{'}'}}
 
         G4 P200  # Pause between speeds
     {% endfor %}

@@ -352,9 +352,22 @@ class GschpooziWizard:
                 )
             else:
                 error = result.stderr or result.stdout or "Unknown error"
-                error_text = f"Generator failed:\n\n{error[:500]}"
+                # Write full error to file for debugging
+                error_log = output_dir.parent / "generator_error.log"
+                try:
+                    with open(error_log, 'w', encoding='utf-8') as f:
+                        f.write(f"Generator failed with return code {result.returncode}\n")
+                        f.write(f"STDOUT:\n{result.stdout}\n\n")
+                        f.write(f"STDERR:\n{result.stderr}\n")
+                except Exception:
+                    pass
+                
+                # Show first 1000 chars (increased from 500)
+                error_text = f"Generator failed:\n\n{error[:1000]}"
+                if len(error) > 1000:
+                    error_text += f"\n\n... (truncated, full error saved to {error_log})"
                 line_count = error_text.count('\n') + 3
-                height = min(20, max(10, line_count))
+                height = min(25, max(10, line_count))
                 self.ui.msgbox(error_text, title="Error", height=height)
 
         except subprocess.TimeoutExpired:

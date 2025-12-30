@@ -3651,5 +3651,10 @@ def main():
             print(f"Generated: {output_file}")
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        print(f"Generator failed:\n\n{traceback.format_exc()}", file=sys.stderr)
+        sys.exit(1)
 

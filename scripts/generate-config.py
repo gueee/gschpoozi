@@ -284,21 +284,21 @@ def generate_hardware_cfg(
     # Support both old (hardware_state.port_assignments) and new (wizard_state.stepper_x.motor_port) formats
     assignments = hardware_state.get('port_assignments', {})
     board_name = hardware_state.get('board_name', board.get('name', 'Unknown'))
-    
+
     # Helper to get stepper config from new format
     def get_stepper_config(stepper_name: str) -> Dict:
         return wizard_state.get(stepper_name, {})
-    
+
     # Helper to get port from new or old format
     def get_stepper_port(stepper_name: str, default: str) -> str:
         config = get_stepper_config(stepper_name)
         return config.get('motor_port') or assignments.get(stepper_name, default)
-    
+
     # Helper to get endstop from new or old format
     def get_endstop_port(stepper_name: str, default: str = '') -> str:
         config = get_stepper_config(stepper_name)
         return config.get('endstop_port') or assignments.get(f'endstop_{stepper_name.split("_")[-1]}', default)
-    
+
     # MCU config from new format
     mcu_config = wizard_state.get('mcu', {})
     main_mcu = mcu_config.get('main', {})
@@ -312,7 +312,7 @@ def generate_hardware_cfg(
     stepper_z_config = wizard_state.get('stepper_z', {})
     extruder_cfg = wizard_state.get('extruder', {})
     heater_bed_cfg = wizard_state.get('heater_bed', {})
-    
+
     kinematics = printer_config.get('kinematics') or wizard_state.get('kinematics', 'corexy')
     bed_x = printer_config.get('bed_size_x') or wizard_state.get('bed_size_x', '300')
     bed_y = printer_config.get('bed_size_y') or wizard_state.get('bed_size_y', '300')
@@ -377,7 +377,7 @@ def generate_hardware_cfg(
     if toolboard:
         tb_name = toolboard_mcu.get('board_type') or hardware_state.get('toolboard_name', 'Toolboard')
         # Get toolboard connection from new format first, then old format, then board definition
-        tb_connection = (toolboard_mcu.get('connection_type') or 
+        tb_connection = (toolboard_mcu.get('connection_type') or
                         wizard_state.get('toolboard_connection') or
                         hardware_state.get('toolboard_connection') or
                         toolboard.get('connection', 'USB')).upper()

@@ -12,6 +12,7 @@
 
 # Repository URLs
 KLIPPER_REPO="https://github.com/Klipper3d/klipper.git"
+KALICO_REPO="https://github.com/KalicoCrew/kalico.git"
 MOONRAKER_REPO="https://github.com/Arksine/moonraker.git"
 MAINSAIL_REPO="https://github.com/mainsail-crew/mainsail"
 FLUIDD_REPO="https://github.com/fluidd-core/fluidd"
@@ -21,6 +22,7 @@ TIMELAPSE_REPO="https://github.com/mainsail-crew/moonraker-timelapse.git"
 
 # Installation paths
 KLIPPER_DIR="${HOME}/klipper"
+KALICO_DIR="${HOME}/kalico"
 MOONRAKER_DIR="${HOME}/moonraker"
 MAINSAIL_DIR="${HOME}/mainsail"
 FLUIDD_DIR="${HOME}/fluidd"
@@ -157,6 +159,11 @@ status_msg() {
 # Check if Klipper is installed
 is_klipper_installed() {
     [[ -d "${KLIPPER_DIR}" && -f "${SYSTEMD_DIR}/klipper.service" ]]
+}
+
+# Check if Kalico is installed
+is_kalico_installed() {
+    [[ -d "${KALICO_DIR}" && -f "${SYSTEMD_DIR}/klipper.service" ]]
 }
 
 # Check if Moonraker is installed
@@ -765,6 +772,101 @@ do_install_klipper() {
     return 0
 }
 
+# Install Kalico (Klipper fork with MPC and advanced features)
+do_install_kalico() {
+    clear_screen
+    print_header "Installing Kalico"
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will install:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Kalico (Klipper fork with MPC temperature control)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Python virtual environment (klippy-env)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Systemd service (uses 'klipper' service name)"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Note: Kalico replaces Klipper.${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}If Klipper is installed, it will be replaced.${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+
+    if ! confirm "Proceed with Kalico installation?"; then
+        return 1
+    fi
+
+    echo ""
+
+    # Preflight checks
+    check_not_root || return 1
+    check_sudo_access || return 1
+
+    # Warn if Klipper is installed
+    if is_klipper_installed; then
+        if ! confirm "Klipper is already installed. This will replace it with Kalico. Continue?"; then
+            return 1
+        fi
+        # Stop Klipper service
+        status_msg "Stopping Klipper service..."
+        sudo systemctl stop klipper 2>/dev/null || true
+    fi
+
+    # Install dependencies (same as Klipper)
+    install_packages "${KLIPPER_DEPS[@]}" || return 1
+
+    # Clone Kalico repository
+    clone_repo "$KALICO_REPO" "$KALICO_DIR" || return 1
+
+    # Create virtual environment (reuse klippy-env name for compatibility)
+    create_virtualenv "$KLIPPY_ENV" || return 1
+
+    # Install Python requirements
+    install_pip_requirements "$KLIPPY_ENV" "${KALICO_DIR}/scripts/klippy-requirements.txt" || return 1
+
+    # Create printer_data directories
+    create_printer_data_dirs
+
+    # Create environment file (same as Klipper)
+    create_klipper_env
+
+    # Create basic printer.cfg
+    create_basic_printer_cfg
+
+    # Update systemd service to point to Kalico directory
+    # The service file uses ${HOME}/klipper, so we need to update it
+    status_msg "Configuring systemd service for Kalico..."
+    if [[ -f "${SYSTEMD_DIR}/klipper.service" ]]; then
+        # Update existing service to use Kalico
+        sudo sed -i "s|${KLIPPER_DIR}|${KALICO_DIR}|g" "${SYSTEMD_DIR}/klipper.service"
+        sudo systemctl daemon-reload
+    else
+        # Create new service pointing to Kalico
+        create_systemd_service "klipper" "${SERVICE_TEMPLATES}/klipper.service" || return 1
+        # Update it to use Kalico directory
+        sudo sed -i "s|${KLIPPER_DIR}|${KALICO_DIR}|g" "${SYSTEMD_DIR}/klipper.service"
+        sudo systemctl daemon-reload
+    fi
+    enable_service "klipper"
+
+    # Add user to groups
+    add_user_to_groups
+
+    echo ""
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  Kalico installation complete!${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "  Installation: ${CYAN}${KALICO_DIR}${NC}"
+    echo -e "  Config directory: ${CYAN}${PRINTER_DATA}/config${NC}"
+    echo -e "  Log file: ${CYAN}${PRINTER_DATA}/logs/klippy.log${NC}"
+    echo ""
+    echo -e "  ${YELLOW}Kalico features:${NC}"
+    echo -e "  - MPC (Model Predictive Control) temperature control"
+    echo -e "  - Advanced tuning options"
+    echo -e "  - Enhanced motion control"
+    echo ""
+
+    wait_for_key
+    return 0
+}
+
 # Install Moonraker
 do_install_moonraker() {
     clear_screen
@@ -1340,6 +1442,54 @@ do_update_klipper() {
     return 0
 }
 
+# Update Kalico
+do_update_kalico() {
+    clear_screen
+    print_header "Update Kalico"
+
+    if ! is_kalico_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Kalico is not installed!${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update Kalico to the latest version."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+
+    if ! confirm "Proceed with Kalico update?"; then
+        return 1
+    fi
+
+    echo ""
+
+    # Stop service
+    status_msg "Stopping Klipper service..."
+    sudo systemctl stop klipper
+
+    # Update repository
+    status_msg "Pulling latest changes..."
+    cd "$KALICO_DIR"
+    git pull
+
+    # Update Python requirements
+    status_msg "Updating Python dependencies..."
+    "${KLIPPY_ENV}/bin/pip" install -r "${KALICO_DIR}/scripts/klippy-requirements.txt"
+
+    # Restart service
+    status_msg "Starting Klipper service..."
+    sudo systemctl start klipper
+
+    echo ""
+    ok_msg "Kalico updated successfully!"
+    echo ""
+
+    wait_for_key
+    return 0
+}
+
 # Update Moonraker
 do_update_moonraker() {
     clear_screen
@@ -1838,6 +1988,64 @@ do_remove_klipper() {
 
     echo ""
     ok_msg "Klipper has been removed."
+    echo -e "  ${WHITE}Your config files in ~/printer_data have been preserved.${NC}"
+    echo ""
+
+    wait_for_key
+    return 0
+}
+
+# Remove Kalico
+do_remove_kalico() {
+    clear_screen
+    print_header "Remove Kalico"
+
+    if ! is_kalico_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Kalico is not installed.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${RED}WARNING: This will remove:${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Kalico installation (~/kalico)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Python environment (~/klippy-env)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Systemd service"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${WHITE}Your config files in ~/printer_data will be preserved.${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+
+    if ! confirm "Are you sure you want to remove Kalico?"; then
+        return 1
+    fi
+
+    # Double confirm for destructive action
+    echo -e "\n${RED}This action cannot be undone!${NC}"
+    if ! confirm "Type 'yes' to confirm removal"; then
+        return 1
+    fi
+
+    echo ""
+
+    # Stop and disable service
+    status_msg "Stopping and disabling Klipper service..."
+    sudo systemctl stop klipper 2>/dev/null || true
+    sudo systemctl disable klipper 2>/dev/null || true
+    sudo rm -f "${SYSTEMD_DIR}/klipper.service"
+    sudo systemctl daemon-reload
+
+    # Remove directories
+    status_msg "Removing Kalico files..."
+    rm -rf "$KALICO_DIR"
+    rm -rf "$KLIPPY_ENV"
+
+    # Remove environment file (but keep printer_data structure)
+    rm -f "${PRINTER_DATA}/systemd/klipper.env"
+
+    echo ""
+    ok_msg "Kalico has been removed."
     echo -e "  ${WHITE}Your config files in ~/printer_data have been preserved.${NC}"
     echo ""
 

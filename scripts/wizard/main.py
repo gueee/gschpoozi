@@ -196,7 +196,7 @@ class GschpooziWizard:
         """Check if a component is installed.
 
         Args:
-            component: Component ID (klipper, moonraker, mainsail, fluidd, klipperscreen, crowsnest)
+            component: Component ID (klipper, kalico, moonraker, mainsail, fluidd, klipperscreen, crowsnest)
 
         Returns:
             True if installed, False otherwise
@@ -204,7 +204,10 @@ class GschpooziWizard:
         # Map component IDs to check methods
         checks = {
             "klipper": lambda: (Path.home() / "klipper").exists() and
-                              Path("/etc/systemd/system/klipper.service").exists(),
+                              Path("/etc/systemd/system/klipper.service").exists() and
+                              not (Path.home() / "kalico").exists(),  # Not Kalico
+            "kalico": lambda: (Path.home() / "kalico").exists() and
+                             Path("/etc/systemd/system/klipper.service").exists(),
             "moonraker": lambda: (Path.home() / "moonraker").exists() and
                                 Path("/etc/systemd/system/moonraker.service").exists(),
             "mainsail": lambda: (Path.home() / "mainsail").exists() and
@@ -234,6 +237,16 @@ class GschpooziWizard:
         Returns:
             Status string like "[installed]" or "[not installed]"
         """
+        # Handle Klipper/Kalico mutual exclusivity
+        if component == "klipper":
+            # If Kalico is installed, Klipper is not available
+            if (Path.home() / "kalico").exists():
+                return "[not available - Kalico installed]"
+        elif component == "kalico":
+            # If Klipper is installed (and not Kalico), show Kalico as not installed
+            if (Path.home() / "klipper").exists() and not (Path.home() / "kalico").exists():
+                return "[not installed - Klipper installed]"
+
         if self._check_component_installed(component):
             # Also check if service is running
             service_name = component
@@ -419,6 +432,7 @@ class GschpooziWizard:
         """
         components = [
             ("klipper", "Klipper", "Core printer firmware"),
+            ("kalico", "Kalico", "Klipper fork with MPC and advanced features"),
             ("moonraker", "Moonraker", "API server for web interfaces"),
             ("mainsail", "Mainsail", "Modern web interface"),
             ("fluidd", "Fluidd", "Alternative web interface"),
@@ -455,6 +469,7 @@ class GschpooziWizard:
         # Get component display name
         component_names = {
             "klipper": "Klipper",
+            "kalico": "Kalico",
             "moonraker": "Moonraker",
             "mainsail": "Mainsail",
             "fluidd": "Fluidd",
@@ -487,6 +502,7 @@ class GschpooziWizard:
         # Map component IDs to bash function names
         func_map = {
             "klipper": "klipper",
+            "kalico": "kalico",
             "moonraker": "moonraker",
             "mainsail": "mainsail",
             "fluidd": "fluidd",
@@ -496,17 +512,47 @@ class GschpooziWizard:
         func_component = func_map.get(component, component)
 
         if choice == "install":
-            # Confirm installation
-            if not self.ui.yesno(
-                f"Install {display_name}?\n\n"
-                "This will:\n"
-                "- Download and install the component\n"
-                "- Set up systemd services\n"
-                "- Configure necessary dependencies\n\n"
-                "The installation may take several minutes.",
-                title=f"Install {display_name}"
-            ):
-                return
+            # Special handling for Klipper/Kalico (mutually exclusive)
+            if component == "kalico" and self._check_component_installed("klipper"):
+                if not self.ui.yesno(
+                    f"Install {display_name}?\n\n"
+                    "WARNING: Klipper is already installed.\n"
+                    "Kalico will replace Klipper.\n\n"
+                    "This will:\n"
+                    "- Stop Klipper service\n"
+                    "- Install Kalico (Klipper fork)\n"
+                    "- Set up systemd services\n"
+                    "- Configure necessary dependencies\n\n"
+                    "The installation may take several minutes.",
+                    title=f"Install {display_name}"
+                ):
+                    return
+            elif component == "klipper" and self._check_component_installed("kalico"):
+                if not self.ui.yesno(
+                    f"Install {display_name}?\n\n"
+                    "WARNING: Kalico is already installed.\n"
+                    "Klipper will replace Kalico.\n\n"
+                    "This will:\n"
+                    "- Stop Kalico service\n"
+                    "- Install Klipper\n"
+                    "- Set up systemd services\n"
+                    "- Configure necessary dependencies\n\n"
+                    "The installation may take several minutes.",
+                    title=f"Install {display_name}"
+                ):
+                    return
+            else:
+                # Confirm installation
+                if not self.ui.yesno(
+                    f"Install {display_name}?\n\n"
+                    "This will:\n"
+                    "- Download and install the component\n"
+                    "- Set up systemd services\n"
+                    "- Configure necessary dependencies\n\n"
+                    "The installation may take several minutes.",
+                    title=f"Install {display_name}"
+                ):
+                    return
 
             self.ui.infobox(f"Installing {display_name}...\n\nThis may take several minutes.", title="Please Wait")
 

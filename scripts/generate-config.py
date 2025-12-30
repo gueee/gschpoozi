@@ -2436,7 +2436,7 @@ def generate_chopper_tuning_cfg(wizard_state: Dict) -> Optional[str]:
     lines.append("    # State tracking macro - variables can be set by other macros")
     lines.append("    # This macro exists to prevent runtime errors when setting state variables")
     lines.append("")
-    
+
     lines.append("[gcode_macro _CHOPPER_ABORT]")
     lines.append("description: Emergency abort chopper tuning")
     lines.append("gcode:")

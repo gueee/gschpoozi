@@ -10,6 +10,7 @@ import sys
 import os
 import json
 import re
+import argparse
 import traceback
 from pathlib import Path
 from typing import Optional, Union, Tuple
@@ -9461,6 +9462,53 @@ read -r _
 
 def main():
     """Entry point."""
+    parser = argparse.ArgumentParser(
+        description="gschpoozi - Klipper Configuration Wizard",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--dark",
+        action="store_true",
+        help="Use dark color theme (better for light terminal backgrounds)"
+    )
+    parser.add_argument(
+        "--light",
+        action="store_true",
+        help="Use light color theme (default, better for dark terminal backgrounds)"
+    )
+    args = parser.parse_args()
+
+    # Set whiptail color theme via NEWT_COLORS environment variable
+    # Default theme works well on dark terminals
+    # Dark theme inverts colors for light terminal backgrounds
+    if args.dark:
+        # Dark theme: dark background, light text
+        os.environ["NEWT_COLORS"] = (
+            "root=white,black "
+            "border=white,black "
+            "window=white,black "
+            "shadow=black,gray "
+            "title=white,black "
+            "button=black,cyan "
+            "actbutton=white,cyan "
+            "compactbutton=white,black "
+            "checkbox=white,black "
+            "actcheckbox=black,cyan "
+            "entry=black,white "
+            "disentry=gray,white "
+            "label=white,black "
+            "listbox=white,black "
+            "actlistbox=black,cyan "
+            "sellistbox=black,white "
+            "actsellistbox=black,cyan "
+            "textbox=white,black "
+            "acttextbox=black,cyan "
+            "emptyscale=,black "
+            "fullscale=,cyan "
+            "helpline=white,black "
+            "roottext=white,black"
+        )
+
     wizard = GschpooziWizard()
     sys.exit(wizard.run())
 

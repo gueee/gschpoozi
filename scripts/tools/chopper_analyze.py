@@ -65,7 +65,8 @@ PARAM_INFO = {
 def find_chopper_csvs(csv_dir: str, axis: str = None) -> list:
     """Find chopper tuning CSV files."""
     patterns = [
-        'chopper_*.csv',
+        'chopper_*.csv',      # Format: chopper_x_t8_2_3_5_3_s75.csv
+        't*_*_*_*_*_s*.csv',  # Format: t8_2_3_5_3_s75.csv (standalone)
         'resonance_sweep_*.csv',
     ]
 
@@ -75,7 +76,7 @@ def find_chopper_csvs(csv_dir: str, axis: str = None) -> list:
 
     if axis:
         axis = axis.lower()
-        all_files = [f for f in all_files if f'_{axis}_' in f.lower() or f'_{axis}.' in f.lower()]
+        all_files = [f for f in all_files if f'_{axis}_' in f.lower() or f'_{axis}.' in f.lower() or f'chopper_{axis}' in f.lower()]
 
     # Sort by modification time (newest first)
     all_files.sort(key=os.path.getmtime, reverse=True)
@@ -87,8 +88,8 @@ def parse_filename_params(filename: str) -> dict:
     Extract chopper parameters from filename.
 
     Expected formats:
-        chopper_x_tpfd4_tbl2_toff3_s75.csv
-        chopper_y_tpfd8_tbl1_toff4_s100.csv
+        t{tpfd}_{tbl}_{toff}_{hstrt}_{hend}_s{speed}.csv (e.g., t8_2_3_5_3_s75.csv)
+        chopper_x_tpfd4_tbl2_toff3_s75.csv (legacy format)
     """
     params = {
         'axis': None,
@@ -102,19 +103,50 @@ def parse_filename_params(filename: str) -> dict:
 
     basename = os.path.basename(filename).replace('.csv', '')
 
-    # Extract axis
+    # Try new format first: t{tpfd}_{tbl}_{toff}_{hstrt}_{hend}_s{speed}
+    # Example: t8_2_3_5_3_s75
+    new_format_match = re.search(r'^t(\d+)_(\d+)_(\d+)_(\d+)_(\d+)_s(\d+)$', basename)
+    if new_format_match:
+        params['tpfd'] = int(new_format_match.group(1))
+        params['tbl'] = int(new_format_match.group(2))
+        params['toff'] = int(new_format_match.group(3))
+        params['hstrt'] = int(new_format_match.group(4))
+        params['hend'] = int(new_format_match.group(5))
+        params['speed'] = int(new_format_match.group(6))
+        # Try to extract axis from parent directory or other context
+        # For now, we'll try to infer from filename patterns
+        if 'x' in basename.lower() or '_x_' in basename.lower():
+            params['axis'] = 'X'
+        elif 'y' in basename.lower() or '_y_' in basename.lower():
+            params['axis'] = 'Y'
+        return params
+
+    # Try format with axis prefix: chopper_{axis}_t{tpfd}_{tbl}_{toff}_{hstrt}_{hend}_s{speed}
+    # Example: chopper_x_t8_2_3_5_3_s75
+    axis_prefix_match = re.search(r'chopper_([xy])_t(\d+)_(\d+)_(\d+)_(\d+)_(\d+)_s(\d+)', basename, re.IGNORECASE)
+    if axis_prefix_match:
+        params['axis'] = axis_prefix_match.group(1).upper()
+        params['tpfd'] = int(axis_prefix_match.group(2))
+        params['tbl'] = int(axis_prefix_match.group(3))
+        params['toff'] = int(axis_prefix_match.group(4))
+        params['hstrt'] = int(axis_prefix_match.group(5))
+        params['hend'] = int(axis_prefix_match.group(6))
+        params['speed'] = int(axis_prefix_match.group(7))
+        return params
+
+    # Legacy format: chopper_x_tpfd4_tbl2_toff3_s75.csv
     axis_match = re.search(r'chopper_([xy])', basename, re.IGNORECASE)
     if axis_match:
         params['axis'] = axis_match.group(1).upper()
 
-    # Extract parameters
+    # Extract parameters (legacy format with param names)
     for param in ['tpfd', 'tbl', 'toff', 'hstrt', 'hend']:
         match = re.search(rf'{param}(\d+)', basename, re.IGNORECASE)
         if match:
             params[param] = int(match.group(1))
 
     # Extract speed
-    speed_match = re.search(r's(\d+)', basename)
+    speed_match = re.search(r'_s(\d+)', basename)
     if speed_match:
         params['speed'] = int(speed_match.group(1))
 

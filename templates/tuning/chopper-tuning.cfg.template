@@ -333,8 +333,8 @@ gcode:
     {% set distance = 40 %}
     {% set center = printer.toolhead.axis_maximum[axis|lower] / 2 %}
 
-    # Test filename encodes parameters
-    {% set test_name = "chopper_" ~ axis|lower ~ "_tpfd" ~ tpfd ~ "_tbl" ~ tbl ~ "_toff" ~ toff %}
+    # Test filename encodes parameters: t{tpfd}_{tbl}_{toff}_{hstrt}_{hend}
+    {% set test_name = "chopper_" ~ axis|lower ~ "_t" ~ tpfd ~ "_" ~ tbl ~ "_" ~ toff ~ "_" ~ hstrt ~ "_" ~ hend %}
 
     # Test at each speed
     {% for speed in speeds.split(",") %}

@@ -829,11 +829,11 @@ class GschpooziWizard:
     def _install_eddy_module(self) -> None:
         """Install eddy current probe module (Beacon, Cartographer, BTT Eddy)."""
         probe_type = self.state.get('mcu.eddy_probe.probe_type')
-        
+
         if not probe_type or probe_type == 'none':
             self.ui.msgbox("Please select a probe type first.", title="Info")
             return
-        
+
         module_info = {
             'beacon': {
                 'name': 'Beacon',
@@ -854,12 +854,12 @@ class GschpooziWizard:
                 'install_script': None
             }
         }
-        
+
         info = module_info.get(probe_type)
         if not info:
             self.ui.msgbox(f"Unknown probe type: {probe_type}", title="Error")
             return
-        
+
         if info['repo'] is None:
             self.ui.msgbox(
                 f"{info['name']} support is built into Klipper.\n\n"
@@ -867,9 +867,9 @@ class GschpooziWizard:
                 title="Info"
             )
             return
-        
+
         install_dir = info['install_dir']
-        
+
         # Check if already installed
         if install_dir and install_dir.exists():
             if self.ui.yesno(
@@ -885,7 +885,7 @@ class GschpooziWizard:
                     return
             else:
                 return
-        
+
         # Confirm installation
         if not self.ui.yesno(
             f"Install {info['name']} module?\n\n"
@@ -894,7 +894,7 @@ class GschpooziWizard:
             title="Install Module"
         ):
             return
-        
+
         # Clone repository
         self.ui.infobox(f"Cloning {info['name']}...", title="Please Wait")
         try:
@@ -910,7 +910,7 @@ class GschpooziWizard:
         except Exception as e:
             self.ui.msgbox(f"Error cloning repository: {e}", title="Error")
             return
-        
+
         # Run installation script
         install_script = install_dir / info['install_script']
         if install_script.exists():
@@ -939,11 +939,11 @@ class GschpooziWizard:
     def _install_mmu_module(self) -> None:
         """Install MMU software module (Happy Hare or AFC)."""
         module_type = self.state.get('mcu.mmu.module_type')
-        
+
         if not module_type:
             self.ui.msgbox("Please select a software module first.", title="Info")
             return
-        
+
         module_info = {
             'happy_hare': {
                 'name': 'Happy Hare',
@@ -958,14 +958,14 @@ class GschpooziWizard:
                 'install_script': 'install-afc.sh'
             }
         }
-        
+
         info = module_info.get(module_type)
         if not info:
             self.ui.msgbox(f"Unknown module type: {module_type}", title="Error")
             return
-        
+
         install_dir = info['install_dir']
-        
+
         # Check if already installed
         if install_dir.exists():
             if self.ui.yesno(
@@ -981,7 +981,7 @@ class GschpooziWizard:
                     return
             else:
                 return
-        
+
         # Confirm installation
         if not self.ui.yesno(
             f"Install {info['name']}?\n\n"
@@ -990,7 +990,7 @@ class GschpooziWizard:
             title="Install Module"
         ):
             return
-        
+
         # Clone repository
         self.ui.infobox(f"Cloning {info['name']}...", title="Please Wait")
         try:
@@ -1006,7 +1006,7 @@ class GschpooziWizard:
         except Exception as e:
             self.ui.msgbox(f"Error cloning repository: {e}", title="Error")
             return
-        
+
         # Run installation script
         install_script = install_dir / info['install_script']
         if install_script.exists():
@@ -1035,7 +1035,7 @@ class GschpooziWizard:
     def _install_ks_mmu_addon(self) -> None:
         """Install KlipperScreen MMU add-on."""
         module_type = self.state.get('mcu.mmu.module_type')
-        
+
         addon_info = {
             'happy_hare': {
                 'name': 'Happy Hare KlipperScreen',
@@ -1052,7 +1052,7 @@ class GschpooziWizard:
                         'setup from the AFC menu if not auto-installed.'
             }
         }
-        
+
         info = addon_info.get(module_type)
         if not info:
             self.ui.msgbox(
@@ -1061,7 +1061,7 @@ class GschpooziWizard:
                 title="Info"
             )
             return
-        
+
         self.ui.msgbox(
             f"{info['name']} Add-on\n\n{info['note']}",
             title="KlipperScreen Add-on"

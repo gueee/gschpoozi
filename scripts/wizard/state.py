@@ -40,7 +40,7 @@ class WizardState:
         # Ensure basic structure
         if "wizard" not in self._state:
             self._state["wizard"] = {
-                "version": "2.0",
+                "version": "3.0",
                 "created": datetime.now().isoformat(),
                 "last_modified": datetime.now().isoformat(),
             }

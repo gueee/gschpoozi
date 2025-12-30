@@ -804,8 +804,8 @@ def generate_hardware_cfg(
             lines.append(f"sensor_pin: {th_pin}  # {th_port}")
 
         # Add pullup_resistor if specified (required for PT1000 direct and some thermistors)
-        # Only add if not using MAX31865 (which handles pullup internally)
-        if hotend_pullup and 'MAX31865' not in hotend_therm:
+        # Only add if not using MAX31865 (which handles pullup internally) and not set to "none"
+        if hotend_pullup and hotend_pullup.lower() != 'none' and 'MAX31865' not in hotend_therm:
             lines.append(f"pullup_resistor: {hotend_pullup}  # Board-specific pullup value")
 
     lines.append("min_temp: 0")
@@ -857,8 +857,8 @@ def generate_hardware_cfg(
     lines.append(f"sensor_type: {bed_therm}")
     lines.append(f"sensor_pin: {tb_pin}  # {tb_port}")
     # Add pullup_resistor if specified (required for PT1000 direct and some thermistors)
-    # Only add if not using MAX31865 (which handles pullup internally)
-    if bed_pullup and 'MAX31865' not in bed_therm:
+    # Only add if not using MAX31865 (which handles pullup internally) and not set to "none"
+    if bed_pullup and bed_pullup.lower() != 'none' and 'MAX31865' not in bed_therm:
         lines.append(f"pullup_resistor: {bed_pullup}  # Board-specific pullup value")
     lines.append("control: pid")
     lines.append("pid_kp: 54.027  # Run PID_CALIBRATE HEATER=heater_bed TARGET=60")
@@ -1790,6 +1790,10 @@ def generate_hardware_cfg(
     # Chamber temperature sensor
     has_chamber_sensor = wizard_state.get('has_chamber_sensor', '')
     chamber_sensor_type = wizard_state.get('chamber_sensor_type') or 'Generic 3950'
+    # Get chamber pullup from temperature_sensors.chamber config
+    temp_sensors = wizard_state.get('temperature_sensors', {})
+    chamber_config = temp_sensors.get('chamber', {}) if isinstance(temp_sensors, dict) else {}
+    chamber_pullup = chamber_config.get('pullup_resistor') or wizard_state.get('chamber_pullup_resistor', '')
     # Try hardware assignments first, then wizard state
     chamber_port = assignments.get('thermistor_chamber', '')
     if chamber_port:
@@ -1805,6 +1809,9 @@ def generate_hardware_cfg(
         lines.append("[temperature_sensor chamber]")
         lines.append(f"sensor_type: {chamber_sensor_type}")
         lines.append(f"sensor_pin: {chamber_sensor_pin}  # {chamber_port or 'direct pin'}")
+        # Add pullup_resistor if specified and not "none" (MAX31865 handles pullup internally)
+        if chamber_pullup and chamber_pullup.lower() != 'none' and 'MAX31865' not in chamber_sensor_type:
+            lines.append(f"pullup_resistor: {chamber_pullup}  # Board-specific pullup value")
         lines.append("min_temp: 0")
         lines.append("max_temp: 80")
         lines.append("gcode_id: C")

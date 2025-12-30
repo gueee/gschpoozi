@@ -335,12 +335,14 @@ gcode:
 
     # Test filename encodes parameters: t{tpfd}_{tbl}_{toff}_{hstrt}_{hend}
     {% set test_name = "chopper_" ~ axis|lower ~ "_t" ~ tpfd ~ "_" ~ tbl ~ "_" ~ toff ~ "_" ~ hstrt ~ "_" ~ hend %}
+    {% set speed_list = speeds.split(",") %}
 
     # Test at each speed
-    {% for speed in speeds.split(",") %}
+    {% for speed in speed_list %}
         {% set speed_int = speed|int %}
+        {% set is_last = loop.last %}
 
-        # Start measurement
+        # Start measurement for this speed test
         ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip | default('adxl345') }}
 
         # Execute test movement
@@ -349,6 +351,7 @@ gcode:
         G1 {{'{'}}axis{{'}'}}{{'{'}}center{{'}'}} F{{'{'}}speed_int * 60{{'}'}}
 
         # Stop and save with encoded filename
+        # This stops the current measurement and saves it, preventing data loss
         ACCELEROMETER_MEASURE CHIP={{ input_shaper.accel_chip | default('adxl345') }} NAME={{'{'}}test_name{{'}'}}_s{{'{'}}speed_int{{'}'}}
 
         G4 P200  # Pause between speeds

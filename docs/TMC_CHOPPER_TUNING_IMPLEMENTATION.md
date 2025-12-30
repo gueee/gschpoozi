@@ -521,17 +521,24 @@ def analyze_parameter_sweep(results_dir: Path) -> dict:
     results = []
 
     # Find all test files matching pattern: t{tpfd}_{tbl}_{toff}_{hstrt}_{hend}_s{speed}.csv
-    for csv_file in results_dir.glob("t*_s*.csv"):
+    # or chopper_{axis}_t{tpfd}_{tbl}_{toff}_{hstrt}_{hend}_s{speed}.csv
+    for csv_file in results_dir.glob("*_s*.csv"):
         name = csv_file.stem
-        # Parse parameters from filename
-        parts = name.split("_")
+
+        # Parse parameters from filename using regex (more robust than split)
+        # Handles both formats: t8_2_3_5_3_s75 or chopper_x_t8_2_3_5_3_s75
+        import re
+        match = re.search(r'(?:chopper_[xy]_)?t(\d+)_(\d+)_(\d+)_(\d+)_(\d+)_s(\d+)', name, re.IGNORECASE)
+        if not match:
+            continue
+
         params = {
-            'tpfd': int(parts[0][1:]),  # Remove 't' prefix
-            'tbl': int(parts[1]),
-            'toff': int(parts[2]),
-            'hstrt': int(parts[3]),
-            'hend': int(parts[4]),
-            'speed': int(parts[5][1:]),  # Remove 's' prefix
+            'tpfd': int(match.group(1)),
+            'tbl': int(match.group(2)),
+            'toff': int(match.group(3)),
+            'hstrt': int(match.group(4)),
+            'hend': int(match.group(5)),
+            'speed': int(match.group(6)),
         }
 
         # Calculate vibration score

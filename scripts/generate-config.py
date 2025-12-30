@@ -128,13 +128,13 @@ def load_motor_mapping() -> Dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def get_motor_pins(board: Dict, port_name: str) -> Dict[str, str]:
-    """Get motor pins for a given port."""
+    """Get motor pins for a given port. Returns None for missing pins."""
     motor_ports = board.get('motor_ports', {})
     port = motor_ports.get(port_name, {})
     return {
-        'step_pin': port.get('step_pin', 'REPLACE_PIN'),
-        'dir_pin': port.get('dir_pin', 'REPLACE_PIN'),
-        'enable_pin': port.get('enable_pin', 'REPLACE_PIN'),
+        'step_pin': port.get('step_pin'),
+        'dir_pin': port.get('dir_pin'),
+        'enable_pin': port.get('enable_pin'),
         'uart_pin': port.get('uart_pin'),
         'cs_pin': port.get('cs_pin'),
         'diag_pin': port.get('diag_pin'),
@@ -181,26 +181,26 @@ def get_spi_pins(board: Dict, spi_bus_name: str = None) -> Dict[str, str]:
 
     return {'mosi': None, 'miso': None, 'sck': None, 'bus': None}
 
-def get_heater_pin(board: Dict, port_name: str) -> str:
-    """Get heater pin for a given port."""
+def get_heater_pin(board: Dict, port_name: str) -> Optional[str]:
+    """Get heater pin for a given port. Returns None if not found."""
     heater_ports = board.get('heater_ports', {})
     port = heater_ports.get(port_name, {})
-    return port.get('pin', 'REPLACE_PIN')
+    return port.get('pin')
 
-def get_thermistor_pin(board: Dict, port_name: str) -> str:
-    """Get thermistor pin for a given port."""
+def get_thermistor_pin(board: Dict, port_name: str) -> Optional[str]:
+    """Get thermistor pin for a given port. Returns None if not found."""
     therm_ports = board.get('thermistor_ports', {})
     port = therm_ports.get(port_name, {})
-    return port.get('pin', 'REPLACE_PIN')
+    return port.get('pin')
 
-def get_fan_pin(board: Dict, port_name: str) -> str:
-    """Get fan pin for a given port."""
+def get_fan_pin(board: Dict, port_name: str) -> Optional[str]:
+    """Get fan pin for a given port. Returns None if not found."""
     fan_ports = board.get('fan_ports', {})
     port = fan_ports.get(port_name, {})
-    return port.get('pin', 'REPLACE_PIN')
+    return port.get('pin')
 
-def get_endstop_pin(board: Dict, port_name: str) -> str:
-    """Get endstop pin for a given port.
+def get_endstop_pin(board: Dict, port_name: str) -> Optional[str]:
+    """Get endstop pin for a given port. Returns None if not found.
 
     Handles different naming conventions between boards:
     - BTT style: STOP_0, STOP_1, STOP_2...
@@ -210,25 +210,38 @@ def get_endstop_pin(board: Dict, port_name: str) -> str:
 
     # Direct lookup first
     if port_name in endstop_ports:
-        return endstop_ports[port_name].get('pin', 'REPLACE_PIN')
+        return endstop_ports[port_name].get('pin')
 
     # Try mapping STOP_x -> IOx (BTT to Mellow)
     if port_name.startswith('STOP_'):
         io_name = f"IO{port_name[5:]}"
         if io_name in endstop_ports:
-            return endstop_ports[io_name].get('pin', 'REPLACE_PIN')
+            return endstop_ports[io_name].get('pin')
 
     # Try mapping IOx -> STOP_x (Mellow to BTT)
     if port_name.startswith('IO') and port_name[2:].isdigit():
         stop_name = f"STOP_{port_name[2:]}"
         if stop_name in endstop_ports:
-            return endstop_ports[stop_name].get('pin', 'REPLACE_PIN')
+            return endstop_ports[stop_name].get('pin')
 
     # If port_name looks like a pin (e.g., PG12), use it directly
     if len(port_name) >= 2 and port_name[0] == 'P' and port_name[1].isalpha():
         return port_name
 
-    return 'REPLACE_PIN'
+    return None
+
+def validate_motor_pins(pins: Dict[str, str], stepper_name: str, port_name: str) -> None:
+    """Validate that required motor pins are present. Raises ValueError if missing."""
+    required = ['step_pin', 'dir_pin', 'enable_pin']
+    missing = [p for p in required if not pins.get(p)]
+    if missing:
+        raise ValueError(f"Stepper '{stepper_name}' on port '{port_name}' is missing required pins: {', '.join(missing)}")
+
+def validate_pin(pin: Optional[str], description: str) -> str:
+    """Validate that a pin is present. Raises ValueError if missing."""
+    if not pin:
+        raise ValueError(f"Missing required pin for {description}")
+    return pin
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIG GENERATION
@@ -383,6 +396,7 @@ def generate_hardware_cfg(
 
     x_port = assignments.get('stepper_x', 'MOTOR_0')
     x_pins = get_motor_pins(board, x_port)
+    validate_motor_pins(x_pins, 'stepper_x', x_port)
     x_dir_pin = apply_dir_invert(x_pins['dir_pin'], 'stepper_x', motor_mapping, hardware_state)
     lines.append(f"[stepper_x]")
     lines.append(f"step_pin: {x_pins['step_pin']}      # {x_port}")
@@ -428,6 +442,7 @@ def generate_hardware_cfg(
     # Stepper Y
     y_port = assignments.get('stepper_y', 'MOTOR_1')
     y_pins = get_motor_pins(board, y_port)
+    validate_motor_pins(y_pins, 'stepper_y', y_port)
     y_dir_pin = apply_dir_invert(y_pins['dir_pin'], 'stepper_y', motor_mapping, hardware_state)
     lines.append(f"[stepper_y]")
     lines.append(f"step_pin: {y_pins['step_pin']}      # {y_port}")
@@ -466,6 +481,7 @@ def generate_hardware_cfg(
     if kinematics == 'corexy-awd':
         x1_port = assignments.get('stepper_x1', 'MOTOR_2')
         x1_pins = get_motor_pins(board, x1_port)
+        validate_motor_pins(x1_pins, 'stepper_x1', x1_port)
         x1_dir_pin = apply_dir_invert(x1_pins['dir_pin'], 'stepper_x1', motor_mapping, hardware_state)
         lines.append(f"[stepper_x1]")
         lines.append(f"step_pin: {x1_pins['step_pin']}      # {x1_port}")
@@ -479,6 +495,7 @@ def generate_hardware_cfg(
 
         y1_port = assignments.get('stepper_y1', 'MOTOR_3')
         y1_pins = get_motor_pins(board, y1_port)
+        validate_motor_pins(y1_pins, 'stepper_y1', y1_port)
         y1_dir_pin = apply_dir_invert(y1_pins['dir_pin'], 'stepper_y1', motor_mapping, hardware_state)
         lines.append(f"[stepper_y1]")
         lines.append(f"step_pin: {y1_pins['step_pin']}      # {y1_port}")
@@ -496,6 +513,7 @@ def generate_hardware_cfg(
         z_key = f"stepper_z{suffix}" if suffix else "stepper_z"
         z_port = assignments.get(z_key, f'MOTOR_{2 + z_idx}')
         z_pins = get_motor_pins(board, z_port)
+        validate_motor_pins(z_pins, z_key, z_port)
         z_dir_pin = apply_dir_invert(z_pins['dir_pin'], z_key, motor_mapping, hardware_state)
 
         section_name = f"stepper_z{suffix}"
@@ -577,11 +595,8 @@ def generate_hardware_cfg(
                 tmc_lines.append(f"spi_software_mosi_pin: {spi_pins['mosi']}")
                 tmc_lines.append(f"spi_software_sclk_pin: {spi_pins['sck']}")
             else:
-                # No SPI config found - add comment for manual config
-                tmc_lines.append("# SPI pins not found in board config - configure manually:")
-                tmc_lines.append("# spi_software_miso_pin: REPLACE_MISO")
-                tmc_lines.append("# spi_software_mosi_pin: REPLACE_MOSI")
-                tmc_lines.append("# spi_software_sclk_pin: REPLACE_SCLK")
+                # No SPI config found - this is an error for SPI drivers
+                raise ValueError(f"TMC SPI driver {driver_type} requires SPI configuration but board has no SPI pins defined")
         else:
             tmc_lines.append(f"uart_pin: {prefix}{motor_pins.get('uart_pin')}")
 
@@ -667,6 +682,7 @@ def generate_hardware_cfg(
         # Extruder motor on toolboard
         e_port = tb_assignments.get('extruder', 'EXTRUDER')
         e_pins = get_motor_pins(toolboard, e_port)
+        validate_motor_pins(e_pins, 'extruder', e_port)
         e_dir_pin = apply_dir_invert(e_pins['dir_pin'], 'extruder', motor_mapping, hardware_state)
         lines.append(f"step_pin: toolboard:{e_pins['step_pin']}      # {e_port}")
         lines.append(f"dir_pin: toolboard:{e_dir_pin}       # {e_port}")
@@ -675,6 +691,7 @@ def generate_hardware_cfg(
         # Extruder motor on main board
         e_port = assignments.get('extruder', 'MOTOR_5')
         e_pins = get_motor_pins(board, e_port)
+        validate_motor_pins(e_pins, 'extruder', e_port)
         e_dir_pin = apply_dir_invert(e_pins['dir_pin'], 'extruder', motor_mapping, hardware_state)
         lines.append(f"step_pin: {e_pins['step_pin']}      # {e_port}")
         lines.append(f"dir_pin: {e_dir_pin}       # {e_port}")
@@ -690,10 +707,12 @@ def generate_hardware_cfg(
     if heater_on_toolboard:
         he_port = tb_assignments.get('heater_extruder', 'HE')
         he_pin = get_heater_pin(toolboard, he_port)
+        validate_pin(he_pin, f"extruder heater on toolboard port {he_port}")
         lines.append(f"heater_pin: toolboard:{he_pin}  # {he_port}")
     else:
         he_port = assignments.get('heater_extruder', 'HE0')
         he_pin = get_heater_pin(board, he_port)
+        validate_pin(he_pin, f"extruder heater on port {he_port}")
         lines.append(f"heater_pin: {he_pin}  # {he_port}")
 
     # Handle special sensor types (MAX31865 for PT100/PT1000)
@@ -718,10 +737,12 @@ def generate_hardware_cfg(
         if therm_on_toolboard:
             th_port = tb_assignments.get('thermistor_extruder', 'TH0')
             th_pin = get_thermistor_pin(toolboard, th_port)
+            validate_pin(th_pin, f"extruder thermistor on toolboard port {th_port}")
             lines.append(f"sensor_pin: toolboard:{th_pin}  # {th_port}")
         else:
             th_port = assignments.get('thermistor_extruder', 'T0')
             th_pin = get_thermistor_pin(board, th_port)
+            validate_pin(th_pin, f"extruder thermistor on port {th_port}")
             lines.append(f"sensor_pin: {th_pin}  # {th_port}")
 
         # Add pullup_resistor if specified (important for PT1000 direct)
@@ -765,8 +786,10 @@ def generate_hardware_cfg(
 
     hb_port = assignments.get('heater_bed', 'HB')
     hb_pin = get_heater_pin(board, hb_port)
+    validate_pin(hb_pin, f"heater bed on port {hb_port}")
     tb_port = assignments.get('thermistor_bed', 'TB')
     tb_pin = get_thermistor_pin(board, tb_port)
+    validate_pin(tb_pin, f"bed thermistor on port {tb_port}")
 
     lines.append("[heater_bed]")
     lines.append(f"heater_pin: {hb_pin}  # {hb_port}")
@@ -927,13 +950,16 @@ def generate_hardware_cfg(
                 lines.append(f"heater_temp: {hf_heater_temp}.0")
             elif fan_hotend_type == 'temperature':
                 hf_sensor = wizard_state.get('fan_hotend_sensor_type', '')
+                hf_sensor_pin = wizard_state.get('fan_hotend_sensor_pin', '')
                 hf_target = wizard_state.get('fan_hotend_target_temp', '40')
                 lines.append("[temperature_fan hotend_fan]")
                 lines.append(f"pin: {hf_pin}  # {hf_port}")
                 add_fan_settings(lines, hf_settings, {'max_power': '1.0', 'kick_start': '0.5', 'shutdown_speed': '0'})
                 if hf_sensor and hf_sensor != 'chamber':
+                    if not hf_sensor_pin:
+                        raise ValueError("Hotend fan temperature control requires sensor_pin when using custom sensor")
                     lines.append(f"sensor_type: {hf_sensor}")
-                    lines.append("sensor_pin: REPLACE_PIN  # Connect temperature sensor")
+                    lines.append(f"sensor_pin: {hf_sensor_pin}")
                 else:
                     lines.append("sensor_type: temperature_combined")
                     lines.append("sensor_list: temperature_sensor chamber")
@@ -1152,13 +1178,16 @@ def generate_hardware_cfg(
             lines.append("# Recirculating active carbon/HEPA filter")
         elif fan_rscs_type == 'temperature':
             rs_sensor = wizard_state.get('fan_rscs_sensor_type', '')
+            rs_sensor_pin = wizard_state.get('fan_rscs_sensor_pin', '')
             rs_target = wizard_state.get('fan_rscs_target_temp', '45')
             lines.append("[temperature_fan rscs_fan]")
             lines.append(f"pin: {rs_pin_str}")
             add_fan_settings(lines, rs_settings, {'max_power': '1.0', 'shutdown_speed': '0', 'kick_start': '0.5'})
             if rs_sensor and rs_sensor != 'chamber':
+                if not rs_sensor_pin:
+                    raise ValueError("RSCS fan temperature control requires sensor_pin when using custom sensor")
                 lines.append(f"sensor_type: {rs_sensor}")
-                lines.append("sensor_pin: REPLACE_PIN  # Connect temperature sensor")
+                lines.append(f"sensor_pin: {rs_sensor_pin}")
             else:
                 lines.append("sensor_type: temperature_combined")
                 lines.append("sensor_list: temperature_sensor chamber")
@@ -1573,7 +1602,7 @@ def generate_hardware_cfg(
         # Status LEDs (toolhead neopixels)
         if has_leds == 'yes' or lighting_type == 'neopixel':
             # Priority: 1) User-selected toolboard pin, 2) User-selected mainboard pin,
-            #           3) Toolboard RGB from template, 4) REPLACE_PIN
+            #           3) Toolboard RGB from template, 4) Skip if no pin
             if tb_lighting_pin:
                 # User selected a toolboard pin
                 # Extract just the pin from format like "RGB:gpio7" or "manual:PD15"

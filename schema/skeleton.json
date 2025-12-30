@@ -2957,6 +2957,7 @@
               "label": "Fan Port (Mainboard)",
               "state_key": "fans.part_cooling.pin_mainboard",
               "port_type": "fan_ports",
+              "required": true,
               "condition": "fans.part_cooling.enabled and fans.part_cooling.location == 'mainboard'"
             },
             {
@@ -2965,6 +2966,7 @@
               "label": "Fan Port (Toolboard)",
               "state_key": "fans.part_cooling.pin_toolboard",
               "port_type": "fan_ports",
+              "required": true,
               "condition": "fans.part_cooling.enabled and fans.part_cooling.location == 'toolboard'"
             },
             {
@@ -3034,6 +3036,7 @@
               "label": "Fan Port (Mainboard)",
               "state_key": "fans.hotend.pin_mainboard",
               "port_type": "fan_ports",
+              "required": true,
               "condition": "fans.hotend.enabled and fans.hotend.location == 'mainboard'"
             },
             {
@@ -3042,6 +3045,7 @@
               "label": "Fan Port (Toolboard)",
               "state_key": "fans.hotend.pin_toolboard",
               "port_type": "fan_ports",
+              "required": true,
               "condition": "fans.hotend.enabled and fans.hotend.location == 'toolboard'"
             },
             {
@@ -3090,6 +3094,7 @@
               "label": "Fan Port",
               "state_key": "fans.controller.pin",
               "port_type": "fan_ports",
+              "required": true,
               "condition": "fans.controller.enabled"
             },
             {
@@ -3144,6 +3149,7 @@
             "type": "text",
             "label": "Fan Name",
             "state_key": "name",
+            "required": true,
             "help": "e.g., nevermore, rscs, exhaust"
           },
           {
@@ -3186,6 +3192,7 @@
             "label": "Fan Port",
             "state_key": "pin",
             "port_type": "fan_ports",
+            "required": true,
             "condition": "pin_type == 'single'"
           },
           {
@@ -3202,6 +3209,7 @@
             "label": "Select Fan Ports",
             "state_key": "pins",
             "port_type": "fan_ports",
+            "required": true,
             "help": "Select multiple fan ports to combine",
             "condition": "pin_type == 'multi_pin'"
           },
@@ -3301,12 +3309,45 @@
           "condition": "leds.enabled"
         },
         {
+          "id": "pin_mainboard",
+          "type": "port_select",
+          "label": "LED Pin (Mainboard)",
+          "state_key": "leds.pin_mainboard",
+          "port_type": "misc_ports",
+          "required": true,
+          "condition": "leds.enabled and leds.location == 'mainboard'"
+        },
+        {
+          "id": "pin_toolboard",
+          "type": "port_select",
+          "label": "LED Pin (Toolboard)",
+          "state_key": "leds.pin_toolboard",
+          "port_type": "misc_ports",
+          "required": true,
+          "condition": "leds.enabled and leds.location == 'toolboard'"
+        },
+        {
           "id": "chain_count",
           "type": "int",
           "label": "Number of LEDs",
           "state_key": "leds.chain_count",
           "default": 1,
           "range": [1, 100],
+          "required": true,
+          "condition": "leds.enabled"
+        },
+        {
+          "id": "color_order",
+          "type": "choice",
+          "label": "Color Order",
+          "state_key": "leds.color_order",
+          "options": [
+            { "value": "GRB", "label": "GRB (most common)" },
+            { "value": "RGB", "label": "RGB" },
+            { "value": "GRBW", "label": "GRBW" },
+            { "value": "RGBW", "label": "RGBW" }
+          ],
+          "default": "GRB",
           "condition": "leds.enabled"
         }
       ]
@@ -3394,6 +3435,7 @@
               "label": "Thermistor Port",
               "state_key": "temperature_sensors.chamber.sensor_port_mainboard",
               "port_type": "thermistor_ports",
+              "required": true,
               "condition": "temperature_sensors.chamber.enabled and temperature_sensors.chamber.sensor_location == 'mainboard'"
             },
             {
@@ -3402,6 +3444,7 @@
               "label": "GPIO Pin",
               "state_key": "temperature_sensors.chamber.sensor_pin_rpi",
               "default": "gpio4",
+              "required": true,
               "help": "GPIO pin for DS18B20 (e.g., gpio4)",
               "condition": "temperature_sensors.chamber.enabled and temperature_sensors.chamber.sensor_location == 'rpi'"
             },

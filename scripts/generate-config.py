@@ -3784,6 +3784,32 @@ def main():
                 old_autotune.unlink()
                 print(f"Removed (disabled): {old_autotune}")
 
+        # Clean up old [autotune_tmc] sections from tuning.cfg (legacy cleanup)
+        # These sections may exist from a previous generator or manual additions
+        tuning_cfg_path = output_dir / "tuning.cfg"
+        if tuning_cfg_path.exists():
+            try:
+                with open(tuning_cfg_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                if '[autotune_tmc' in content:
+                    import re
+                    # Remove all [autotune_tmc ...] sections (section header + following lines until next section or EOF)
+                    cleaned = re.sub(
+                        r'\[autotune_tmc[^\]]*\][^\[]*',
+                        '',
+                        content,
+                        flags=re.MULTILINE
+                    )
+                    # Clean up excess blank lines
+                    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+
+                    with open(tuning_cfg_path, 'w', encoding='utf-8') as f:
+                        f.write(cleaned)
+                    print(f"Cleaned [autotune_tmc] sections from: {tuning_cfg_path}")
+            except Exception as e:
+                print(f"Warning: Could not clean tuning.cfg: {e}", file=sys.stderr)
+
 if __name__ == '__main__':
     try:
         main()

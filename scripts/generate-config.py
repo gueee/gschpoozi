@@ -1370,7 +1370,11 @@ def generate_hardware_cfg(
 
     # Probe configuration
     probe_type = get_probe_type_from_state(wizard_state)
-    probe_mode = wizard_state.get('probe_mode', 'proximity')  # Default to proximity
+    # probe.homing_mode: 'contact'/'proximity' for Beacon, 'touch'/'scan' for Cartographer
+    probe_config = wizard_state.get('probe', {})
+    probe_mode = probe_config.get('homing_mode', '') if isinstance(probe_config, dict) else ''
+    if not probe_mode:
+        probe_mode = wizard_state.get('probe.homing_mode', '') or wizard_state.get('probe_mode', 'proximity')
     # Get probe serial/CAN - check wizard state first, then hardware state as fallback
     probe_serial = wizard_state.get('probe_serial') or hardware_state.get('probe_serial')
     probe_canbus_uuid = wizard_state.get('probe_canbus_uuid') or hardware_state.get('probe_canbus_uuid')
@@ -1405,8 +1409,8 @@ def generate_hardware_cfg(
             lines.append("mesh_main_direction: x")
             lines.append("mesh_runs: 2")
 
-            # Contact/Touch mode configuration for Beacon
-            if probe_mode == 'touch':
+            # Contact mode configuration for Beacon
+            if probe_mode == 'contact':
                 lines.append("")
                 lines.append("# Contact mode settings (Beacon Rev H+ required)")
                 lines.append("home_method: contact")
@@ -1535,9 +1539,12 @@ def generate_hardware_cfg(
         # ─────────────────────────────────────────────────────────────────────
         # SAFE Z HOME - Required unless probe handles homing itself
         # ─────────────────────────────────────────────────────────────────────
-        # Beacon touch mode handles Z homing via home_method: contact
-        # and has its own home_xy_position, so safe_z_home would conflict
-        skip_safe_z_home = (probe_type == 'beacon' and probe_mode == 'touch')
+        # Beacon contact mode and Cartographer touch mode handle Z homing internally
+        # with home_xy_position in their own section, so safe_z_home would conflict
+        skip_safe_z_home = (
+            (probe_type == 'beacon' and probe_mode == 'contact') or
+            (probe_type == 'cartographer' and probe_mode == 'touch')
+        )
 
         if not skip_safe_z_home:
             lines.append("# " + "─" * 77)

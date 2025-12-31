@@ -5,7 +5,7 @@ import { usePortRegistry } from '../../hooks/usePortRegistry';
 import { PortSelector } from '../ui/PortSelector';
 import { PinEditor } from '../ui/PinEditor';
 import type { MotorPort, SimplePort, ProbePort } from '../ui/PortSelector';
-import { Settings, Info, Cpu, CircuitBoard } from 'lucide-react';
+import { Settings, Info, Cpu, CircuitBoard, Crosshair } from 'lucide-react';
 
 interface StepperPanelProps {
   stepperName: string;
@@ -410,46 +410,124 @@ export function StepperPanel({ stepperName }: StepperPanelProps) {
         {/* Endstop Configuration */}
         <div className="space-y-3">
           <label className="block text-sm font-medium text-slate-300">
-            Endstop Port
+            {isZAxis ? 'Z Endstop / Probe' : 'Endstop'}
           </label>
 
-          {/* Board selector for endstop (if toolboard enabled) */}
-          {toolboardEnabled && toolboardData && (
-            <div className="grid grid-cols-2 gap-2 mb-2">
-              <button
-                onClick={() => handleEndstopLocationChange('mainboard')}
-                className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  endstopLocation === 'mainboard'
-                    ? 'bg-cyan-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >
-                <Cpu size={16} />
-                Mainboard
-              </button>
-              <button
-                onClick={() => handleEndstopLocationChange('toolboard')}
-                className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  endstopLocation === 'toolboard'
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >
-                <CircuitBoard size={16} />
-                Toolboard
-              </button>
+          {/* Z axis: Option to use probe as endstop */}
+          {isZAxis && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setValue('endstop_type', 'probe');
+                    setValue('endstop_pin', 'probe:z_virtual_endstop');
+                    setValue('endstop_port', undefined);
+                    setValue('endstop_location', undefined);
+                  }}
+                  className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    getValue('endstop_type') === 'probe' || getValue('endstop_pin') === 'probe:z_virtual_endstop'
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  <Crosshair size={16} />
+                  Use Probe
+                </button>
+                <button
+                  onClick={() => {
+                    setValue('endstop_type', 'switch');
+                    setValue('endstop_pin', undefined);
+                  }}
+                  className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    getValue('endstop_type') === 'switch' || (getValue('endstop_type') !== 'probe' && getValue('endstop_pin') !== 'probe:z_virtual_endstop')
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  <Settings size={16} />
+                  Use Switch
+                </button>
+              </div>
+
+              {/* Probe virtual endstop info */}
+              {(getValue('endstop_type') === 'probe' || getValue('endstop_pin') === 'probe:z_virtual_endstop') && (
+                <div className="bg-violet-900/20 border border-violet-700/50 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <Info size={14} className="text-violet-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-violet-300">
+                      <strong>Using probe as Z endstop</strong>
+                      <div className="font-mono mt-1 text-violet-200">
+                        endstop_pin: probe:z_virtual_endstop
+                      </div>
+                      <p className="text-violet-200/70 mt-2">
+                        For eddy probes (Beacon, Cartographer, BTT Eddy), also set:
+                        <br />
+                        <code className="bg-slate-800 px-1 rounded">homing_retract_dist: 0</code>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Homing retract dist for eddy probes */}
+                  <div className="mt-3 pt-3 border-t border-violet-700/30">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={getValue('homing_retract_dist') === 0}
+                        onChange={(e) => setValue('homing_retract_dist', e.target.checked ? 0 : undefined)}
+                        className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-violet-500 focus:ring-violet-500"
+                      />
+                      <span className="text-sm text-slate-300">
+                        Set homing_retract_dist: 0 (required for eddy probes)
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          <PortSelector
-            portType="endstop"
-            value={getValue('endstop_port') || ''}
-            onChange={handleEndstopPortChange}
-            boardData={activeEndstopBoardData}
-            usedPorts={portRegistry.getUsedByType('endstop')}
-            placeholder={`Select endstop port from ${endstopLocation}...`}
-            allowClear={true}
-          />
+          {/* Physical endstop switch configuration */}
+          {(!isZAxis || getValue('endstop_type') === 'switch' || (getValue('endstop_type') !== 'probe' && getValue('endstop_pin') !== 'probe:z_virtual_endstop')) && (
+            <>
+              {/* Board selector for endstop (if toolboard enabled) */}
+              {toolboardEnabled && toolboardData && (
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <button
+                    onClick={() => handleEndstopLocationChange('mainboard')}
+                    className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      endstopLocation === 'mainboard'
+                        ? 'bg-cyan-600 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    <Cpu size={16} />
+                    Mainboard
+                  </button>
+                  <button
+                    onClick={() => handleEndstopLocationChange('toolboard')}
+                    className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      endstopLocation === 'toolboard'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    <CircuitBoard size={16} />
+                    Toolboard
+                  </button>
+                </div>
+              )}
+
+              <PortSelector
+                portType="endstop"
+                value={getValue('endstop_port') || ''}
+                onChange={handleEndstopPortChange}
+                boardData={activeEndstopBoardData}
+                usedPorts={portRegistry.getUsedByType('endstop')}
+                placeholder={`Select endstop port from ${endstopLocation}...`}
+                allowClear={true}
+              />
+            </>
+          )}
         </div>
 
         {/* Endstop pin display with pullup/invert toggles */}

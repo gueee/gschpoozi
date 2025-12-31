@@ -263,7 +263,7 @@ export function ProbePanel() {
             {probeType === 'beacon' && (
               <div className="space-y-3 border-t border-slate-700 pt-4">
                 <h4 className="text-sm font-medium text-slate-300">Beacon Options</h4>
-                
+
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">
                     Home Method

@@ -4,8 +4,8 @@
 [Unit]
 Description=Moonraker API Server
 Documentation=https://moonraker.readthedocs.io/
-After=network-online.target klipper.service
-Wants=network-online.target
+Requires=network-online.target
+After=network-online.target
 
 [Install]
 WantedBy=multi-user.target
@@ -13,8 +13,10 @@ WantedBy=multi-user.target
 [Service]
 Type=simple
 User=%USER%
-RemainAfterExit=no
-ExecStart=%HOME%/moonraker-env/bin/python %HOME%/moonraker/moonraker/moonraker.py -d %HOME%/printer_data
+SupplementaryGroups=moonraker-admin
+RemainAfterExit=yes
+ExecStart=%HOME%/moonraker-env/bin/python \
+    %HOME%/moonraker/moonraker/moonraker.py \
+    -d %HOME%/printer_data
 Restart=always
 RestartSec=10
-

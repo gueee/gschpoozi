@@ -568,24 +568,60 @@ z_tilt:
   condition: "bed_leveling.leveling_type == 'z_tilt'"
   template: |
     [z_tilt]
+    # Z motor positions (outside bed, where steppers are located)
+    # Auto-generated defaults for 2-3 Z motor setup - adjust to match your hardware!
+    {% if bed_leveling.z_tilt and bed_leveling.z_tilt.z_positions %}
     z_positions: {{ bed_leveling.z_tilt.z_positions }}
+    {% else %}
+    z_positions:
+        {{ (printer.bed_size_x / 2) | int }}, {{ printer.bed_size_y | int + 50 }}   # Front center (stepper)
+        -50, -50                                                                      # Back left (stepper)
+        {{ printer.bed_size_x | int + 50 }}, -50                                     # Back right (stepper)
+    {% endif %}
+    # Probe points (inside bed, where nozzle/probe can reach)
+    {% if bed_leveling.z_tilt and bed_leveling.z_tilt.points %}
     points: {{ bed_leveling.z_tilt.points }}
-    speed: {{ bed_leveling.z_tilt.speed | default(200) }}
-    horizontal_move_z: {{ bed_leveling.z_tilt.horizontal_move_z | default(10) }}
-    retries: {{ bed_leveling.z_tilt.retries | default(5) }}
-    retry_tolerance: {{ bed_leveling.z_tilt.retry_tolerance | default(0.0075) }}
+    {% else %}
+    points:
+        {{ (printer.bed_size_x / 2) | int }}, {{ (printer.bed_size_y - 30) | int }}  # Front center
+        30, 30                                                                        # Back left
+        {{ (printer.bed_size_x - 30) | int }}, 30                                    # Back right
+    {% endif %}
+    speed: {{ bed_leveling.z_tilt.speed | default(200) if bed_leveling.z_tilt else 200 }}
+    horizontal_move_z: {{ bed_leveling.z_tilt.horizontal_move_z | default(10) if bed_leveling.z_tilt else 10 }}
+    retries: {{ bed_leveling.z_tilt.retries | default(5) if bed_leveling.z_tilt else 5 }}
+    retry_tolerance: {{ bed_leveling.z_tilt.retry_tolerance | default(0.0075) if bed_leveling.z_tilt else 0.0075 }}
 
 quad_gantry_level:
   condition: "bed_leveling.leveling_type == 'qgl'"
   template: |
     [quad_gantry_level]
+    # Gantry corners (outside bed, where gantry pivots are located)
+    # Auto-generated defaults for Voron-style QGL - adjust to match your hardware!
+    {% if bed_leveling.qgl and bed_leveling.qgl.gantry_corners %}
     gantry_corners: {{ bed_leveling.qgl.gantry_corners }}
+    {% else %}
+    gantry_corners:
+        -60, -10                                                                      # Front left
+        {{ printer.bed_size_x | int + 60 }}, -10                                     # Front right
+        {{ printer.bed_size_x | int + 60 }}, {{ printer.bed_size_y | int + 60 }}     # Back right
+        -60, {{ printer.bed_size_y | int + 60 }}                                     # Back left
+    {% endif %}
+    # Probe points (inside bed corners)
+    {% if bed_leveling.qgl and bed_leveling.qgl.points %}
     points: {{ bed_leveling.qgl.points }}
-    speed: {{ bed_leveling.qgl.speed | default(200) }}
-    horizontal_move_z: {{ bed_leveling.qgl.horizontal_move_z | default(10) }}
-    retries: {{ bed_leveling.qgl.retries | default(5) }}
-    retry_tolerance: {{ bed_leveling.qgl.retry_tolerance | default(0.0075) }}
-    max_adjust: {{ bed_leveling.qgl.max_adjust | default(10) }}
+    {% else %}
+    points:
+        50, 25                                                                        # Front left
+        50, {{ (printer.bed_size_y - 25) | int }}                                    # Back left
+        {{ (printer.bed_size_x - 50) | int }}, {{ (printer.bed_size_y - 25) | int }} # Back right
+        {{ (printer.bed_size_x - 50) | int }}, 25                                    # Front right
+    {% endif %}
+    speed: {{ bed_leveling.qgl.speed | default(200) if bed_leveling.qgl else 200 }}
+    horizontal_move_z: {{ bed_leveling.qgl.horizontal_move_z | default(10) if bed_leveling.qgl else 10 }}
+    retries: {{ bed_leveling.qgl.retries | default(5) if bed_leveling.qgl else 5 }}
+    retry_tolerance: {{ bed_leveling.qgl.retry_tolerance | default(0.0075) if bed_leveling.qgl else 0.0075 }}
+    max_adjust: {{ bed_leveling.qgl.max_adjust | default(10) if bed_leveling.qgl else 10 }}
 
 # -----------------------------------------------------------------------------
 # Common Sections (always included)

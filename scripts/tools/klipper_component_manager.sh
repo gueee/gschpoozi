@@ -159,50 +159,58 @@ source "${REPO_ROOT}/scripts/lib/klipper-install.sh"
 case "${action}" in
   install)
     case "${component}" in
-      klipper)    do_install_klipper ;;
-      moonraker)  do_install_moonraker ;;
-      mainsail)   do_install_mainsail ;;
-      fluidd)     do_install_fluidd ;;
-      crowsnest)  do_install_crowsnest ;;
-      sonar)      do_install_sonar ;;
-      timelapse)  do_install_timelapse ;;
+      klipper)      do_install_klipper ;;
+      moonraker)    do_install_moonraker ;;
+      mainsail)     do_install_mainsail ;;
+      fluidd)       do_install_fluidd ;;
+      crowsnest)    do_install_crowsnest ;;
+      sonar)        do_install_sonar ;;
+      timelapse)    do_install_timelapse ;;
+      beacon)       do_install_beacon ;;
+      cartographer) do_install_cartographer ;;
       *) echo "Unknown component for install: ${component}" >&2; exit 2 ;;
     esac
     ;;
   update)
     case "${component}" in
-      klipper)    do_update_klipper ;;
-      moonraker)  do_update_moonraker ;;
-      mainsail)   do_update_mainsail ;;
-      fluidd)     do_update_fluidd ;;
-      crowsnest)  do_update_crowsnest ;;
-      sonar)      do_update_sonar ;;
-      timelapse)  do_update_timelapse ;;
+      klipper)      do_update_klipper ;;
+      moonraker)    do_update_moonraker ;;
+      mainsail)     do_update_mainsail ;;
+      fluidd)       do_update_fluidd ;;
+      crowsnest)    do_update_crowsnest ;;
+      sonar)        do_update_sonar ;;
+      timelapse)    do_update_timelapse ;;
+      beacon)       do_update_beacon ;;
+      cartographer) do_update_cartographer ;;
       *) echo "Unknown component for update: ${component}" >&2; exit 2 ;;
     esac
     ;;
   remove)
     case "${component}" in
-      klipper)    do_remove_klipper ;;
-      moonraker)  do_remove_moonraker ;;
-      mainsail)   do_remove_mainsail ;;
-      fluidd)     do_remove_fluidd ;;
-      crowsnest)  do_remove_crowsnest ;;
-      sonar)      do_remove_sonar ;;
-      timelapse)  do_remove_timelapse ;;
+      klipper)      do_remove_klipper ;;
+      moonraker)    do_remove_moonraker ;;
+      mainsail)     do_remove_mainsail ;;
+      fluidd)       do_remove_fluidd ;;
+      crowsnest)    do_remove_crowsnest ;;
+      sonar)        do_remove_sonar ;;
+      timelapse)    do_remove_timelapse ;;
+      beacon)       do_remove_beacon ;;
+      cartographer) do_remove_cartographer ;;
       *) echo "Unknown component for remove: ${component}" >&2; exit 2 ;;
     esac
     ;;
   reinstall)
     # Full uninstall + re-install. This mirrors KIAUH's "clean reinstall" behavior.
     case "${component}" in
-      klipper)    do_remove_klipper;   do_install_klipper ;;
-      moonraker)  do_remove_moonraker; do_install_moonraker ;;
-      mainsail)   do_remove_mainsail;  do_install_mainsail ;;
-      fluidd)     do_remove_fluidd;    do_install_fluidd ;;
-      crowsnest)  do_remove_crowsnest; do_install_crowsnest ;;
-      sonar)      do_remove_sonar;     do_install_sonar ;;
-      timelapse)  do_remove_timelapse; do_install_timelapse ;;
+      klipper)      do_remove_klipper;       do_install_klipper ;;
+      moonraker)    do_remove_moonraker;     do_install_moonraker ;;
+      mainsail)     do_remove_mainsail;      do_install_mainsail ;;
+      fluidd)       do_remove_fluidd;        do_install_fluidd ;;
+      crowsnest)    do_remove_crowsnest;     do_install_crowsnest ;;
+      sonar)        do_remove_sonar;         do_install_sonar ;;
+      timelapse)    do_remove_timelapse;     do_install_timelapse ;;
+      beacon)       do_remove_beacon;        do_install_beacon ;;
+      cartographer) do_remove_cartographer;  do_install_cartographer ;;
       *) echo "Unknown component for reinstall: ${component}" >&2; exit 2 ;;
     esac
     ;;

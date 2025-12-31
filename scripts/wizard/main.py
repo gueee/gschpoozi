@@ -182,6 +182,80 @@ class GschpooziWizard:
 
         return name
 
+    def _check_and_install_probe_module(self, probe_type: str) -> None:
+        """Check if probe Klipper module is installed and offer to install if not.
+
+        Args:
+            probe_type: "beacon" or "cartographer"
+        """
+        klipper_extras = Path.home() / "klipper" / "klippy" / "extras"
+
+        if probe_type == "beacon":
+            module_file = klipper_extras / "beacon.py"
+            module_name = "Beacon"
+            repo_dir = Path.home() / "beacon_klipper"
+        elif probe_type == "cartographer":
+            module_file = klipper_extras / "cartographer.py"
+            module_name = "Cartographer"
+            repo_dir = Path.home() / "cartographer-klipper"
+        else:
+            return
+
+        # Check if already installed
+        if module_file.exists():
+            return
+
+        # Module not installed - offer to install
+        if not self.ui.yesno(
+            f"{module_name} Klipper module is NOT installed.\n\n"
+            f"The {module_name} probe requires a Klipper module to function.\n\n"
+            f"Would you like to install it now?\n\n"
+            f"This will:\n"
+            f"- Clone the {module_name} repo to ~/{repo_dir.name}\n"
+            f"- Link the module into ~/klipper/klippy/extras/\n"
+            f"- Restart Klipper to load the module",
+            title=f"Install {module_name} Module",
+            default_no=False,
+            height=18,
+            width=70
+        ):
+            self.ui.msgbox(
+                f"{module_name} module NOT installed.\n\n"
+                f"You can install it later from:\n"
+                f"Klipper Setup → Manage Components → install {probe_type}",
+                title="Skipped Installation"
+            )
+            return
+
+        # Run installation via component manager
+        tool = REPO_ROOT / "scripts" / "tools" / "klipper_component_manager.sh"
+        if not tool.exists():
+            self.ui.msgbox(f"Missing tool: {tool}", title="Error")
+            return
+
+        self.ui.infobox(f"Installing {module_name} module...\n\nThis may take a moment.", title="Installing")
+
+        try:
+            exit_code = self._run_in_terminal([str(tool), "install", probe_type])
+            if exit_code == 0:
+                self.ui.msgbox(
+                    f"{module_name} module installed successfully!\n\n"
+                    f"Klipper has been restarted to load the module.",
+                    title="Installation Complete"
+                )
+            else:
+                self.ui.msgbox(
+                    f"{module_name} installation may have failed.\n\n"
+                    f"Exit code: {exit_code}\n\n"
+                    f"Check the terminal output for details.",
+                    title="Installation Issue"
+                )
+        except Exception as e:
+            self.ui.msgbox(
+                f"Failed to run installer:\n\n{e}",
+                title="Error"
+            )
+
     def _load_board_data(self, board_id: str, board_type: str = "boards") -> dict:
         """Load full board JSON data.
 
@@ -5388,6 +5462,10 @@ class GschpooziWizard:
             self.state.delete("probe")
             self.state.save()
             return
+
+        # Check if probe module needs to be installed (beacon/cartographer)
+        if probe_type in ["beacon", "cartographer"]:
+            self._check_and_install_probe_module(probe_type)
 
         # Eddy current probes have their own serial connection
         eddy_probes = ["beacon", "cartographer", "btt_eddy"]

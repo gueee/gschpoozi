@@ -25,6 +25,8 @@ FLUIDD_REPO="https://github.com/fluidd-core/fluidd"
 CROWSNEST_REPO="https://github.com/mainsail-crew/crowsnest.git"
 SONAR_REPO="https://github.com/mainsail-crew/sonar.git"
 TIMELAPSE_REPO="https://github.com/mainsail-crew/moonraker-timelapse.git"
+BEACON_REPO="https://github.com/beacon3d/beacon_klipper.git"
+CARTOGRAPHER_REPO="https://github.com/Cartographer3D/cartographer-klipper.git"
 
 # Installation paths
 KLIPPER_DIR="${HOME}/klipper"
@@ -34,6 +36,8 @@ FLUIDD_DIR="${HOME}/fluidd"
 CROWSNEST_DIR="${HOME}/crowsnest"
 SONAR_DIR="${HOME}/sonar"
 TIMELAPSE_DIR="${HOME}/moonraker-timelapse"
+BEACON_DIR="${HOME}/beacon_klipper"
+CARTOGRAPHER_DIR="${HOME}/cartographer-klipper"
 
 KLIPPY_ENV="${HOME}/klippy-env"
 MOONRAKER_ENV="${HOME}/moonraker-env"
@@ -150,6 +154,14 @@ is_sonar_installed() {
 
 is_timelapse_installed() {
     [[ -d "${TIMELAPSE_DIR}" ]]
+}
+
+is_beacon_installed() {
+    [[ -d "${BEACON_DIR}" && -f "${KLIPPER_DIR}/klippy/extras/beacon.py" ]]
+}
+
+is_cartographer_installed() {
+    [[ -d "${CARTOGRAPHER_DIR}" && -f "${KLIPPER_DIR}/klippy/extras/cartographer.py" ]]
 }
 
 # Check if running as root (we don't want that)
@@ -1207,6 +1219,168 @@ EOF
     return 0
 }
 
+# Install Beacon Klipper module
+do_install_beacon() {
+    clear_screen
+    print_header "Installing Beacon Klipper Module"
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will install:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Beacon Klipper module (eddy current probe)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Links module into Klipper extras"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    if ! is_klipper_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Error: Klipper is not installed!${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Beacon requires Klipper.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+
+    if is_beacon_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Beacon is already installed.${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Use update to get the latest version.${NC}"
+        print_footer
+        wait_for_key
+        return 0
+    fi
+
+    print_footer
+
+    if ! confirm "Proceed with Beacon installation?"; then
+        return 1
+    fi
+
+    echo ""
+
+    # Clone repository
+    clone_repo "$BEACON_REPO" "$BEACON_DIR" || return 1
+
+    # Link beacon.py into Klipper extras
+    local klipper_extras="${KLIPPER_DIR}/klippy/extras"
+    status_msg "Linking Beacon module into Klipper extras..."
+
+    # Remove existing file/link if present
+    rm -f "${klipper_extras}/beacon.py"
+
+    # Create symlink
+    ln -sf "${BEACON_DIR}/beacon.py" "${klipper_extras}/beacon.py"
+
+    if [[ -f "${klipper_extras}/beacon.py" ]]; then
+        ok_msg "Beacon module linked successfully"
+    else
+        error_msg "Failed to link beacon.py"
+        return 1
+    fi
+
+    # Add update manager entry
+    add_update_manager_entry "beacon" "git_repo" "${BEACON_DIR}" "origin: https://github.com/beacon3d/beacon_klipper.git
+primary_branch: main"
+
+    # Restart Klipper to load the module
+    status_msg "Restarting Klipper..."
+    sudo systemctl restart klipper
+
+    echo ""
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  Beacon Klipper module installation complete!${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "  ${WHITE}Configure your beacon in printer.cfg:${NC}"
+    echo -e "  ${CYAN}[beacon]${NC}"
+    echo -e "  ${CYAN}serial: /dev/serial/by-id/usb-Beacon_...${NC}"
+    echo ""
+    echo -e "  Documentation: ${CYAN}https://docs.beacon3d.com/${NC}"
+    echo ""
+
+    wait_for_key
+    return 0
+}
+
+# Install Cartographer Klipper module
+do_install_cartographer() {
+    clear_screen
+    print_header "Installing Cartographer Klipper Module"
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will install:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Cartographer Klipper module (eddy current probe)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Links module into Klipper extras"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+
+    if ! is_klipper_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Error: Klipper is not installed!${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Cartographer requires Klipper.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+
+    if is_cartographer_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Cartographer is already installed.${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Use update to get the latest version.${NC}"
+        print_footer
+        wait_for_key
+        return 0
+    fi
+
+    print_footer
+
+    if ! confirm "Proceed with Cartographer installation?"; then
+        return 1
+    fi
+
+    echo ""
+
+    # Clone repository
+    clone_repo "$CARTOGRAPHER_REPO" "$CARTOGRAPHER_DIR" || return 1
+
+    # Link cartographer.py into Klipper extras
+    local klipper_extras="${KLIPPER_DIR}/klippy/extras"
+    status_msg "Linking Cartographer module into Klipper extras..."
+
+    # Cartographer has multiple files to link
+    local files_to_link=("cartographer.py" "idm.py")
+    for fname in "${files_to_link[@]}"; do
+        if [[ -f "${CARTOGRAPHER_DIR}/${fname}" ]]; then
+            rm -f "${klipper_extras}/${fname}"
+            ln -sf "${CARTOGRAPHER_DIR}/${fname}" "${klipper_extras}/${fname}"
+            ok_msg "Linked ${fname}"
+        fi
+    done
+
+    if [[ -f "${klipper_extras}/cartographer.py" ]]; then
+        ok_msg "Cartographer module linked successfully"
+    else
+        error_msg "Failed to link cartographer.py"
+        return 1
+    fi
+
+    # Add update manager entry
+    add_update_manager_entry "cartographer" "git_repo" "${CARTOGRAPHER_DIR}" "origin: https://github.com/Cartographer3D/cartographer-klipper.git
+primary_branch: master"
+
+    # Restart Klipper to load the module
+    status_msg "Restarting Klipper..."
+    sudo systemctl restart klipper
+
+    echo ""
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  Cartographer Klipper module installation complete!${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "  ${WHITE}Configure your cartographer in printer.cfg:${NC}"
+    echo -e "  ${CYAN}[cartographer]${NC}"
+    echo -e "  ${CYAN}serial: /dev/serial/by-id/usb-Cartographer_...${NC}"
+    echo ""
+    echo -e "  Documentation: ${CYAN}https://docs.cartographer3d.com/${NC}"
+    echo ""
+
+    wait_for_key
+    return 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # UPDATE FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1552,6 +1726,101 @@ do_update_timelapse() {
     return 0
 }
 
+# Update Beacon
+do_update_beacon() {
+    clear_screen
+    print_header "Update Beacon"
+
+    if ! is_beacon_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Beacon is not installed!${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update Beacon to the latest version."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+
+    if ! confirm "Proceed with Beacon update?"; then
+        return 1
+    fi
+
+    echo ""
+
+    # Update repository
+    status_msg "Pulling latest changes..."
+    cd "$BEACON_DIR"
+    git pull
+
+    # Re-link in case file structure changed
+    local klipper_extras="${KLIPPER_DIR}/klippy/extras"
+    rm -f "${klipper_extras}/beacon.py"
+    ln -sf "${BEACON_DIR}/beacon.py" "${klipper_extras}/beacon.py"
+
+    # Restart Klipper to reload the module
+    status_msg "Restarting Klipper..."
+    sudo systemctl restart klipper
+
+    echo ""
+    ok_msg "Beacon updated successfully!"
+    echo ""
+
+    wait_for_key
+    return 0
+}
+
+# Update Cartographer
+do_update_cartographer() {
+    clear_screen
+    print_header "Update Cartographer"
+
+    if ! is_cartographer_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${RED}Cartographer is not installed!${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will update Cartographer to the latest version."
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+
+    if ! confirm "Proceed with Cartographer update?"; then
+        return 1
+    fi
+
+    echo ""
+
+    # Update repository
+    status_msg "Pulling latest changes..."
+    cd "$CARTOGRAPHER_DIR"
+    git pull
+
+    # Re-link in case file structure changed
+    local klipper_extras="${KLIPPER_DIR}/klippy/extras"
+    local files_to_link=("cartographer.py" "idm.py")
+    for fname in "${files_to_link[@]}"; do
+        if [[ -f "${CARTOGRAPHER_DIR}/${fname}" ]]; then
+            rm -f "${klipper_extras}/${fname}"
+            ln -sf "${CARTOGRAPHER_DIR}/${fname}" "${klipper_extras}/${fname}"
+        fi
+    done
+
+    # Restart Klipper to reload the module
+    status_msg "Restarting Klipper..."
+    sudo systemctl restart klipper
+
+    echo ""
+    ok_msg "Cartographer updated successfully!"
+    echo ""
+
+    wait_for_key
+    return 0
+}
+
 # Update all components
 do_update_all() {
     clear_screen
@@ -1566,6 +1835,8 @@ do_update_all() {
     is_crowsnest_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Crowsnest"
     is_sonar_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Sonar"
     is_timelapse_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Timelapse"
+    is_beacon_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Beacon"
+    is_cartographer_installed && echo -e "${BCYAN}${BOX_V}${NC}  - Cartographer"
     echo -e "${BCYAN}${BOX_V}${NC}"
     print_footer
 
@@ -1638,6 +1909,33 @@ do_update_all() {
         cd "$TIMELAPSE_DIR" && git pull
         sudo systemctl restart moonraker
         ok_msg "Timelapse updated"
+    fi
+
+    if is_beacon_installed; then
+        echo -e "\n${BWHITE}=== Updating Beacon ===${NC}"
+        cd "$BEACON_DIR" && git pull
+        local klipper_extras="${KLIPPER_DIR}/klippy/extras"
+        rm -f "${klipper_extras}/beacon.py"
+        ln -sf "${BEACON_DIR}/beacon.py" "${klipper_extras}/beacon.py"
+        ok_msg "Beacon updated"
+    fi
+
+    if is_cartographer_installed; then
+        echo -e "\n${BWHITE}=== Updating Cartographer ===${NC}"
+        cd "$CARTOGRAPHER_DIR" && git pull
+        local klipper_extras="${KLIPPER_DIR}/klippy/extras"
+        for fname in cartographer.py idm.py; do
+            if [[ -f "${CARTOGRAPHER_DIR}/${fname}" ]]; then
+                rm -f "${klipper_extras}/${fname}"
+                ln -sf "${CARTOGRAPHER_DIR}/${fname}" "${klipper_extras}/${fname}"
+            fi
+        done
+        ok_msg "Cartographer updated"
+    fi
+
+    # Restart Klipper if any probe modules were updated
+    if is_beacon_installed || is_cartographer_installed; then
+        sudo systemctl restart klipper
     fi
 
     echo ""
@@ -2024,6 +2322,115 @@ do_remove_timelapse() {
     return 0
 }
 
+# Remove Beacon
+do_remove_beacon() {
+    clear_screen
+    print_header "Remove Beacon"
+
+    if ! is_beacon_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Beacon is not installed.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will remove:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Beacon Klipper module (~/beacon_klipper)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Module symlink from Klipper extras"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${WHITE}Your beacon config in printer.cfg will be preserved.${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+
+    if ! confirm "Are you sure you want to remove Beacon?"; then
+        return 1
+    fi
+
+    echo ""
+
+    # Remove symlink from Klipper extras
+    status_msg "Removing beacon module symlink..."
+    rm -f "${KLIPPER_DIR}/klippy/extras/beacon.py"
+
+    # Remove repository
+    status_msg "Removing Beacon repository..."
+    rm -rf "$BEACON_DIR"
+
+    # Remove update manager entry
+    if [[ -f "${PRINTER_DATA}/config/moonraker.conf" ]]; then
+        sed -i '/\[update_manager beacon\]/,/^$/d' "${PRINTER_DATA}/config/moonraker.conf" 2>/dev/null || true
+    fi
+
+    # Restart Klipper
+    status_msg "Restarting Klipper..."
+    sudo systemctl restart klipper
+
+    echo ""
+    ok_msg "Beacon has been removed."
+    echo -e "  ${WHITE}Your beacon config in printer.cfg has been preserved.${NC}"
+    echo -e "  ${YELLOW}Note: Klipper will error until you remove [beacon] from your config.${NC}"
+    echo ""
+
+    wait_for_key
+    return 0
+}
+
+# Remove Cartographer
+do_remove_cartographer() {
+    clear_screen
+    print_header "Remove Cartographer"
+
+    if ! is_cartographer_installed; then
+        echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}Cartographer is not installed.${NC}"
+        print_footer
+        wait_for_key
+        return 1
+    fi
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will remove:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Cartographer Klipper module (~/cartographer-klipper)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Module symlinks from Klipper extras"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  ${WHITE}Your cartographer config in printer.cfg will be preserved.${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+
+    if ! confirm "Are you sure you want to remove Cartographer?"; then
+        return 1
+    fi
+
+    echo ""
+
+    # Remove symlinks from Klipper extras
+    status_msg "Removing cartographer module symlinks..."
+    rm -f "${KLIPPER_DIR}/klippy/extras/cartographer.py"
+    rm -f "${KLIPPER_DIR}/klippy/extras/idm.py"
+
+    # Remove repository
+    status_msg "Removing Cartographer repository..."
+    rm -rf "$CARTOGRAPHER_DIR"
+
+    # Remove update manager entry
+    if [[ -f "${PRINTER_DATA}/config/moonraker.conf" ]]; then
+        sed -i '/\[update_manager cartographer\]/,/^$/d' "${PRINTER_DATA}/config/moonraker.conf" 2>/dev/null || true
+    fi
+
+    # Restart Klipper
+    status_msg "Restarting Klipper..."
+    sudo systemctl restart klipper
+
+    echo ""
+    ok_msg "Cartographer has been removed."
+    echo -e "  ${WHITE}Your cartographer config in printer.cfg has been preserved.${NC}"
+    echo -e "  ${YELLOW}Note: Klipper will error until you remove [cartographer] from your config.${NC}"
+    echo ""
+
+    wait_for_key
+    return 0
+}
+
 # Remove component menu
 show_remove_menu() {
     while true; do
@@ -2081,6 +2488,18 @@ show_remove_menu() {
             num=$((num + 1))
         fi
 
+        if is_beacon_installed; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} Beacon"
+            options+=("beacon")
+            num=$((num + 1))
+        fi
+
+        if is_cartographer_installed; then
+            echo -e "${BCYAN}${BOX_V}${NC}  ${BWHITE}${num})${NC} Cartographer"
+            options+=("cartographer")
+            num=$((num + 1))
+        fi
+
         if [[ ${#options[@]} -eq 0 ]]; then
             echo -e "${BCYAN}${BOX_V}${NC}  ${YELLOW}No components installed to remove.${NC}"
         fi
@@ -2106,6 +2525,8 @@ show_remove_menu() {
                         crowsnest) do_remove_crowsnest ;;
                         sonar) do_remove_sonar ;;
                         timelapse) do_remove_timelapse ;;
+                        beacon) do_remove_beacon ;;
+                        cartographer) do_remove_cartographer ;;
                     esac
                 fi
                 ;;

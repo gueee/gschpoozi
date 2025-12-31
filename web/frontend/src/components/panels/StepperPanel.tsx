@@ -244,7 +244,7 @@ export function StepperPanel({ stepperName }: StepperPanelProps) {
                   </code>
                 </div>
 
-                {/* For SPI drivers, show diag0 and diag1 options */}
+                {/* For SPI drivers, show diag1 and diag0 options */}
                 {selectedDriver.interface === 'spi' && (
                   <div className="mt-3 pt-3 border-t border-slate-700">
                     <p className="text-xs text-slate-400 mb-2">
@@ -253,33 +253,33 @@ export function StepperPanel({ stepperName }: StepperPanelProps) {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1">
-                          diag0_pin (StallGuard)
+                          diag1_pin (StallGuard) <span className="text-cyan-400">*</span>
                         </label>
                         <input
                           type="text"
-                          value={getValue('diag0_pin') || ''}
-                          onChange={(e) => setValue('diag0_pin', e.target.value || undefined)}
+                          value={getValue('diag1_pin') || ''}
+                          onChange={(e) => setValue('diag1_pin', e.target.value || undefined)}
                           placeholder={motorPortData.diag_pin || 'e.g., PG6'}
                           className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-sm text-white placeholder-slate-500 font-mono focus:border-cyan-500"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1">
-                          diag1_pin (optional)
+                          diag0_pin (optional)
                         </label>
                         <input
                           type="text"
-                          value={getValue('diag1_pin') || ''}
-                          onChange={(e) => setValue('diag1_pin', e.target.value || undefined)}
+                          value={getValue('diag0_pin') || ''}
+                          onChange={(e) => setValue('diag0_pin', e.target.value || undefined)}
                           placeholder="Leave empty if not used"
                           className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-sm text-white placeholder-slate-500 font-mono focus:border-cyan-500"
                         />
                       </div>
                     </div>
                     <p className="text-xs text-slate-500 mt-2">
-                      <strong>diag0:</strong> Used for StallGuard/sensorless homing and chopper tuning.
+                      <strong>diag1:</strong> Primary output for StallGuard/sensorless homing and chopper tuning.
                       <br />
-                      <strong>diag1:</strong> Can be used for index pulse or additional diagnostics.
+                      <strong>diag0:</strong> Optional, can be used for overtemperature or other diagnostics.
                     </p>
                   </div>
                 )}

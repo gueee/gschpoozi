@@ -4,17 +4,25 @@ import { useBoard, useToolboard } from '../../hooks/useTemplates';
 import { usePortRegistry } from '../../hooks/usePortRegistry';
 import { PortSelector } from '../ui/PortSelector';
 import type { SimplePort, MotorPort, ProbePort } from '../ui/PortSelector';
-import { Flame, CircuitBoard, Cpu } from 'lucide-react';
+import { Flame, CircuitBoard, Cpu, Info } from 'lucide-react';
 
 const SENSOR_TYPES = [
-  { id: 'EPCOS 100K B57560G104F', name: 'EPCOS 100K (common)' },
-  { id: 'ATC Semitec 104GT-2', name: 'ATC Semitec 104GT-2' },
-  { id: 'ATC Semitec 104NT-4-R025H42G', name: 'ATC Semitec 104NT-4 (Revo/Rapido)' },
-  { id: 'Generic 3950', name: 'Generic 3950' },
-  { id: 'Honeywell 100K 135-104LAG-J01', name: 'Honeywell 100K' },
-  { id: 'NTC 100K MGB18-104F39050L32', name: 'NTC 100K Keenovo' },
-  { id: 'PT1000', name: 'PT1000 (high temp)' },
-  { id: 'MAX31865', name: 'MAX31865 (RTD)' },
+  { id: 'EPCOS 100K B57560G104F', name: 'EPCOS 100K (common)', needsPullup: false },
+  { id: 'ATC Semitec 104GT-2', name: 'ATC Semitec 104GT-2', needsPullup: false },
+  { id: 'ATC Semitec 104NT-4-R025H42G', name: 'ATC Semitec 104NT-4 (Revo/Rapido)', needsPullup: false },
+  { id: 'Generic 3950', name: 'Generic 3950', needsPullup: false },
+  { id: 'Honeywell 100K 135-104LAG-J01', name: 'Honeywell 100K', needsPullup: false },
+  { id: 'NTC 100K MGB18-104F39050L32', name: 'NTC 100K Keenovo', needsPullup: false },
+  { id: 'PT1000', name: 'PT1000 (high temp)', needsPullup: true, defaultPullup: 4700 },
+  { id: 'MAX31865', name: 'MAX31865 (RTD)', needsPullup: false, isSPI: true },
+];
+
+// Common pullup resistor values
+const PULLUP_VALUES = [
+  { value: 4700, label: '4.7kΩ (standard mainboard)' },
+  { value: 2200, label: '2.2kΩ (common toolboard)' },
+  { value: 1000, label: '1kΩ (PT1000 some boards)' },
+  { value: 0, label: 'Custom value...' },
 ];
 
 const NOZZLE_SIZES = [0.2, 0.25, 0.4, 0.5, 0.6, 0.8, 1.0];
@@ -173,7 +181,14 @@ export function HotendPanel() {
           </label>
           <select
             value={getValue('sensor_type', 'EPCOS 100K B57560G104F')}
-            onChange={(e) => setValue('sensor_type', e.target.value)}
+            onChange={(e) => {
+              setValue('sensor_type', e.target.value);
+              // Auto-suggest pullup for PT1000
+              const sensor = SENSOR_TYPES.find(s => s.id === e.target.value);
+              if (sensor?.needsPullup && sensor.defaultPullup) {
+                setValue('pullup_resistor', sensor.defaultPullup);
+              }
+            }}
             className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
           >
             {SENSOR_TYPES.map((sensor) => (
@@ -182,6 +197,89 @@ export function HotendPanel() {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Pullup Resistor Configuration */}
+        <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+          <div className="flex items-start gap-2 mb-3">
+            <Info size={16} className="text-cyan-400 shrink-0 mt-0.5" />
+            <div>
+              <div className="text-sm font-medium text-slate-300">Pullup Resistor</div>
+              <p className="text-xs text-slate-500 mt-1">
+                {hotendLocation === 'toolboard' 
+                  ? 'Toolboards often use 2.2kΩ pullup instead of the standard 4.7kΩ. Check your toolboard documentation.'
+                  : 'Most mainboards use 4.7kΩ pullup. Only change if you know your board uses a different value.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {/* Enable custom pullup toggle */}
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={getValue('use_custom_pullup', false)}
+                onChange={(e) => {
+                  setValue('use_custom_pullup', e.target.checked);
+                  if (!e.target.checked) {
+                    setValue('pullup_resistor', undefined);
+                  } else if (hotendLocation === 'toolboard') {
+                    // Default to 2.2k for toolboard
+                    setValue('pullup_resistor', 2200);
+                  }
+                }}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
+              />
+              <span className="text-sm text-slate-300">
+                Specify pullup resistor value
+              </span>
+            </label>
+
+            {/* Pullup value selection */}
+            {getValue('use_custom_pullup') && (
+              <div className="space-y-2 pl-7">
+                <div className="grid grid-cols-2 gap-2">
+                  {PULLUP_VALUES.filter(p => p.value > 0).map((pullup) => (
+                    <button
+                      key={pullup.value}
+                      onClick={() => setValue('pullup_resistor', pullup.value)}
+                      className={`py-2 px-3 rounded-lg text-xs font-medium transition-colors text-left ${
+                        getValue('pullup_resistor') === pullup.value
+                          ? 'bg-cyan-600 text-white'
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      {pullup.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom value input */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    Custom value (Ω)
+                  </label>
+                  <input
+                    type="number"
+                    step="100"
+                    min="100"
+                    max="10000"
+                    value={getValue('pullup_resistor') || ''}
+                    onChange={(e) => setValue('pullup_resistor', e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="e.g., 4700"
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 focus:border-cyan-500"
+                  />
+                </div>
+
+                {/* Show what will be generated */}
+                {getValue('pullup_resistor') && (
+                  <div className="text-xs text-slate-500 font-mono bg-slate-900/50 rounded p-2">
+                    pullup_resistor: {getValue('pullup_resistor')}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Nozzle Diameter */}

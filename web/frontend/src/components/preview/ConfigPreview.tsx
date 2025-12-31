@@ -324,7 +324,8 @@ nozzle_diameter: ${state['extruder.nozzle_diameter'] || 0.4}
 filament_diameter: 1.750
 heater_pin: ${state['extruder.heater_pin'] || 'PA2  # Configure heater'}
 sensor_pin: ${state['extruder.sensor_pin'] || 'PF4  # Configure thermistor'}
-sensor_type: ${state['extruder.sensor_type'] || 'EPCOS 100K B57560G104F'}
+sensor_type: ${state['extruder.sensor_type'] || 'EPCOS 100K B57560G104F'}${state['extruder.pullup_resistor'] ? `
+pullup_resistor: ${state['extruder.pullup_resistor']}` : ''}
 min_temp: 0
 max_temp: ${state['extruder.max_temp'] || 280}
 min_extrude_temp: 170

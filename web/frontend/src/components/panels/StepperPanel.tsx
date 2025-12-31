@@ -284,27 +284,37 @@ export function StepperPanel({ stepperName }: StepperPanelProps) {
                   </div>
                 )}
 
-                {/* For UART drivers, simpler diag pin setup */}
+                {/* For UART drivers with sensorless support (TMC2209, TMC2226) */}
                 {selectedDriver.interface === 'uart' && selectedDriver.sensorless && (
-                  <div className="mt-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
+                  <div className="mt-3 pt-3 border-t border-slate-700">
+                    <p className="text-xs text-slate-400 mb-2">
+                      UART drivers use a single DIAG pin for StallGuard output:
+                    </p>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">
+                        diag_pin (StallGuard)
+                      </label>
                       <input
-                        type="checkbox"
-                        checked={!!getValue('use_diag_pin')}
-                        onChange={(e) => {
-                          setValue('use_diag_pin', e.target.checked || undefined);
-                          if (e.target.checked && motorPortData?.diag_pin) {
-                            setValue('diag_pin', motorPortData.diag_pin);
-                          } else if (!e.target.checked) {
-                            setValue('diag_pin', undefined);
-                          }
-                        }}
-                        className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
+                        type="text"
+                        value={getValue('diag_pin') || ''}
+                        onChange={(e) => setValue('diag_pin', e.target.value || undefined)}
+                        placeholder={motorPortData.diag_pin || 'e.g., PG6'}
+                        className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-sm text-white placeholder-slate-500 font-mono focus:border-cyan-500"
                       />
-                      <span className="text-sm text-slate-300">
-                        Enable diag pin for sensorless homing
-                      </span>
-                    </label>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Connect DIAG pin to an endstop input for sensorless homing.
+                      Required for StallGuard-based homing and chopper tuning.
+                    </p>
+                    {motorPortData?.diag_pin && !getValue('diag_pin') && (
+                      <button
+                        type="button"
+                        onClick={() => setValue('diag_pin', motorPortData.diag_pin)}
+                        className="mt-2 text-xs text-cyan-400 hover:text-cyan-300 underline"
+                      >
+                        Use {motorPortData.diag_pin} from motor port
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

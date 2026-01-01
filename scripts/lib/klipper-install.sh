@@ -1711,8 +1711,10 @@ do_update_crowsnest() {
     add_update_manager_entry "crowsnest" "git_repo" "~/crowsnest" "origin: https://github.com/mainsail-crew/crowsnest.git
 managed_services: crowsnest"
 
-    # Restart service
-    status_msg "Starting Crowsnest service..."
+    # Ensure service is enabled and restart
+    status_msg "Enabling and starting Crowsnest service..."
+    sudo systemctl daemon-reload
+    sudo systemctl enable crowsnest 2>/dev/null || true
     sudo systemctl start crowsnest 2>/dev/null || true
 
     echo ""
@@ -1759,8 +1761,10 @@ do_update_sonar() {
     add_update_manager_entry "sonar" "git_repo" "~/sonar" "origin: https://github.com/mainsail-crew/sonar.git
 managed_services: sonar"
 
-    # Restart service
-    status_msg "Starting Sonar service..."
+    # Ensure service is enabled and restart
+    status_msg "Enabling and starting Sonar service..."
+    sudo systemctl daemon-reload
+    sudo systemctl enable sonar 2>/dev/null || true
     sudo systemctl start sonar 2>/dev/null || true
 
     echo ""

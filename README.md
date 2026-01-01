@@ -51,6 +51,9 @@ Inspired by [Klippain](https://github.com/Frix-x/klippain), but built from the g
 ## Quick Start
 
 ```bash
+# 0. Install git (vanilla Raspberry Pi OS may not include it)
+sudo apt update && sudo apt install -y git
+
 # 1. Clone the repository
 cd ~ && git clone https://github.com/gm-tc-collaborators/gschpoozi.git
 

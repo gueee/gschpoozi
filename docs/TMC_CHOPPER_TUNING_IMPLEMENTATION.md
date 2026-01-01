@@ -28,7 +28,7 @@ Users with TMC5160 drivers (especially at 48V with LDO motors) experience violen
 │    - Safety limit macros                                                     │
 │                                                                              │
 │  Conditional on:                                                             │
-│    - accelerometer.type != 'none'                                           │
+│    - input_shaper.accel_chip != 'none'                                      │
 │    - driver_type IN ['TMC5160', 'TMC2240']                                  │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -71,7 +71,7 @@ Add to Tuning & Optimization section:
 - id: "X.X"
   name: "TMC Chopper Tuning"
   condition: >
-    accelerometer.type != 'none' AND
+    input_shaper.accel_chip != 'none' AND
     (stepper_x.driver_type in ['TMC5160', 'TMC2240'] OR
      stepper_y.driver_type in ['TMC5160', 'TMC2240'])
   parameters:
@@ -192,7 +192,7 @@ chopper_safety_limits:
 
 ```yaml
 chopper_tune_macro:
-  condition: "tuning.chopper_tuning_enabled and accelerometer.type != 'none'"
+  condition: "tuning.chopper_tuning_enabled and input_shaper.accel_chip != 'none'"
   template: |
     # ═══════════════════════════════════════════════════════════════════════════
     # TMC CHOPPER AUTO-TUNING SYSTEM

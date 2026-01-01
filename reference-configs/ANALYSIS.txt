@@ -1,0 +1,218 @@
+===================================
+Klipper Config Section Analysis
+===================================
+
+>>> creality-ender3-v2.cfg
+    Sections:
+      [stepper_x]
+      [stepper_y]
+      [stepper_z]
+      [extruder]
+      [heater_bed]
+      [fan]
+      [mcu]
+      [printer]
+
+    Line count: 95
+    Includes: 0
+
+-----------------------------------
+
+>>> generic-btt-skr-3.cfg
+    Sections:
+      [stepper_x]
+      [stepper_y]
+      [stepper_z]
+      [extruder]
+      [heater_bed]
+      [fan]
+      [mcu]
+      [printer]
+      [board_pins]
+
+    Line count: 185
+    Includes: 0
+
+-----------------------------------
+
+>>> ratrig-vcore3-300-base.cfg
+    Sections:
+      [stepper_x]
+      [stepper_y]
+      [stepper_z]
+      [bed_mesh]
+      [z_tilt]
+      [stepper_x]
+      [stepper_y]
+      [stepper_z]
+      [stepper_z1]
+      [stepper_z2]
+      [extruder]
+      [tmc2209 stepper_x]
+      [tmc2209 stepper_y]
+      [tmc2209 extruder]
+      [tmc2209 stepper_z]
+      [tmc2209 stepper_z1]
+      [tmc2209 stepper_z2]
+      [gcode_macro PAUSE]
+      [gcode_macro RESUME]
+      [gcode_macro CANCEL_PRINT]
+
+    Line count: 163
+    Includes: 0
+
+-----------------------------------
+
+>>> ratrig-vcore3-compiled.cfg
+    Sections:
+      [mcu]
+      [board_pins]
+      [heater_bed]
+      [fan]
+      [heater_fan toolhead_cooling_fan]
+      [controller_fan controller_fan]
+      [printer]
+      [temperature_sensor raspberry_pi]
+      [temperature_sensor SKR_Pro]
+      [skew_correction]
+      [input_shaper]
+      [virtual_sdcard]
+      [display_status]
+      [pause_resume]
+      [extruder]
+      [probe]
+      [bltouch]
+
+    Line count: 139
+    Includes: 0
+
+-----------------------------------
+
+>>> sample-idex.cfg
+    Sections:
+      [stepper_x]
+      [extruder]
+      [gcode_macro PARK_extruder]
+      [gcode_macro T0]
+      [dual_carriage]
+      [extruder1]
+      [gcode_macro PARK_extruder1]
+      [gcode_macro T1]
+      [gcode_macro ACTIVATE_COPY_MODE]
+      [gcode_macro ACTIVATE_MIRROR_MODE]
+
+    Line count: 132
+    Includes: 0
+
+-----------------------------------
+
+>>> voron-0.2-skr-mini-e3-v3-raw.cfg
+    Sections:
+      [include mainsail.cfg]
+      [mcu]
+      [temperature_sensor mcu_temp]
+      [temperature_sensor host_temp]
+      [printer]
+      [stepper_x]
+      [tmc2209 stepper_x]
+      [stepper_y]
+      [tmc2209 stepper_y]
+      [stepper_z]
+      [tmc2209 stepper_z]
+      [extruder]
+      [tmc2209 extruder]
+      [heater_bed]
+      [heater_fan hotend_fan]
+      [fan]
+      [controller_fan controller_fan]
+      [idle_timeout]
+      [homing_override]
+      [bed_screws]
+
+    Line count: 417
+    Includes: 0
+
+-----------------------------------
+
+>>> voron-2.4-octopus-raw.cfg
+    Sections:
+      [mcu]
+      [printer]
+      [stepper_x]
+      [tmc2209 stepper_x]
+      [stepper_y]
+      [tmc2209 stepper_y]
+      [stepper_z]
+      [tmc2209 stepper_z]
+      [stepper_z1]
+      [tmc2209 stepper_z1]
+      [stepper_z2]
+      [tmc2209 stepper_z2]
+      [stepper_z3]
+      [tmc2209 stepper_z3]
+      [extruder]
+      [tmc2209 extruder]
+      [heater_bed]
+      [probe]
+      [fan]
+      [heater_fan hotend_fan]
+
+    Line count: 593
+    Includes: 0
+
+-----------------------------------
+
+>>> voron-trident-skr13-raw.cfg
+    Sections:
+      [pause_resume]
+      [display_status]
+      [virtual_sdcard]
+      [printer]
+      [mcu]
+      [mcu xye]
+      [stepper_x]
+      [tmc2209 stepper_x]
+      [stepper_y]
+      [tmc2209 stepper_y]
+      [stepper_z]
+      [tmc2209 stepper_z]
+      [stepper_z1]
+      [tmc2209 stepper_z1]
+      [stepper_z2]
+      [tmc2209 stepper_z2]
+      [extruder]
+      [tmc2209 extruder]
+      [heater_bed]
+      [probe]
+
+    Line count: 611
+    Includes: 0
+
+-----------------------------------
+
+
+===================================
+Section Usage Summary
+===================================
+
+Most common sections across all configs:
+      8 [stepper_x]
+      8 [extruder]
+      7 [stepper_z]
+      7 [stepper_y]
+      6 [printer]
+      6 [mcu]
+      6 [heater_bed]
+      6 [fan]
+      4 [tmc2209 stepper_z]
+      4 [tmc2209 stepper_y]
+      4 [tmc2209 stepper_x]
+      4 [tmc2209 extruder]
+      3 [tmc2209 stepper_z2]
+      3 [tmc2209 stepper_z1]
+      3 [stepper_z2]
+      3 [stepper_z1]
+      3 [probe]
+      3 [idle_timeout]
+      3 [gcode_macro PRINT_START]
+      3 [gcode_macro PRINT_END]

@@ -394,13 +394,105 @@ class GschpooziWizard:
 
             lines = ["", header]
             # Preserve ordering similar to Moonraker docs
-            for key in ("type", "path", "origin", "primary_branch", "virtualenv", "requirements", "system_dependencies", "managed_services"):
+            for key in (
+                "type",
+                "channel",
+                "refresh_interval",
+                "path",
+                "origin",
+                "primary_branch",
+                "virtualenv",
+                "requirements",
+                "system_dependencies",
+                "enable_node_updates",
+                "is_system_service",
+                "managed_services",
+            ):
                 if key in entry and entry[key] is not None and entry[key] != "":
                     lines.append(f"{key}: {entry[key]}")
             conf.write_text(content + "\n".join(lines) + "\n", encoding="utf-8")
             return True
         except Exception:
             return False
+
+    def _ensure_gschpoozi_update_manager_entry(self) -> None:
+        """
+        Ensure gschpoozi is listed in Moonraker's Update Manager.
+
+        Writes a [update_manager gschpoozi] stanza to:
+          ~/printer_data/config/moonraker.conf
+        """
+        conf = Path.home() / "printer_data" / "config" / "moonraker.conf"
+        header = "[update_manager gschpoozi]"
+
+        try:
+            existing = conf.read_text(encoding="utf-8", errors="ignore") if conf.exists() else ""
+        except Exception:
+            existing = ""
+
+        already_present = header in existing
+
+        repo_path = REPO_ROOT
+        origin_url = "https://github.com/gm-tc-collaborators/gschpoozi.git"
+        primary_branch = "main"
+
+        # Best-effort: read repo origin + current branch so Moonraker doesn't flag a "master/main" anomaly.
+        try:
+            import subprocess
+
+            if (repo_path / ".git").exists():
+                r = subprocess.run(
+                    ["git", "-C", str(repo_path), "config", "--get", "remote.origin.url"],
+                    capture_output=True,
+                    text=True,
+                )
+                if r.returncode == 0 and r.stdout.strip():
+                    origin_url = r.stdout.strip()
+
+                r = subprocess.run(
+                    ["git", "-C", str(repo_path), "branch", "--show-current"],
+                    capture_output=True,
+                    text=True,
+                )
+                if r.returncode == 0 and r.stdout.strip():
+                    primary_branch = r.stdout.strip()
+        except Exception as e:
+            self._log_wizard(f"gschpoozi update_manager git detection failed: {type(e).__name__}:{e}")
+
+        entry = {
+            "type": "git_repo",
+            # Channel is independent of git branch; default to dev for gschpoozi installs.
+            "channel": "dev",
+            "path": str(repo_path),
+            "origin": origin_url,
+            "primary_branch": primary_branch,
+            # gschpoozi is not a systemd service; avoid Moonraker trying to restart it.
+            "is_system_service": "False",
+        }
+
+        ok = self._ensure_moonraker_update_manager_entry("gschpoozi", entry)
+        if not ok:
+            return
+
+        # If we just added it, Moonraker typically needs a restart to load the stanza.
+        if not already_present:
+            try:
+                active_ok, active_out = self._run_shell("systemctl is-active moonraker")
+                is_active = active_ok and active_out.strip() == "active"
+            except Exception:
+                is_active = False
+
+            if is_active:
+                restart = self.ui.yesno(
+                    "Added gschpoozi to Moonraker Update Manager.\n\n"
+                    "Restart Moonraker now to load the new entry?",
+                    title="Update Manager",
+                    default_no=False,
+                    height=10,
+                    width=70,
+                )
+                if restart:
+                    self._run_systemctl("restart", "moonraker")
 
     def _write_klipperscreen_conf(self, host: str, port: int) -> Tuple[bool, str]:
         """Write/update ~/KlipperScreen/KlipperScreen.conf with [printer default]."""
@@ -1171,6 +1263,12 @@ class GschpooziWizard:
     def run(self) -> int:
         """Run the wizard. Returns exit code."""
         try:
+            # Best-effort: ensure gschpoozi appears in Moonraker Update Manager.
+            # Non-fatal: the wizard must still run even if Moonraker isn't installed yet.
+            try:
+                self._ensure_gschpoozi_update_manager_entry()
+            except Exception as e:
+                self._log_wizard(f"ensure_gschpoozi_update_manager_entry failed: {type(e).__name__}:{e}")
             self.main_menu()
             return 0
         except KeyboardInterrupt:

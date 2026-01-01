@@ -143,3 +143,9 @@ When proposing changes, include: affected files, specific changes with reasoning
 - **Never force hardware location** - When a toolboard exists, don't assume hotend/thermistor/endstops MUST be on the toolboard. Always offer BOTH mainboard AND toolboard options.
 - **No artificial restrictions** - If hardware physically supports a configuration, the wizard should allow it.
 - **Trust the user** - They know their printer better than we do. Provide warnings for unusual configs, but don't block them.
+
+### Global Pin Visibility Rule (Do Not Diverge)
+
+- **All pin pickers must be non-restrictive**: if a pin/port is known and selectable, it must be shown (even if currently assigned/defaulted to another function), with a clear warning/marker.
+- **Always include general-purpose labeled pins**: board/toolboard templates may expose extra pins under `pins` (e.g. Fly Super8 `IN7`). These must be selectable anywhere a pin can be chosen.
+- **Manual raw pin entry must remain valid**: the generator must accept raw MCU pins (e.g. `PF8`, `gpio22`) in state and pass them through correctly.

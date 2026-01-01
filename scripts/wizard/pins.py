@@ -452,6 +452,11 @@ class PinManager:
 
                 # Build label
                 if isinstance(port_info, dict):
+                    # Skip header-style connectors without a direct selectable pin
+                    # (e.g. EXP1/EXP2 with nested "pins" maps).
+                    if isinstance(port_info.get("pins"), dict):
+                        continue
+
                     pin = port_info.get("pin") or port_info.get("signal_pin") or ""
                     label = port_info.get("label", port_id)
                     # Add capability info if available
@@ -465,6 +470,9 @@ class PinManager:
                     if capabilities:
                         label = f"{label} [{', '.join(capabilities)}]"
                     label = f"{label} [{group}]"
+                    # If there's no resolvable pin, it isn't a usable selection entry.
+                    if not pin:
+                        continue
                 else:
                     label = f"{port_id} [{group}]"
                     port_info = {"pin": str(port_info) if port_info else ""}
@@ -557,7 +565,9 @@ class PinManager:
             or None if cancelled
         """
         if groups is None:
-            groups = ["endstop_ports", "misc_ports", "probe_ports"]
+            # Global DIY rule: do not artificially restrict input choices to a curated subset.
+            # Include labeled general-purpose pins and other port groups users may repurpose.
+            groups = ["endstop_ports", "probe_ports", "misc_ports", "pins", "fan_ports", "heater_ports", "thermistor_ports"]
 
         title = title or f"Select {purpose} Pin"
 
@@ -880,14 +890,15 @@ class PinManager:
         """
         if groups is None:
             if output_type == "mosfet":
-                groups = ["heater_ports", "fan_ports", "misc_ports"]
+                groups = ["heater_ports", "fan_ports", "misc_ports", "pins", "endstop_ports", "probe_ports"]
             else:
-                groups = ["fan_ports", "heater_ports", "misc_ports"]
+                groups = ["fan_ports", "heater_ports", "misc_ports", "pins", "endstop_ports", "probe_ports"]
 
         title = title or f"Select {purpose} Pin"
 
-        # Filter out input pins when selecting outputs
-        available = self.get_available_pins(location, groups, exclude_ports, filter_direction="output")
+        # Global DIY rule: do not hide pins. Show all known pins and let the user decide.
+        # We still tag misc_ports by keywords elsewhere; we do not filter here.
+        available = self.get_available_pins(location, groups, exclude_ports, filter_direction=None)
 
         if not available:
             return self.ui.inputbox(

@@ -688,6 +688,7 @@ class GschpooziWizard:
             "misc_ports",
             "endstop_ports",
             "probe_ports",
+            "pins",
             "fan_ports",
             "heater_ports",
             "thermistor_ports",
@@ -3329,42 +3330,35 @@ class GschpooziWizard:
                     else:
                         current_endstop_port = self.state.get(f"{state_key}.endstop_port", "")
 
-                    # Pass current purpose to avoid false warnings when reassigning same function
-                    current_purpose = f"{state_key} endstop"
-                    endstop_ports = self._get_board_ports("endstop_ports", board_type, current_purpose=current_purpose)
-                    if endstop_ports:
-                        endstop_port = self.ui.radiolist(
-                            f"Select endstop port for {axis_upper} axis:",
-                            [
-                                (
-                                    p,
-                                    l,
-                                    (p == current_endstop_port) if current_endstop_port else bool(d),
-                                )
-                                for p, l, d in endstop_ports
-                            ],
-                            title=f"Stepper {axis_upper} - Endstop Port"
-                        )
-                    else:
-                        endstop_port = self.ui.inputbox(
-                            f"Enter endstop port for {axis_upper} axis:",
-                            default=current_endstop_port or "",
-                            title=f"Stepper {axis_upper} - Endstop Port"
-                        )
-                    if endstop_port is None:
+                    # Global DIY rule: allow selecting ANY known-capable pin/port (not just endstop_ports),
+                    # and always show already-assigned pins with a warning (but still selectable).
+                    pin_manager = self._get_pin_manager()
+                    current_pullup = bool(self.state.get(f"{state_key}.endstop_pullup", True))
+                    current_invert = bool(self.state.get(f"{state_key}.endstop_invert", False))
+
+                    selected = pin_manager.select_digital_input(
+                        endstop_source,
+                        purpose=f"{state_key} endstop",
+                        groups=[
+                            "endstop_ports",
+                            "probe_ports",
+                            "misc_ports",
+                            "pins",
+                            "fan_ports",
+                            "heater_ports",
+                            "thermistor_ports",
+                        ],
+                        current_port=current_endstop_port,
+                        current_pullup=current_pullup,
+                        current_invert=current_invert,
+                        title=f"Stepper {axis_upper} - Endstop Pin",
+                    )
+                    if selected is None:
                         return
 
-                    # Check if port is already assigned and unassign it
-                    pin_manager = self._get_pin_manager()
-                    assigned_to = pin_manager.get_used_by(endstop_source, endstop_port)
-                    if assigned_to and endstop_port != current_endstop_port:
-                        unassigned_purpose = pin_manager.unassign_port_from_state(endstop_source, endstop_port)
-                        if unassigned_purpose:
-                            self.ui.msgbox(
-                                f"Port {endstop_port} was previously assigned to: {unassigned_purpose}\n\n"
-                                f"It has been unassigned and is now available for: {axis_upper} endstop",
-                                title="Port Reassigned"
-                            )
+                    endstop_port = selected.get("port", "")
+                    endstop_pullup = bool(selected.get("pullup", True))
+                    endstop_invert = bool(selected.get("invert", False))
 
                     # Persist chosen endstop port immediately and clear the other side to avoid ambiguity.
                     if endstop_source == "toolboard":
@@ -3374,11 +3368,6 @@ class GschpooziWizard:
                         self.state.set(f"{state_key}.endstop_port", endstop_port)
                         self.state.delete(f"{state_key}.endstop_port_toolboard")
                     self.state.save()
-
-                    wiring = self._prompt_endstop_wiring(axis_upper=axis_upper, state_key=state_key)
-                    if wiring is None:
-                        return
-                    endstop_pullup, endstop_invert = wiring
 
                     # Persist config immediately so it is reflected when re-entering the menu.
                     self.state.set(f"{state_key}.endstop_pullup", bool(endstop_pullup))
@@ -3796,36 +3785,39 @@ class GschpooziWizard:
                 self.state.set(f"{state_key}.endstop_source", endstop_source)
                 self.state.save()
 
-                # Endstop port selection from board templates
-                board_type = "toolboards" if endstop_source == "toolboard" else "boards"
-                # Pass current purpose to avoid false warnings when reassigning same function
-                current_purpose = f"{state_key} endstop"
-                endstop_ports = self._get_board_ports("endstop_ports", board_type, current_purpose=current_purpose)
-                if endstop_ports:
-                    if endstop_source == "toolboard":
-                        current_port = self.state.get(f"{state_key}.endstop_port_toolboard", "")
-                    else:
-                        current_port = self.state.get(f"{state_key}.endstop_port", "")
-                    endstop_port = self.ui.radiolist(
-                        f"Select endstop port for {axis_upper} axis:",
-                        [
-                            (
-                                p,
-                                l,
-                                (p == current_port) if current_port else bool(d),
-                            )
-                            for p, l, d in endstop_ports
-                        ],
-                        title=f"Stepper {axis_upper} - Endstop Port"
-                    )
+                # Global DIY rule: allow selecting ANY known-capable pin/port (not just endstop_ports),
+                # and always show already-assigned pins with a warning (but still selectable).
+                pin_manager = self._get_pin_manager()
+                if endstop_source == "toolboard":
+                    current_port = self.state.get(f"{state_key}.endstop_port_toolboard", "")
                 else:
-                    endstop_port = self.ui.inputbox(
-                        f"Enter endstop port for {axis_upper} axis:",
-                        default="",
-                        title=f"Stepper {axis_upper} - Endstop Port"
-                    )
-                if endstop_port is None:
+                    current_port = self.state.get(f"{state_key}.endstop_port", "")
+                current_pullup = bool(self.state.get(f"{state_key}.endstop_pullup", True))
+                current_invert = bool(self.state.get(f"{state_key}.endstop_invert", False))
+
+                selected = pin_manager.select_digital_input(
+                    endstop_source,
+                    purpose=f"{state_key} endstop",
+                    groups=[
+                        "endstop_ports",
+                        "probe_ports",
+                        "misc_ports",
+                        "pins",
+                        "fan_ports",
+                        "heater_ports",
+                        "thermistor_ports",
+                    ],
+                    current_port=current_port,
+                    current_pullup=current_pullup,
+                    current_invert=current_invert,
+                    title=f"Stepper {axis_upper} - Endstop Pin",
+                )
+                if selected is None:
                     return
+
+                endstop_port = selected.get("port", "")
+                endstop_pullup = bool(selected.get("pullup", True))
+                endstop_invert = bool(selected.get("invert", False))
 
                 # Persist chosen endstop port immediately and clear the other side to avoid ambiguity.
                 if endstop_source == "toolboard":
@@ -3835,12 +3827,6 @@ class GschpooziWizard:
                     self.state.set(f"{state_key}.endstop_port", endstop_port)
                     self.state.delete(f"{state_key}.endstop_port_toolboard")
                 self.state.save()
-
-                # Endstop pin configuration (modifiers)
-                wiring = self._prompt_endstop_wiring(axis_upper=axis_upper, state_key=state_key)
-                if wiring is None:
-                    return
-                endstop_pullup, endstop_invert = wiring
 
                 # Persist config immediately so it is reflected when re-entering the menu.
                 self.state.set(f"{state_key}.endstop_pullup", bool(endstop_pullup))
@@ -5491,7 +5477,7 @@ class GschpooziWizard:
                 # Offer a picker of *valid* port IDs (what the generator expects),
                 # not raw MCU pins. This avoids templates failing on board.pins[fan.pin].
                 pick_items = []
-                for group_key, group_label in (("fan_ports", "Fan"), ("heater_ports", "Heater"), ("misc_ports", "Misc")):
+                for group_key, group_label in (("fan_ports", "Fan"), ("heater_ports", "Heater"), ("misc_ports", "Misc"), ("pins", "Pins")):
                     ports = self._get_board_ports(group_key, board_type)
                     if not ports:
                         continue
@@ -6336,11 +6322,19 @@ class GschpooziWizard:
                 # Use board template port selection
                 sensor_ports = self._get_board_ports("thermistor_ports", "boards", current_chamber_port)
                 if sensor_ports:
+                    # Global DIY rule: always allow manual entry (no artificial restrictions).
+                    pick_items = list(sensor_ports) + [("manual", "Manual entry...", False)]
                     sensor_port = self.ui.radiolist(
                         "Select chamber sensor port on mainboard:",
-                        sensor_ports,
+                        pick_items,
                         title="Chamber Sensor Port"
                     )
+                    if sensor_port == "manual":
+                        sensor_port = self.ui.inputbox(
+                            "Enter chamber sensor pin/port on mainboard:",
+                            default=current_chamber_port or "",
+                            title="Chamber Sensor Port"
+                        )
                 else:
                     sensor_port = self.ui.inputbox(
                         "Enter chamber sensor port on mainboard:",
@@ -6487,11 +6481,20 @@ class GschpooziWizard:
                 current_probe_pin = self.state.get("temperature_sensors.probe.sensor_pin", "")
                 sensor_ports = self._get_board_ports("thermistor_ports", "boards")
                 if sensor_ports:
+                    # Global DIY rule: always allow manual entry (no artificial restrictions).
+                    pick_items = [(p, l, (p == current_probe_pin) or bool(d)) for p, l, d in sensor_ports]
+                    pick_items.append(("manual", "Manual entry...", False))
                     probe_pin = self.ui.radiolist(
                         "Select PINDA thermistor port:",
-                        [(p, l, p == current_probe_pin or d) for p, l, d in sensor_ports],
+                        pick_items,
                         title="PINDA Thermistor Port"
                     )
+                    if probe_pin == "manual":
+                        probe_pin = self.ui.inputbox(
+                            "Enter PINDA thermistor pin:",
+                            default=current_probe_pin,
+                            title="PINDA Thermistor Port"
+                        )
                 else:
                     probe_pin = self.ui.inputbox(
                         "Enter PINDA thermistor pin:",

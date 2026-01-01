@@ -360,6 +360,22 @@ class ConfigGenerator:
         for port_name, port_data in board_data.get('endstop_ports', {}).items():
             pins[port_name] = {'signal': port_data.get('pin')}
 
+        # Transform probe ports (optional)
+        for port_name, port_data in board_data.get('probe_ports', {}).items():
+            pins[port_name] = {'signal': port_data.get('pin')}
+
+        # Transform general-purpose pins (optional)
+        # Boards may expose additional labeled pins that are not tied to a specific function group.
+        # Example: Mellow Fly boards expose "IN7" under "pins".
+        for port_name, port_data in board_data.get('pins', {}).items():
+            if port_name in pins:
+                continue
+            if not isinstance(port_data, dict):
+                continue
+            pin = port_data.get('pin') or port_data.get('signal_pin')
+            if pin:
+                pins[port_name] = {'signal': pin}
+
         # Transform misc ports (optional)
         # Many boards expose useful general purpose pins (e.g. PS_ON, LEDs, etc).
         # Some misc ports are headers with nested pin maps (EXP1/EXP2) - skip those.
@@ -483,12 +499,19 @@ class ConfigGenerator:
         def _get_pin(pin_dict: dict, port_id: str, pin_type: str = 'signal',
                      mcu_prefix: str = '', pullup: bool = False, invert: bool = False) -> Optional[str]:
             """Resolve a port ID to a pin string with modifiers."""
-            if not port_id or not pin_dict:
+            if not port_id:
                 return None
             port_data = pin_dict.get(port_id)
-            if not isinstance(port_data, dict):
-                return None
-            raw_pin = port_data.get(pin_type)
+            raw_pin = None
+            if isinstance(port_data, dict):
+                raw_pin = port_data.get(pin_type)
+
+            # Global DIY rule: allow raw MCU pins in state (e.g. PF8, gpio22).
+            # If the user selected a raw pin (or manually entered it), pass it through.
+            if not raw_pin:
+                s = str(port_id).strip()
+                if re.match(r"^P[A-Z]\d+$", s) or re.match(r"^gpio\d+$", s, flags=re.IGNORECASE):
+                    raw_pin = s
             if not raw_pin:
                 return None
 

@@ -9718,6 +9718,92 @@ read -r _
                     if ts is None:
                         continue  # Cancelled - back to menu
                     self.state.set("macros.unload_tip_shape", ts)
+
+                    # Tip shaping tuning (only when enabled)
+                    if ts:
+                        # Defaults match current macro behavior
+                        prime_len = self.state.get("macros.unload_tip_prime_length", 10.0)
+                        prime_spd = self.state.get("macros.unload_tip_prime_speed", 300)
+                        qr_len = self.state.get("macros.unload_tip_quick_retract_length", 10.0)
+                        qr_spd = self.state.get("macros.unload_tip_quick_retract_speed", 3600)
+                        ram_len = self.state.get("macros.unload_tip_ram_length", 5.0)
+                        ram_spd = self.state.get("macros.unload_tip_ram_speed", 300)
+                        sr_len = self.state.get("macros.unload_tip_short_retract_length", 15.0)
+                        sr_spd = self.state.get("macros.unload_tip_short_retract_speed", 3600)
+
+                        tl = self.ui.inputbox(
+                            "Tip shaping: prime length (mm):\n\nTypical: 10",
+                            default=str(prime_len),
+                            title="Tip Shaping - Prime Length",
+                        )
+                        if tl is None:
+                            continue
+                        tspeed = self.ui.inputbox(
+                            "Tip shaping: prime speed (mm/min):\n\nTypical: 300",
+                            default=str(prime_spd),
+                            title="Tip Shaping - Prime Speed",
+                        )
+                        if tspeed is None:
+                            continue
+
+                        ql = self.ui.inputbox(
+                            "Tip shaping: quick retract length (mm):\n\nTypical: 10",
+                            default=str(qr_len),
+                            title="Tip Shaping - Quick Retract Length",
+                        )
+                        if ql is None:
+                            continue
+                        qspeed = self.ui.inputbox(
+                            "Tip shaping: quick retract speed (mm/min):\n\nTypical: 3600",
+                            default=str(qr_spd),
+                            title="Tip Shaping - Quick Retract Speed",
+                        )
+                        if qspeed is None:
+                            continue
+
+                        rl = self.ui.inputbox(
+                            "Tip shaping: ram (small push) length (mm):\n\nTypical: 5",
+                            default=str(ram_len),
+                            title="Tip Shaping - Ram Length",
+                        )
+                        if rl is None:
+                            continue
+                        rspeed = self.ui.inputbox(
+                            "Tip shaping: ram speed (mm/min):\n\nTypical: 300",
+                            default=str(ram_spd),
+                            title="Tip Shaping - Ram Speed",
+                        )
+                        if rspeed is None:
+                            continue
+
+                        sl = self.ui.inputbox(
+                            "Tip shaping: short retract length (mm):\n\nTypical: 15",
+                            default=str(sr_len),
+                            title="Tip Shaping - Short Retract Length",
+                        )
+                        if sl is None:
+                            continue
+                        sspeed = self.ui.inputbox(
+                            "Tip shaping: short retract speed (mm/min):\n\nTypical: 3600",
+                            default=str(sr_spd),
+                            title="Tip Shaping - Short Retract Speed",
+                        )
+                        if sspeed is None:
+                            continue
+
+                        try:
+                            self.state.set("macros.unload_tip_prime_length", float(tl))
+                            self.state.set("macros.unload_tip_prime_speed", int(float(tspeed)))
+                            self.state.set("macros.unload_tip_quick_retract_length", float(ql))
+                            self.state.set("macros.unload_tip_quick_retract_speed", int(float(qspeed)))
+                            self.state.set("macros.unload_tip_ram_length", float(rl))
+                            self.state.set("macros.unload_tip_ram_speed", int(float(rspeed)))
+                            self.state.set("macros.unload_tip_short_retract_length", float(sl))
+                            self.state.set("macros.unload_tip_short_retract_speed", int(float(sspeed)))
+                        except ValueError:
+                            # Keep previous values if user entered something invalid
+                            pass
+
                     self.state.save()
                     self.state.set("macros.preset", "custom")
 

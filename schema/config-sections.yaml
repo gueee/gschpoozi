@@ -1924,6 +1924,15 @@ common:
       variable_unload_length: {{ macros.unload_length | default(100) }}
       variable_unload_speed: {{ macros.unload_speed | default(1800) }}
       variable_unload_tip_shape: {{ 'True' if (macros.unload_tip_shape | default(true)) else 'False' }}
+      # Tip shaping tuning (units: mm and mm/min)
+      variable_unload_tip_prime_length: {{ macros.unload_tip_prime_length | default(10.0) }}
+      variable_unload_tip_prime_speed: {{ macros.unload_tip_prime_speed | default(300) }}
+      variable_unload_tip_quick_retract_length: {{ macros.unload_tip_quick_retract_length | default(10.0) }}
+      variable_unload_tip_quick_retract_speed: {{ macros.unload_tip_quick_retract_speed | default(3600) }}
+      variable_unload_tip_ram_length: {{ macros.unload_tip_ram_length | default(5.0) }}
+      variable_unload_tip_ram_speed: {{ macros.unload_tip_ram_speed | default(300) }}
+      variable_unload_tip_short_retract_length: {{ macros.unload_tip_short_retract_length | default(15.0) }}
+      variable_unload_tip_short_retract_speed: {{ macros.unload_tip_short_retract_speed | default(3600) }}
 
       # ═══════════════════════════════════════════════════════════════════════════════
       # FILAMENT SENSOR
@@ -2856,12 +2865,13 @@ common:
 
           {% if cfg.unload_tip_shape %}
               # Tip-shaping sequence (reduces stringing on reload)
-              G1 E10 F300      ; Prime
-              G1 E-10 F3600    ; Quick retract
-              G1 E5 F300       ; Small push
-              G1 E-15 F3600    ; Retract
+              G1 E{cfg.unload_tip_prime_length} F{cfg.unload_tip_prime_speed}      ; Prime
+              G1 E-{cfg.unload_tip_quick_retract_length} F{cfg.unload_tip_quick_retract_speed}    ; Quick retract
+              G1 E{cfg.unload_tip_ram_length} F{cfg.unload_tip_ram_speed}       ; Small push (ram)
+              G1 E-{cfg.unload_tip_short_retract_length} F{cfg.unload_tip_short_retract_speed}    ; Short retract
           {% else %}
-              G1 E10 F300      ; Simple prime
+              # Simple prime only (still tunable)
+              G1 E{cfg.unload_tip_prime_length} F{cfg.unload_tip_prime_speed}
           {% endif %}
 
           # Main retract

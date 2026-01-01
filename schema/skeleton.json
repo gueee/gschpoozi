@@ -4634,6 +4634,78 @@
           "state_key": "macros.unload_tip_shape",
           "default": true,
           "help": "Create tip shape when unloading (prevents blob)"
+        },
+        {
+          "id": "unload_tip_prime_length",
+          "type": "float",
+          "label": "Tip Shape: Prime Length (mm)",
+          "state_key": "macros.unload_tip_prime_length",
+          "default": 10.0,
+          "range": [0, 50],
+          "help": "Prime amount before shaping sequence"
+        },
+        {
+          "id": "unload_tip_prime_speed",
+          "type": "int",
+          "label": "Tip Shape: Prime Speed (mm/min)",
+          "state_key": "macros.unload_tip_prime_speed",
+          "default": 300,
+          "range": [10, 20000],
+          "help": "Feedrate for tip-shape prime"
+        },
+        {
+          "id": "unload_tip_quick_retract_length",
+          "type": "float",
+          "label": "Tip Shape: Quick Retract Length (mm)",
+          "state_key": "macros.unload_tip_quick_retract_length",
+          "default": 10.0,
+          "range": [0, 100],
+          "help": "Fast retract to neck the filament"
+        },
+        {
+          "id": "unload_tip_quick_retract_speed",
+          "type": "int",
+          "label": "Tip Shape: Quick Retract Speed (mm/min)",
+          "state_key": "macros.unload_tip_quick_retract_speed",
+          "default": 3600,
+          "range": [10, 60000],
+          "help": "Feedrate for quick retract"
+        },
+        {
+          "id": "unload_tip_ram_length",
+          "type": "float",
+          "label": "Tip Shape: Ram Length (mm)",
+          "state_key": "macros.unload_tip_ram_length",
+          "default": 5.0,
+          "range": [0, 50],
+          "help": "Small push to form tip before final retract"
+        },
+        {
+          "id": "unload_tip_ram_speed",
+          "type": "int",
+          "label": "Tip Shape: Ram Speed (mm/min)",
+          "state_key": "macros.unload_tip_ram_speed",
+          "default": 300,
+          "range": [10, 20000],
+          "help": "Feedrate for ram move"
+        },
+        {
+          "id": "unload_tip_short_retract_length",
+          "type": "float",
+          "label": "Tip Shape: Short Retract Length (mm)",
+          "state_key": "macros.unload_tip_short_retract_length",
+          "default": 15.0,
+          "range": [0, 150],
+          "help": "Final short retract before main unload"
+        },
+        {
+          "id": "unload_tip_short_retract_speed",
+          "type": "int",
+          "label": "Tip Shape: Short Retract Speed (mm/min)",
+          "state_key": "macros.unload_tip_short_retract_speed",
+          "default": 3600,
+          "range": [10, 60000],
+          "help": "Feedrate for short retract"
         }
       ]
     },

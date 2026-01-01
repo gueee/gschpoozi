@@ -806,7 +806,19 @@ do_install_klipper() {
 
     # Create and enable service
     create_systemd_service "klipper" "${SERVICE_TEMPLATES}/klipper.service" || return 1
-    enable_service "klipper"
+    if ! enable_service "klipper"; then
+        echo ""
+        echo -e "${YELLOW}Warning: Klipper service failed to start automatically.${NC}"
+        echo -e "${YELLOW}Check logs: sudo journalctl -u klipper -n 50${NC}"
+        echo ""
+        echo -e "Common issues:"
+        echo -e "- Missing/invalid printer.cfg"
+        echo -e "- MCU not reachable / serial path invalid"
+        echo ""
+        if ! confirm "Continue anyway? (You can start manually later)"; then
+            return 1
+        fi
+    fi
 
     # Add user to groups
     add_user_to_groups
@@ -882,7 +894,20 @@ do_install_moonraker() {
 
     # Create and enable service
     create_systemd_service "moonraker" "${SERVICE_TEMPLATES}/moonraker.service" || return 1
-    enable_service "moonraker"
+    if ! enable_service "moonraker"; then
+        echo ""
+        echo -e "${YELLOW}Warning: Moonraker service failed to start automatically.${NC}"
+        echo -e "${YELLOW}Check logs: sudo journalctl -u moonraker -n 50${NC}"
+        echo ""
+        echo -e "Common issues:"
+        echo -e "- Klipper service not running (start Klipper first)"
+        echo -e "- Config file errors in moonraker.conf"
+        echo -e "- Port 7125 already in use"
+        echo ""
+        if ! confirm "Continue anyway? (You can start manually later)"; then
+            return 1
+        fi
+    fi
 
     echo ""
     echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"

@@ -1693,6 +1693,10 @@ do_update_crowsnest() {
         bash tools/update.sh
     fi
 
+    # Ensure update manager entry exists (in case it was missing)
+    add_update_manager_entry "crowsnest" "git_repo" "~/crowsnest" "origin: https://github.com/mainsail-crew/crowsnest.git
+managed_services: crowsnest"
+
     # Restart service
     status_msg "Starting Crowsnest service..."
     sudo systemctl start crowsnest 2>/dev/null || true
@@ -1736,6 +1740,10 @@ do_update_sonar() {
     status_msg "Pulling latest changes..."
     cd "$SONAR_DIR"
     git pull
+
+    # Ensure update manager entry exists (in case it was missing)
+    add_update_manager_entry "sonar" "git_repo" "~/sonar" "origin: https://github.com/mainsail-crew/sonar.git
+managed_services: sonar"
 
     # Restart service
     status_msg "Starting Sonar service..."

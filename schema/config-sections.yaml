@@ -1794,6 +1794,8 @@ common:
       variable_extruder_preheat_temp: {{ macros.extruder_preheat_temp | default(150) }}
       variable_preheat_scale: {{ macros.preheat_scale | default(0.75) }}
       # Park position before final extruder heating (front/back/center/front_left/front_right/back_left/back_right/none)
+      # Park position before final extruder heating:
+      # front/back/left/right/center/front_left/front_right/back_left/back_right/none or manual "X,Y"
       variable_heating_park_position: "{{ macros.heating_park_position | default('center') }}"
 
       # ═══════════════════════════════════════════════════════════════════════════════
@@ -1876,6 +1878,8 @@ common:
       # ═══════════════════════════════════════════════════════════════════════════════
       # END PRINT - PARKING
       # ═══════════════════════════════════════════════════════════════════════════════
+      # Park position:
+      # front/back/left/right/center/front_left/front_right/back_left/back_right or manual "X,Y"
       variable_park_position: "{{ macros.park_position | default('front') }}"
       variable_park_z_hop: {{ macros.park_z_hop | default(10.0) }}
       # Default park_z_max should scale with printer Z travel (z_max - 5 safety margin)
@@ -1896,6 +1900,8 @@ common:
       # ═══════════════════════════════════════════════════════════════════════════════
       variable_pause_retract: {{ macros.pause_retract | default(1.0) }}
       variable_pause_z_hop: {{ macros.pause_z_hop | default(10.0) }}
+      # Pause park position:
+      # front/back/left/right/center/front_left/front_right/back_left/back_right or manual "X,Y"
       variable_pause_position: "{{ macros.pause_position | default('front') }}"
       variable_pause_heater_off: {{ 'True' if (macros.pause_heater_off | default(false)) else 'False' }}
       variable_pause_timeout: {{ macros.pause_timeout | default(43200) }}
@@ -2578,10 +2584,11 @@ common:
       # Park Toolhead
       # ───────────────────────────────────────────────────────────────────────────────
       [gcode_macro _PARK]
-      description: Park toolhead (POSITION=front|back|center|front_left|front_right|back_left|back_right)
+      description: Park toolhead (POSITION=front|back|left|right|center|front_left|front_right|back_left|back_right|X,Y)
       gcode:
           {% set cfg = printer["gcode_macro _MACRO_CONFIG"] %}
-          {% set POSITION = params.POSITION|default(cfg.park_position)|lower %}
+          {% set POSITION = (params.POSITION|default(cfg.park_position)|string)|lower %}
+          {% set POSITION = POSITION.replace(" ", "") %}
 
           # Get current Z and calculate safe Z
           {% set current_z = printer.toolhead.position.z %}
@@ -2602,6 +2609,12 @@ common:
           {% elif POSITION == "center" %}
               {% set park_x = bed_x / 2 %}
               {% set park_y = bed_y / 2 %}
+          {% elif POSITION == "left" %}
+              {% set park_x = 10 %}
+              {% set park_y = bed_y / 2 %}
+          {% elif POSITION == "right" %}
+              {% set park_x = bed_x - 10 %}
+              {% set park_y = bed_y / 2 %}
           {% elif POSITION == "front_left" %}
               {% set park_x = 10 %}
               {% set park_y = 10 %}
@@ -2614,6 +2627,19 @@ common:
           {% elif POSITION == "back_right" %}
               {% set park_x = bed_x - 10 %}
               {% set park_y = bed_y - 10 %}
+          {% elif "," in POSITION %}
+              {% set _p = POSITION.split(",") %}
+              {% if _p|length >= 2 %}
+                  {% set park_x = _p[0]|float %}
+                  {% set park_y = _p[1]|float %}
+                  # Clamp inside bed with a 10mm margin
+                  {% set park_x = ([10, park_x, bed_x - 10]|sort)[1] %}
+                  {% set park_y = ([10, park_y, bed_y - 10]|sort)[1] %}
+              {% else %}
+                  # Default to front center
+                  {% set park_x = bed_x / 2 %}
+                  {% set park_y = 10 %}
+              {% endif %}
           {% else %}
               # Default to front center
               {% set park_x = bed_x / 2 %}

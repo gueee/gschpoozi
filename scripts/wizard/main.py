@@ -9536,18 +9536,61 @@ read -r _
                             self.state.set("macros.pause_retract", float(pr))
                         except ValueError:
                             pass
+                    bed_x = float(self.state.get("printer.bed_size_x", 300))
+                    bed_y = float(self.state.get("printer.bed_size_y", 300))
+
                     pp = self.ui.menu(
-                        "Park position when paused:",
+                        "Park position when paused:\n\n"
+                        "Tip: corners/edges are useful for access.\n"
+                        "Manual allows custom X,Y (mm).",
                         [
                             ("front", "Front center"),
                             ("back", "Back center"),
+                            ("left", "Left center edge"),
+                            ("right", "Right center edge"),
                             ("center", "Bed center"),
+                            ("front_left", "Front left corner"),
+                            ("front_right", "Front right corner"),
+                            ("back_left", "Back left corner"),
+                            ("back_right", "Back right corner"),
+                            ("manual", "Manual X,Y position..."),
                         ],
                         title="Pause Position",
                     )
-                    if pp:
+                    if pp == "manual":
+                        # Default manual position: bed center
+                        default_x = str(int(bed_x / 2))
+                        default_y = str(int(bed_y / 2))
+
+                        mx = self.ui.inputbox(
+                            f"Manual park X (mm):\n\nBed X size: {int(bed_x)}mm\n"
+                            "Tip: values will be clamped to stay on the bed.",
+                            default=default_x,
+                            title="Pause Position - Manual X",
+                        )
+                        if mx is None:
+                            continue
+                        my = self.ui.inputbox(
+                            f"Manual park Y (mm):\n\nBed Y size: {int(bed_y)}mm\n"
+                            "Tip: values will be clamped to stay on the bed.",
+                            default=default_y,
+                            title="Pause Position - Manual Y",
+                        )
+                        if my is None:
+                            continue
+                        try:
+                            x = float(str(mx).strip())
+                            y = float(str(my).strip())
+                            # Store as "X,Y" (no spaces). _PARK will clamp.
+                            self.state.set("macros.pause_position", f"{x:g},{y:g}")
+                        except ValueError:
+                            self.ui.msgbox("Invalid X/Y values. Please enter numbers.", title="Invalid Input")
+                            continue
+                    elif pp:
                         self.state.set("macros.pause_position", pp)
+
                     self.state.save()
+                    self.state.set("macros.preset", "custom")
 
                 elif choice == "resume":
                     rp = self.ui.inputbox(
@@ -9583,14 +9626,18 @@ read -r _
             while True:
                 load_temp = self.state.get("macros.load_temp", 220)
                 load_len = self.state.get("macros.load_length", 100)
+                load_speed = self.state.get("macros.load_speed", 300)
                 unload_len = self.state.get("macros.unload_length", 100)
+                unload_speed = self.state.get("macros.unload_speed", 1800)
                 tip_shape = self.state.get("macros.unload_tip_shape", True)
 
                 choice = self.ui.menu(
                     "Filament Macros (LOAD / UNLOAD)\n\n"
                     f"  Load temp:        {load_temp}C\n"
                     f"  Load length:      {load_len}mm\n"
+                    f"  Load speed:       {load_speed} mm/min\n"
                     f"  Unload length:    {unload_len}mm\n"
+                    f"  Unload speed:     {unload_speed} mm/min\n"
                     f"  Tip shaping:      {'Enabled' if tip_shape else 'Disabled'}\n",
                     [
                         ("load", "LOAD_FILAMENT Settings"),
@@ -9624,7 +9671,20 @@ read -r _
                             self.state.set("macros.load_length", int(ll))
                         except ValueError:
                             pass
+                    ls = self.ui.inputbox(
+                        "Load speed (mm/min):\n\n"
+                        "Feedrate for loading move. Typical: 300",
+                        default=str(load_speed),
+                        title="Load Speed",
+                    )
+                    if ls:
+                        try:
+                            self.state.set("macros.load_speed", int(float(ls)))
+                        except ValueError:
+                            pass
+
                     self.state.save()
+                    self.state.set("macros.preset", "custom")
 
                 elif choice == "unload":
                     ul = self.ui.inputbox(
@@ -9635,6 +9695,17 @@ read -r _
                     if ul:
                         try:
                             self.state.set("macros.unload_length", int(ul))
+                        except ValueError:
+                            pass
+                    us = self.ui.inputbox(
+                        "Unload speed (mm/min):\n\n"
+                        "Feedrate for unload move. Typical: 1800",
+                        default=str(unload_speed),
+                        title="Unload Speed",
+                    )
+                    if us:
+                        try:
+                            self.state.set("macros.unload_speed", int(float(us)))
                         except ValueError:
                             pass
                     ts = self.ui.yesno(
@@ -9648,6 +9719,7 @@ read -r _
                         continue  # Cancelled - back to menu
                     self.state.set("macros.unload_tip_shape", ts)
                     self.state.save()
+                    self.state.set("macros.preset", "custom")
 
         # ═══════════════════════════════════════════════════════════════════════════════
         # Smart Defaults Initialization

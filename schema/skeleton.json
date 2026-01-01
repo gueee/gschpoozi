@@ -4483,6 +4483,8 @@
           "options": [
             { "value": "front", "label": "Front" },
             { "value": "back", "label": "Back" },
+            { "value": "left", "label": "Left" },
+            { "value": "right", "label": "Right" },
             { "value": "center", "label": "Center" },
             { "value": "front_left", "label": "Front Left" },
             { "value": "front_right", "label": "Front Right" },
@@ -4490,7 +4492,7 @@
             { "value": "back_right", "label": "Back Right" }
           ],
           "default": "front",
-          "help": "Where to park toolhead when pausing"
+          "help": "Where to park toolhead when pausing (also supports manual \"X,Y\" in CLI wizard)"
         },
         {
           "id": "pause_z_hop",

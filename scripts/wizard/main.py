@@ -7054,6 +7054,29 @@ class GschpooziWizard:
                         self._run_systemctl("enable", svc)
                         self._run_systemctl("start", svc)
 
+                        # Safety: KlipperScreen installers (or OS defaults) can leave $HOME at 700.
+                        # If Mainsail is served from ~/mainsail via nginx, that causes nginx 403
+                        # (www-data cannot traverse /home/<user>). Auto-heal to avoid breaking UI.
+                        try:
+                            import subprocess
+                            from pathlib import Path
+
+                            mainsail_site = Path("/etc/nginx/sites-enabled/mainsail")
+                            idx = Path.home() / "mainsail" / "index.html"
+                            if mainsail_site.exists() and idx.exists():
+                                r = subprocess.run(
+                                    ["sudo", "-u", "www-data", "test", "-r", str(idx)],
+                                    capture_output=True,
+                                    text=True,
+                                )
+                                if r.returncode != 0:
+                                    self._log_wizard("klipperscreen_install detected mainsail nginx permission issue; chmod o+x $HOME")
+                                    # Make HOME traversable for nginx without making it listable.
+                                    self._run_shell_interactive(f"sudo chmod o+x {Path.home()}")
+                                    self._run_shell_interactive("sudo systemctl restart nginx")
+                        except Exception as e:
+                            self._log_wizard(f"klipperscreen_install nginx self-heal failed: {type(e).__name__}:{e}")
+
                         if update_mgr:
                             self._ensure_moonraker_update_manager_entry("KlipperScreen", update_mgr)
                         self.ui.msgbox(

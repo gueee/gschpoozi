@@ -601,6 +601,61 @@ is_port_in_use() {
     grep -rq "listen ${port}" /etc/nginx/sites-enabled/ 2>/dev/null
 }
 
+# Ensure nginx (www-data) can read web UI files under ~/mainsail or ~/fluidd.
+#
+# Some installers (and some OS defaults) set the user's home directory to 700.
+# That breaks nginx because it runs as www-data and cannot traverse /home/<user>,
+# resulting in "403 Forbidden" and nginx errors like "(13: Permission denied)".
+#
+# We fix this automatically by adding execute permission for "other" on $HOME
+# (o+x). This allows traversal but still prevents directory listing (no read bit).
+ensure_nginx_can_access_home_webui() {
+    local ui_name="${1:-}"
+    local web_root="${HOME}/${ui_name}"
+    local index_file="${web_root}/index.html"
+
+    # Only applies to home-based web UIs.
+    if [[ -z "${ui_name}" ]]; then
+        return 0
+    fi
+    if [[ ! -d "${web_root}" ]]; then
+        return 0
+    fi
+
+    # If nginx can't read index.html (or we don't have an index yet), nothing to do.
+    if [[ -f "${index_file}" ]]; then
+        if sudo -u www-data test -r "${index_file}" >/dev/null 2>&1; then
+            return 0
+        fi
+    else
+        # Fall back to just checking directory traversal.
+        if sudo -u www-data test -x "${web_root}" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+
+    warn_msg "nginx (www-data) cannot access ${web_root} (likely HOME permissions)."
+    warn_msg "Applying automatic fix: chmod o+x ${HOME} (traversable, not listable)."
+
+    # Make home directory traversable for non-owners (keeps it private from listing).
+    if ! sudo chmod o+x "${HOME}"; then
+        error_msg "Failed to adjust HOME permissions for nginx access."
+        return 1
+    fi
+
+    # Re-check and restart nginx (best-effort).
+    if [[ -f "${index_file}" ]]; then
+        if ! sudo -u www-data test -r "${index_file}" >/dev/null 2>&1; then
+            error_msg "nginx still cannot read ${index_file}. Check permissions of ${HOME} and ${web_root}."
+            return 1
+        fi
+    fi
+
+    sudo systemctl restart nginx >/dev/null 2>&1 || true
+    ok_msg "nginx access fixed for ${ui_name}."
+    return 0
+}
+
 # Setup nginx for web UI
 # Now supports running Mainsail and Fluidd side by side on different ports
 setup_nginx() {
@@ -657,6 +712,8 @@ setup_nginx() {
     if sudo nginx -t; then
         sudo systemctl restart nginx
         ok_msg "Nginx configured for $ui_name on port $port"
+        # If the UI lives under $HOME, ensure nginx can traverse/read it.
+        ensure_nginx_can_access_home_webui "${ui_name}" || true
         # Store the port for display purposes
         WEBUI_PORT="$port"
         return 0
@@ -890,6 +947,9 @@ do_install_mainsail() {
 
     # Download and extract
     download_and_extract "$download_url" "$MAINSAIL_DIR" || return 1
+
+    # Ensure nginx can access ~/mainsail even if $HOME is 700
+    ensure_nginx_can_access_home_webui "mainsail" || return 1
 
     # Setup nginx with auto-detected port
     setup_nginx "mainsail" "$port" || return 1
@@ -1532,6 +1592,9 @@ do_update_mainsail() {
         rm -rf "$MAINSAIL_DIR"
         mv "${MAINSAIL_DIR}.bak" "$MAINSAIL_DIR"
     fi
+
+    # Self-heal common nginx 403 due to $HOME permissions.
+    ensure_nginx_can_access_home_webui "mainsail" || true
 
     echo ""
     wait_for_key

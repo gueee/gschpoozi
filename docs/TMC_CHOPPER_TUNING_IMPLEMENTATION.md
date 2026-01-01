@@ -178,7 +178,7 @@ chopper_safety_limits:
     [gcode_macro _CHOPPER_RESTORE_LIMITS]
     gcode:
         {% set state = printer["gcode_macro _CHOPPER_SAFETY_LIMITS"] %}
-        SET_VELOCITY_LIMIT VELOCITY={state.original_velocity} ACCEL={state.original_accel}
+        SET_VELOCITY_LIMIT VELOCITY={{state.original_velocity}} ACCEL={{state.original_accel}}
         M118 Velocity limits restored
 ```
 

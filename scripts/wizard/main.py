@@ -7161,7 +7161,6 @@ class GschpooziWizard:
                         # (www-data cannot traverse /home/<user>). Auto-heal to avoid breaking UI.
                         try:
                             import subprocess
-                            from pathlib import Path
 
                             mainsail_site = Path("/etc/nginx/sites-enabled/mainsail")
                             idx = Path.home() / "mainsail" / "index.html"

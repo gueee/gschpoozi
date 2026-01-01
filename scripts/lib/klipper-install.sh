@@ -832,6 +832,110 @@ EOF
 # MAIN INSTALLATION FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Install Host MCU (Linux process / RPi secondary MCU)
+do_install_host_mcu() {
+    clear_screen
+    print_header "Installing Host MCU (Linux process)"
+
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    echo -e "${BCYAN}${BOX_V}${NC}  This will:"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Install klipper-mcu systemd unit (klipper-mcu.service)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Build + install the Linux-process MCU binary (klipper_mcu)"
+    echo -e "${BCYAN}${BOX_V}${NC}  - Start klipper-mcu so /tmp/klipper_host_mcu is available"
+    echo -e "${BCYAN}${BOX_V}${NC}"
+    print_footer
+
+    if ! confirm "Proceed with Host MCU setup?"; then
+        return 1
+    fi
+
+    echo ""
+
+    # Preflight checks
+    check_not_root || return 1
+    check_sudo_access || return 1
+
+    # Ensure Klipper repo exists (we need scripts/klipper-mcu.service and Makefile)
+    if [[ ! -d "${KLIPPER_DIR}" ]]; then
+        error_msg "Klipper directory not found: ${KLIPPER_DIR}"
+        error_msg "Install Klipper first (menu: install -> klipper)"
+        wait_for_key
+        return 1
+    fi
+    if [[ ! -f "${KLIPPER_DIR}/scripts/klipper-mcu.service" ]]; then
+        error_msg "Missing: ${KLIPPER_DIR}/scripts/klipper-mcu.service"
+        error_msg "Your Klipper/Kalico checkout may be incomplete."
+        wait_for_key
+        return 1
+    fi
+
+    # Install the rc script / systemd unit (official Klipper docs)
+    status_msg "Installing klipper-mcu.service..."
+    sudo cp "${KLIPPER_DIR}/scripts/klipper-mcu.service" /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable klipper-mcu.service
+
+    # Build linux-process MCU without clobbering main MCU build artifacts
+    local host_cfg="${KLIPPER_DIR}/.config-hostmcu"
+    local host_out="${KLIPPER_DIR}/out-hostmcu"
+
+    status_msg "Configuring Linux-process MCU build..."
+    cat > "${host_cfg}" <<'EOF'
+CONFIG_MACH_LINUX=y
+EOF
+
+    # Fill remaining defaults
+    (cd "${KLIPPER_DIR}" && make KCONFIG_CONFIG="${host_cfg}" OUT="${host_out}" olddefconfig) || {
+        error_msg "Failed to configure Linux-process MCU build (olddefconfig)."
+        wait_for_key
+        return 1
+    }
+
+    status_msg "Building Linux-process MCU..."
+    (cd "${KLIPPER_DIR}" && make KCONFIG_CONFIG="${host_cfg}" OUT="${host_out}" -j"$(nproc 2>/dev/null || echo 2)") || {
+        error_msg "Failed to build Linux-process MCU."
+        wait_for_key
+        return 1
+    }
+
+    # Install MCU binary to /usr/local/bin and restart host MCU service if present
+    status_msg "Installing Linux-process MCU (make flash)..."
+    sudo systemctl stop klipper >/dev/null 2>&1 || true
+    (cd "${KLIPPER_DIR}" && sudo make KCONFIG_CONFIG="${host_cfg}" OUT="${host_out}" flash) || {
+        error_msg "Failed to install Linux-process MCU (make flash)."
+        echo -e "${YELLOW}Hint: check output above, and logs:${NC} sudo journalctl -u klipper-mcu -n 50"
+        wait_for_key
+        return 1
+    }
+
+    # Start host MCU daemon (must run before klippy)
+    status_msg "Starting klipper-mcu.service..."
+    sudo systemctl start klipper-mcu.service || true
+
+    # Verify socket exists
+    sleep 1
+    if [[ ! -S "/tmp/klipper_host_mcu" ]]; then
+        warn_msg "Host MCU socket not found: /tmp/klipper_host_mcu"
+        echo -e "${YELLOW}Check service:${NC} sudo systemctl status klipper-mcu.service"
+        echo -e "${YELLOW}Logs:${NC} sudo journalctl -u klipper-mcu -n 80"
+        echo -e "${YELLOW}Note:${NC} If logs mention 'Permission denied', add your user to tty group (see Klipper docs)."
+        wait_for_key
+        return 1
+    fi
+
+    # Start Klipper again (now that host MCU is up)
+    sudo systemctl start klipper >/dev/null 2>&1 || true
+
+    echo ""
+    ok_msg "Host MCU installed and running."
+    echo -e "  Socket: ${CYAN}/tmp/klipper_host_mcu${NC}"
+    echo -e "  Service: ${CYAN}systemctl status klipper-mcu.service${NC}"
+    echo ""
+
+    wait_for_key
+    return 0
+}
+
 # Install Klipper
 do_install_klipper() {
     clear_screen

@@ -34,7 +34,7 @@ mcu:
     condition: "mcu.host.enabled"
     template: |
       [mcu rpi]
-      serial: /tmp/klipper_host_mcu
+      serial: {{ mcu.host.serial | default('/tmp/klipper_host_mcu', true) }}
 
 
 # -----------------------------------------------------------------------------

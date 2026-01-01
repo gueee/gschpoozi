@@ -3062,15 +3062,35 @@ class GschpooziWizard:
             return  # Cancelled
 
         self.state.set("mcu.host.enabled", enabled)
+        if enabled and not self.state.get("mcu.host.serial"):
+            self.state.set("mcu.host.serial", "/tmp/klipper_host_mcu")
         self.state.save()
 
         if enabled:
-            self.ui.msgbox(
+            tool = REPO_ROOT / "scripts" / "tools" / "klipper_component_manager.sh"
+            if self.ui.yesno(
                 "Host MCU enabled!\n\n"
-                "Make sure klipper_mcu service is installed.\n"
-                "Serial: /tmp/klipper_host_mcu",
-                title="Host MCU"
-            )
+                "Set up Host MCU now?\n\n"
+                "This will (official Klipper procedure):\n"
+                "- Install/enable klipper-mcu.service\n"
+                "- Build + install Linux-process MCU (make flash)\n"
+                "- Start klipper-mcu so /tmp/klipper_host_mcu exists\n\n"
+                "Recommended: Yes",
+                title="Host MCU Setup",
+                default_no=False,
+            ):
+                if tool.exists():
+                    self._run_tty_command(["bash", str(tool), "install", "host-mcu"])
+                else:
+                    self.ui.msgbox(f"Missing tool: {tool}", title="Error")
+            else:
+                self.ui.msgbox(
+                    "Host MCU enabled.\n\n"
+                    "Note: Klipper will report 'mcu rpi: Unable to connect' until\n"
+                    "klipper-mcu.service is installed and running.\n\n"
+                    "Serial: /tmp/klipper_host_mcu",
+                    title="Host MCU"
+                )
 
     def _printer_settings(self) -> None:
         """Configure printer settings."""

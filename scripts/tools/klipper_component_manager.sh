@@ -159,6 +159,7 @@ source "${REPO_ROOT}/scripts/lib/klipper-install.sh"
 case "${action}" in
   install)
     case "${component}" in
+      host-mcu)     do_install_host_mcu ;;
       klipper)      do_install_klipper ;;
       moonraker)    do_install_moonraker ;;
       mainsail)     do_install_mainsail ;;

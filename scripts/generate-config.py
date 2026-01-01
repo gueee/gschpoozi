@@ -1572,7 +1572,18 @@ def generate_hardware_cfg(
             lines.append("# Eddy probe: use rapid scan for faster mesh")
             lines.append("# BED_MESH_CALIBRATE METHOD=rapid_scan")
             if probe_type == 'btt-eddy':
-                lines.append("scan_overshoot: 8")
+                # Feature-detect support to avoid emitting invalid config options
+                supports_scan_overshoot = False
+                try:
+                    bed_mesh_py = Path.home() / "klipper" / "klippy" / "extras" / "bed_mesh.py"
+                    if bed_mesh_py.exists():
+                        supports_scan_overshoot = "scan_overshoot" in bed_mesh_py.read_text(encoding="utf-8", errors="ignore")
+                except Exception:
+                    supports_scan_overshoot = False
+                if supports_scan_overshoot:
+                    lines.append("scan_overshoot: 8")
+                else:
+                    lines.append("# scan_overshoot: (unsupported by installed Klipper/Kalico; omitted)")
             lines.append(f"mesh_min: {mesh_margin}, {mesh_margin}")
             lines.append(f"mesh_max: {bed_x - mesh_margin}, {bed_y - mesh_margin}")
             lines.append("probe_count: 9, 9")

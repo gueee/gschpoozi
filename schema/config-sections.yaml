@@ -697,8 +697,11 @@ bed_mesh:
     probe_count: {{ probe.bed_mesh.probe_count | default('5, 5', true) if probe.bed_mesh else '5, 5' }}
     {% endif %}
     algorithm: bicubic
-    {% if probe.probe_type in ['beacon', 'cartographer', 'btt_eddy'] %}
-    # scan_overshoot: required for rapid_scan/scan path optimization
+    {% if probe.probe_type in ['beacon', 'cartographer', 'btt_eddy']
+          and probe.bed_mesh
+          and probe.bed_mesh.supports_scan_overshoot is defined
+          and probe.bed_mesh.supports_scan_overshoot %}
+    # scan_overshoot: only emitted when the installed Klipper/Kalico supports it
     scan_overshoot: {{ probe.bed_mesh.scan_overshoot | default(8) if probe.bed_mesh else 8 }}
     {% endif %}
     {% if probe.probe_type == 'cartographer' %}

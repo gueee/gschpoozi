@@ -6002,6 +6002,24 @@ class GschpooziWizard:
         """Configure bed mesh settings (moved from bed leveling since mesh is probe-dependent)."""
         is_eddy_probe = probe_type in eddy_probes
 
+        def _supports_bed_mesh_scan_overshoot() -> bool:
+            """
+            Feature-detect whether the installed Klipper/Kalico supports `scan_overshoot`
+            in the [bed_mesh] config section.
+            """
+            try:
+                bed_mesh_py = Path.home() / "klipper" / "klippy" / "extras" / "bed_mesh.py"
+                if not bed_mesh_py.exists():
+                    return False
+                txt = bed_mesh_py.read_text(encoding="utf-8", errors="ignore")
+                return "scan_overshoot" in txt
+            except Exception:
+                return False
+
+        supports_scan_overshoot = bool(_supports_bed_mesh_scan_overshoot()) if is_eddy_probe else False
+        # Persist capability so the generator can avoid emitting invalid options
+        self.state.set("probe.bed_mesh.supports_scan_overshoot", supports_scan_overshoot)
+
         current_mesh_enabled = self.state.get("probe.bed_mesh.enabled", True)
         enable_mesh = self.ui.yesno(
             "Enable bed mesh compensation?",
@@ -6069,19 +6087,20 @@ class GschpooziWizard:
             if mesh_max is None:
                 return
 
-            # Scan overshoot (eddy probes only)
-            current_overshoot = self.state.get("probe.bed_mesh.scan_overshoot", 8)
-            scan_overshoot = self.ui.inputbox(
-                "Scan overshoot (mm):\n\n"
-                "Distance to travel outside mesh for path optimization.\n"
-                "Recommended: 8mm (minimum: 1mm)",
-                default=str(current_overshoot),
-                title="Bed Mesh - Scan Overshoot"
-            )
-            if scan_overshoot is None:
-                return
-            if scan_overshoot:
-                self.state.set("probe.bed_mesh.scan_overshoot", int(scan_overshoot))
+            # Scan overshoot (only if supported by installed Klipper/Kalico)
+            if supports_scan_overshoot:
+                current_overshoot = self.state.get("probe.bed_mesh.scan_overshoot", 8)
+                scan_overshoot = self.ui.inputbox(
+                    "Scan overshoot (mm):\n\n"
+                    "Extra travel outside mesh for scan path optimization.\n"
+                    "Recommended: 8mm (minimum: 1mm)",
+                    default=str(current_overshoot),
+                    title="Bed Mesh - Scan Overshoot"
+                )
+                if scan_overshoot is None:
+                    return
+                if scan_overshoot:
+                    self.state.set("probe.bed_mesh.scan_overshoot", int(scan_overshoot))
         else:
             # Standard probes: use auto for mesh boundaries
             mesh_min = "auto"
@@ -6109,6 +6128,10 @@ class GschpooziWizard:
             mesh_summary += f"Mesh bounds: {mesh_min} → {mesh_max}\n"
             mesh_method = self.state.get("probe.bed_mesh.mesh_method", "rapid_scan")
             mesh_summary += f"Method: {mesh_method}\n"
+            if supports_scan_overshoot:
+                mesh_summary += f"Scan overshoot: {self.state.get('probe.bed_mesh.scan_overshoot', 8)}mm\n"
+            else:
+                mesh_summary += "Scan overshoot: (not supported by installed Klipper/Kalico)\n"
 
         self.ui.msgbox(
             f"Bed mesh configured!\n\n{mesh_summary}",

@@ -894,19 +894,19 @@ create_printer_data_dirs_for_instance() {
 create_moonraker_conf_for_instance() {
     local printer_data_path="$1"
     local moonraker_port="$2"
-    
+
     if [[ -z "$printer_data_path" ]] || [[ -z "$moonraker_port" ]]; then
         error_msg "printer_data_path and moonraker_port are required"
         return 1
     fi
-    
+
     local conf_file="${printer_data_path}/config/moonraker.conf"
-    
+
     if [[ -f "$conf_file" ]]; then
         warn_msg "moonraker.conf already exists at $conf_file"
         return 0
     fi
-    
+
     status_msg "Creating moonraker.conf for instance (port ${moonraker_port})..."
 
     # Compute relative path to comms directory from config directory

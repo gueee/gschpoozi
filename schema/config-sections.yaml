@@ -2949,37 +2949,27 @@ common:
       [gcode_macro PID_CALIBRATE_EXTRUDER]
       description: Run PID calibration for extruder (TARGET=240 default)
       gcode:
-      {% raw %}
           {% set TARGET = params.TARGET|default(240)|int %}
-          M117 PID calibrating extruder at {TARGET}C...
-          
-          # Ensure fan is on for realistic conditions
+          M117 PID calibrating extruder...
+          ; Ensure fan is on for realistic conditions
           M106 S255
-          
-          # Run PID calibration
+          ; Run PID calibration
           PID_CALIBRATE HEATER=extruder TARGET={TARGET}
-          
           M117 PID calibration complete!
           M118 Run SAVE_CONFIG to save PID values to printer.cfg
-          
-          # Turn off fan
+          ; Turn off fan
           M106 S0
-      {% endraw %}
-      
+
       [gcode_macro PID_CALIBRATE_BED]
       description: Run PID calibration for heated bed (TARGET=60 default)
       gcode:
-      {% raw %}
           {% set TARGET = params.TARGET|default(60)|int %}
-          M117 PID calibrating bed at {TARGET}C...
-          
-          # Run PID calibration
+          M117 PID calibrating bed...
+          ; Run PID calibration
           PID_CALIBRATE HEATER=heater_bed TARGET={TARGET}
-          
           M117 PID calibration complete!
           M118 Run SAVE_CONFIG to save PID values to printer.cfg
-      {% endraw %}
-  
+
   # MPC calibration (Kalico only)
   heater_calibration_mpc:
     condition: "extruder.control == 'mpc'"
@@ -2988,22 +2978,16 @@ common:
       [gcode_macro MPC_CALIBRATE_EXTRUDER]
       description: Run MPC calibration for extruder (Kalico only, TARGET=240 default)
       gcode:
-      {% raw %}
           {% set TARGET = params.TARGET|default(240)|int %}
-          M117 MPC calibrating extruder at {TARGET}C...
-          
-          # Ensure fan is on for realistic conditions
+          M117 MPC calibrating extruder...
+          ; Ensure fan is on for realistic conditions
           M106 S255
-          
-          # Run MPC calibration
+          ; Run MPC calibration
           MPC_CALIBRATE HEATER=extruder TARGET={TARGET}
-          
           M117 MPC calibration complete!
           M118 Run SAVE_CONFIG to save MPC parameters to printer.cfg
-          
-          # Turn off fan
+          ; Turn off fan
           M106 S0
-      {% endraw %}
 
   # Stepper identification & calibration macros (kept separate for readability/continuity)
   calibration:

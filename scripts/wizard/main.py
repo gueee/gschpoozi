@@ -8566,12 +8566,27 @@ read -r _
         """Configure accelerometer for input shaper calibration."""
         # Check for gcode_shell_command extension (required for shaper graph commands)
         def _gcode_shell_command_install_status() -> Tuple[bool, str]:
-            """Check if gcode_shell_command extension is installed."""
+            """Check if gcode_shell_command extension is installed.
+            
+            Always uses extras/ directory (standard location).
+            Also checks for duplicates in plugins/ and reports if found.
+            """
             try:
                 base = Path.home() / "klipper" / "klippy"
-                target = base / "plugins" if (base / "plugins").exists() else (base / "extras")
-                extension_file = target / "gcode_shell_command.py"
-                return extension_file.exists(), str(target)
+                extras_dir = base / "extras"
+                plugins_dir = base / "plugins"
+                extras_file = extras_dir / "gcode_shell_command.py"
+                plugins_file = plugins_dir / "gcode_shell_command.py"
+                
+                # Check for duplicate in plugins/ (shouldn't exist)
+                if plugins_file.exists():
+                    return True, str(extras_dir)  # Return extras as target, but mark as installed
+                
+                # Standard location: extras/
+                if extras_file.exists():
+                    return True, str(extras_dir)
+                
+                return False, str(extras_dir)
             except Exception:
                 return False, str(Path.home() / "klipper" / "klippy" / "extras")
 
@@ -8614,9 +8629,12 @@ read -r _
                         restart = True
 
                     # Install using Python - delete old file first, then copy from repo or download
+                    # Always install to extras/ (standard location), remove duplicates from plugins/
                     target_base = Path.home() / "klipper" / "klippy"
-                    target_dir = target_base / "plugins" if (target_base / "plugins").exists() else (target_base / "extras")
+                    target_dir = target_base / "extras"  # Always use extras/, never plugins/
+                    plugins_dir = target_base / "plugins"
                     target_file = target_dir / "gcode_shell_command.py"
+                    plugins_file = plugins_dir / "gcode_shell_command.py"
                     source_file = REPO_ROOT / "scripts" / "tools" / "gcode_shell_command.py"
 
                     if not target_dir.exists():
@@ -8630,7 +8648,11 @@ read -r _
                         return
 
                     try:
-                        # Delete old file first for clean reinstall
+                        # Remove duplicate from plugins/ if it exists (prevents "found in both" error)
+                        if plugins_file.exists():
+                            plugins_file.unlink()
+                        
+                        # Delete old file from extras/ for clean reinstall
                         if target_file.exists():
                             target_file.unlink()
 
@@ -8795,8 +8817,10 @@ read -r _
         # Handle extension install/reinstall
         if choice == "__INSTALL__" or choice == "__REINSTALL__":
             target_base = Path.home() / "klipper" / "klippy"
-            target_dir = target_base / "plugins" if (target_base / "plugins").exists() else (target_base / "extras")
+            target_dir = target_base / "extras"  # Always use extras/, never plugins/
+            plugins_dir = target_base / "plugins"
             target_file = target_dir / "gcode_shell_command.py"
+            plugins_file = plugins_dir / "gcode_shell_command.py"
             source_file = REPO_ROOT / "scripts" / "tools" / "gcode_shell_command.py"
 
             if not target_dir.exists():
@@ -8821,7 +8845,11 @@ read -r _
                 restart = True
 
             try:
-                # Delete old file first for clean reinstall
+                # Remove duplicate from plugins/ if it exists (prevents "found in both" error)
+                if plugins_file.exists():
+                    plugins_file.unlink()
+                
+                # Delete old file from extras/ for clean reinstall
                 if target_file.exists():
                     target_file.unlink()
 

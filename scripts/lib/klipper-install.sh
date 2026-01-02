@@ -1495,7 +1495,8 @@ do_install_timelapse() {
 
     # Add update manager entry
     add_update_manager_entry "timelapse" "git_repo" "~/moonraker-timelapse" "origin: https://github.com/mainsail-crew/moonraker-timelapse.git
-primary_branch: main"
+primary_branch: main
+is_system_service: False"
 
     # Add timelapse config to moonraker.conf if not present
     local moonraker_conf="${PRINTER_DATA}/config/moonraker.conf"
@@ -1588,7 +1589,8 @@ do_install_beacon() {
 
     # Add update manager entry
     add_update_manager_entry "beacon" "git_repo" "${BEACON_DIR}" "origin: https://github.com/beacon3d/beacon_klipper.git
-primary_branch: main"
+primary_branch: main
+is_system_service: False"
 
     # Restart Klipper to load the module
     status_msg "Restarting Klipper..."
@@ -1671,7 +1673,8 @@ do_install_cartographer() {
 
     # Add update manager entry
     add_update_manager_entry "cartographer" "git_repo" "${CARTOGRAPHER_DIR}" "origin: https://github.com/Cartographer3D/cartographer-klipper.git
-primary_branch: master"
+primary_branch: master
+is_system_service: False"
 
     # Restart Klipper to load the module
     status_msg "Restarting Klipper..."

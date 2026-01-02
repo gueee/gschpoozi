@@ -989,19 +989,19 @@ EOF
 # Create basic printer.cfg for an instance if it doesn't exist
 create_basic_printer_cfg_for_instance() {
     local printer_data_path="$1"
-    
+
     if [[ -z "$printer_data_path" ]]; then
         error_msg "printer_data_path is required"
         return 1
     fi
-    
+
     local conf_file="${printer_data_path}/config/printer.cfg"
-    
+
     if [[ -f "$conf_file" ]]; then
         warn_msg "printer.cfg already exists at $conf_file"
         return 0
     fi
-    
+
     status_msg "Creating basic printer.cfg..."
     cat > "$conf_file" << 'EOF'
 # Klipper Configuration
@@ -1021,7 +1021,7 @@ path: ~/printer_data/gcodes
 # [mcu]
 # serial: /dev/serial/by-id/usb-xxx
 EOF
-    
+
     ok_msg "Created basic $conf_file"
     return 0
 }
@@ -1072,9 +1072,13 @@ setup_nginx_for_instance() {
     fi
 
     # Determine if this should be default_server
+    # Only set default_server if no other site already has it on this port
     local default_server=""
     if [[ "$listen_port" == "80" ]]; then
-        default_server="default_server"
+        # Check if another site already has default_server on this port
+        if ! grep -rq "listen.*${listen_port}.*default_server" /etc/nginx/sites-enabled/ 2>/dev/null; then
+            default_server="default_server"
+        fi
     fi
 
     status_msg "Configuring nginx site ${site_name} (listen ${listen_port}, proxy ${moonraker_port})..."

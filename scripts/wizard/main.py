@@ -10102,13 +10102,38 @@ read -r _
     # Multi-Instance Management
     # -------------------------------------------------------------------------
 
+    def _pick_instance(self, title: str = "Select Instance", allow_cancel: bool = True) -> Optional[str]:
+        """Show instance picker and return selected instance ID.
+        
+        Returns instance ID or None if cancelled/no instances.
+        """
+        instances = []
+        
+        if (Path.home() / "printer_data").exists():
+            instances.append(("default", "Default (~/printer_data)", False))
+        
+        for d in sorted(Path.home().glob("printer_data-*")):
+            if d.is_dir():
+                inst_id = d.name.replace("printer_data-", "")
+                instances.append((inst_id, f"{inst_id} (~/{d.name})", False))
+        
+        if not instances:
+            self.ui.msgbox("No instances found. Create one first!", title="No Instances")
+            return None
+        
+        return self.ui.radiolist(
+            "Select instance:",
+            instances,
+            title=title
+        )
+    
     def _manage_instances_menu(self) -> None:
         """Multi-instance management menu."""
         tool = REPO_ROOT / "scripts" / "tools" / "klipper_instance_manager.sh"
         if not tool.exists():
             self.ui.msgbox(f"Missing tool: {tool}", title="Error")
             return
-
+        
         while True:
             choice = self.ui.menu(
                 "Manage Klipper Instances\n\n"
@@ -10269,29 +10294,7 @@ read -r _
                     )
 
             elif choice == "SWITCH":
-                # Let user pick from existing instances
-                import subprocess
-
-                # Parse instances from home directory
-                instances = []
-                if (Path.home() / "printer_data").exists():
-                    instances.append(("default", "Default (~/printer_data)", True))
-
-                for d in Path.home().glob("printer_data-*"):
-                    if d.is_dir():
-                        inst_id = d.name.replace("printer_data-", "")
-                        instances.append((inst_id, f"{inst_id} (~/{d.name})", False))
-
-                if not instances:
-                    self.ui.msgbox("No instances found. Create one first.", title="No Instances")
-                    continue
-
-                selected = self.ui.radiolist(
-                    "Select instance to switch to:",
-                    instances,
-                    title="Switch Instance"
-                )
-
+                selected = self._pick_instance("Switch to Instance")
                 if selected:
                     # Switch to selected instance
                     if selected == "default":
@@ -10314,10 +10317,7 @@ read -r _
                     return  # Exit to main menu
 
             elif choice == "START":
-                instance_id = self.ui.inputbox(
-                    "Enter instance ID to start:",
-                    title="Start Instance"
-                )
+                instance_id = self._pick_instance("Start Instance")
                 if instance_id:
                     exit_code = self._run_tty_command(["bash", str(tool), "start", instance_id])
                     if exit_code == 0:
@@ -10338,10 +10338,7 @@ read -r _
                         )
 
             elif choice == "STOP":
-                instance_id = self.ui.inputbox(
-                    "Enter instance ID to stop:",
-                    title="Stop Instance"
-                )
+                instance_id = self._pick_instance("Stop Instance")
                 if instance_id:
                     exit_code = self._run_tty_command(["bash", str(tool), "stop", instance_id])
                     if exit_code == 0:
@@ -10361,10 +10358,7 @@ read -r _
                         )
 
             elif choice == "RESTART":
-                instance_id = self.ui.inputbox(
-                    "Enter instance ID to restart:",
-                    title="Restart Instance"
-                )
+                instance_id = self._pick_instance("Restart Instance")
                 if instance_id:
                     exit_code = self._run_tty_command(["bash", str(tool), "restart", instance_id])
                     if exit_code == 0:
@@ -10384,14 +10378,11 @@ read -r _
                         )
 
             elif choice == "STATUS":
-                instance_id = self.ui.inputbox(
-                    "Enter instance ID to check:",
-                    title="Check Instance Status"
-                )
+                instance_id = self._pick_instance("Check Instance Status")
                 if instance_id:
                     # Build status report
                     import subprocess
-                    
+
                     if instance_id == "default":
                         k_svc = "klipper"
                         m_svc = "moonraker"
@@ -10400,12 +10391,12 @@ read -r _
                         k_svc = f"klipper-{instance_id}"
                         m_svc = f"moonraker-{instance_id}"
                         pd_path = Path.home() / f"printer_data-{instance_id}"
-                    
+
                     status_lines = []
                     status_lines.append(f"Instance: {instance_id}")
                     status_lines.append(f"Directory: {pd_path}")
                     status_lines.append("")
-                    
+
                     # Check Klipper service
                     try:
                         r = subprocess.run(["systemctl", "is-active", k_svc], capture_output=True, text=True, timeout=5)
@@ -10413,7 +10404,7 @@ read -r _
                     except:
                         k_status = "unknown"
                     status_lines.append(f"Klipper: {k_status}")
-                    
+
                     # Check Moonraker service
                     try:
                         r = subprocess.run(["systemctl", "is-active", m_svc], capture_output=True, text=True, timeout=5)
@@ -10421,19 +10412,19 @@ read -r _
                     except:
                         m_status = "unknown"
                     status_lines.append(f"Moonraker: {m_status}")
-                    
+
                     # Check nginx sites
                     nginx_sites = []
                     for ui in ["mainsail", "fluidd"]:
                         site = f"{ui}-{instance_id}" if instance_id != "default" else ui
                         if Path(f"/etc/nginx/sites-enabled/{site}").exists():
                             nginx_sites.append(site)
-                    
+
                     if nginx_sites:
                         status_lines.append(f"Nginx sites: {', '.join(nginx_sites)}")
                     else:
                         status_lines.append("Nginx sites: NONE (web UI not configured!)")
-                    
+
                     # Check if nginx is running
                     try:
                         r = subprocess.run(["systemctl", "is-active", "nginx"], capture_output=True, text=True, timeout=5)
@@ -10441,24 +10432,20 @@ read -r _
                     except:
                         nginx_status = "unknown"
                     status_lines.append(f"Nginx: {nginx_status}")
-                    
+
                     # Check printer.cfg exists
                     cfg_exists = (pd_path / "config" / "printer.cfg").exists()
                     status_lines.append(f"printer.cfg: {'exists' if cfg_exists else 'MISSING'}")
-                    
+
                     self.ui.msgbox(
                         "\n".join(status_lines),
                         title=f"Instance Status: {instance_id}",
                         height=18,
                         width=70,
                     )
-            
+
             elif choice == "REMOVE":
-                instance_id = self.ui.inputbox(
-                    "Enter instance ID to remove:\n\n"
-                    "WARNING: This will stop services and optionally delete all data.",
-                    title="Remove Instance"
-                )
+                instance_id = self._pick_instance("Remove Instance (WARNING: Destructive!)")
                 if instance_id:
                     self._run_tty_command(["bash", str(tool), "remove", instance_id])
 

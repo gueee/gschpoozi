@@ -8569,7 +8569,7 @@ read -r _
             """Check if gcode_shell_command extension is installed.
             
             Always uses extras/ directory (standard location).
-            Also checks for duplicates in plugins/ and reports if found.
+            Also checks for duplicates in plugins/ and automatically removes them.
             """
             try:
                 base = Path.home() / "klipper" / "klippy"
@@ -8578,9 +8578,12 @@ read -r _
                 extras_file = extras_dir / "gcode_shell_command.py"
                 plugins_file = plugins_dir / "gcode_shell_command.py"
                 
-                # Check for duplicate in plugins/ (shouldn't exist)
+                # Auto-fix: Remove duplicate from plugins/ if it exists (prevents "found in both" error)
                 if plugins_file.exists():
-                    return True, str(extras_dir)  # Return extras as target, but mark as installed
+                    try:
+                        plugins_file.unlink()
+                    except Exception:
+                        pass  # Best effort, continue even if removal fails
                 
                 # Standard location: extras/
                 if extras_file.exists():
@@ -8651,7 +8654,7 @@ read -r _
                         # Remove duplicate from plugins/ if it exists (prevents "found in both" error)
                         if plugins_file.exists():
                             plugins_file.unlink()
-                        
+
                         # Delete old file from extras/ for clean reinstall
                         if target_file.exists():
                             target_file.unlink()
@@ -8848,7 +8851,7 @@ read -r _
                 # Remove duplicate from plugins/ if it exists (prevents "found in both" error)
                 if plugins_file.exists():
                     plugins_file.unlink()
-                
+
                 # Delete old file from extras/ for clean reinstall
                 if target_file.exists():
                     target_file.unlink()

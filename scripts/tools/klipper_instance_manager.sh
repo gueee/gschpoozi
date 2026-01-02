@@ -494,20 +494,16 @@ do_restart_instance() {
 
 do_remove_instance() {
     local instance_id="$1"
-
+    
     if [[ -z "$instance_id" ]]; then
         error_msg "Usage: $0 remove <instance_id>"
         return 1
     fi
-
-    # Don't allow removing the default instance with this tool
-    if [[ "$instance_id" == "default" ]]; then
-        error_msg "Cannot remove 'default' instance with this tool"
-        error_msg "Use the component manager to remove default Klipper/Moonraker install"
-        return 1
+    
+    # Allow removing default instance, but validate non-default IDs
+    if [[ "$instance_id" != "default" ]]; then
+        validate_instance_id "$instance_id" || return 1
     fi
-
-    validate_instance_id "$instance_id" || return 1
 
     local printer_data
     printer_data="$(get_instance_printer_data "$instance_id")"

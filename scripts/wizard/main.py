@@ -10138,12 +10138,12 @@ read -r _
                     height=14,
                     width=70,
                 )
-                
+
                 exit_code = self._run_tty_command([
                     "bash", str(tool), "create",
                     instance_id, moonraker_port, webui, webui_port, "yes"
                 ])
-                
+
                 if exit_code == 0:
                     # Instance created successfully - offer to switch to it
                     if self.ui.yesno(
@@ -10163,10 +10163,10 @@ read -r _
                         from wizard.state import set_default_state_dir, reset_state
                         set_default_state_dir(config_dir)
                         self.state = reset_state()
-                        
+
                         # Update environment variable for menu display
                         os.environ["GSCHPOOZI_INSTANCE"] = f"{instance_id} (~/printer_data-{instance_id})"
-                        
+
                         self.ui.msgbox(
                             f"Switched to instance '{instance_id}'!\n\n"
                             f"You can now configure this instance from the main menu.\n"
@@ -10186,31 +10186,31 @@ read -r _
                         height=12,
                         width=70,
                     )
-            
+
             elif choice == "SWITCH":
                 # Let user pick from existing instances
                 import subprocess
-                
+
                 # Parse instances from home directory
                 instances = []
                 if (Path.home() / "printer_data").exists():
                     instances.append(("default", "Default (~/printer_data)", True))
-                
+
                 for d in Path.home().glob("printer_data-*"):
                     if d.is_dir():
                         inst_id = d.name.replace("printer_data-", "")
                         instances.append((inst_id, f"{inst_id} (~/{d.name})", False))
-                
+
                 if not instances:
                     self.ui.msgbox("No instances found. Create one first.", title="No Instances")
                     continue
-                
+
                 selected = self.ui.radiolist(
                     "Select instance to switch to:",
                     instances,
                     title="Switch Instance"
                 )
-                
+
                 if selected:
                     # Switch to selected instance
                     if selected == "default":
@@ -10219,19 +10219,19 @@ read -r _
                     else:
                         config_dir = Path.home() / f"printer_data-{selected}" / "config"
                         display = f"{selected} (~/printer_data-{selected})"
-                    
+
                     from wizard.state import set_default_state_dir, reset_state
                     set_default_state_dir(config_dir)
                     self.state = reset_state()
                     os.environ["GSCHPOOZI_INSTANCE"] = display
-                    
+
                     self.ui.msgbox(
                         f"Switched to instance: {display}\n\n"
                         f"You can now configure this instance from the main menu.",
                         title="Instance Switched"
                     )
                     return  # Exit to main menu
-            
+
             elif choice == "START":
                 instance_id = self.ui.inputbox(
                     "Enter instance ID to start:",

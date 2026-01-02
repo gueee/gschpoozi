@@ -961,10 +961,13 @@ common:
       verbose: True
 
   # Hardware stall detection using DIAG pins (TMC5160/TMC2240 only)
-  # Monitors for motor stalls during tuning to prevent damage
-  # ONLY enabled when using sensorless homing (diag pin not used for physical endstop)
+  # Monitors for motor stalls during chopper tuning to prevent damage
+  # ONLY enabled when:
+  #   - Using sensorless homing (diag pin not used for physical endstop)
+  #   - Driver supports advanced chopper tuning (TMC5160, TMC2240, TMC2130)
+  #   - TMC2209 excluded (limited chopper tuning, diag used for sensorless only)
   chopper_stall_monitor_x:
-    condition: "pins.stepper_x.diag and stepper_x.endstop_type == 'sensorless'"
+    condition: "pins.stepper_x.diag and stepper_x.endstop_type == 'sensorless' and stepper_x.driver_type in ['tmc5160', 'tmc2240', 'tmc2130']"
     template: |
       [gcode_button stall_monitor_x]
       pin: {{ pins.stepper_x.diag }}
@@ -972,7 +975,7 @@ common:
           _CHOPPER_STALL_DETECTED AXIS=X
 
   chopper_stall_monitor_y:
-    condition: "pins.stepper_y.diag and stepper_y.endstop_type == 'sensorless'"
+    condition: "pins.stepper_y.diag and stepper_y.endstop_type == 'sensorless' and stepper_y.driver_type in ['tmc5160', 'tmc2240', 'tmc2130']"
     template: |
       [gcode_button stall_monitor_y]
       pin: {{ pins.stepper_y.diag }}

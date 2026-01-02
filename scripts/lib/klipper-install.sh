@@ -828,6 +828,40 @@ setup_nginx() {
     fi
 }
 
+# Fix nginx after git pull (regenerate configs from templates)
+# This fixes issues with line endings or template updates
+fix_nginx_after_pull() {
+    status_msg "Validating nginx configuration..."
+    
+    if sudo nginx -t >/dev/null 2>&1; then
+        ok_msg "Nginx configuration is valid"
+        return 0
+    fi
+    
+    warn_msg "Nginx configuration has errors. Regenerating from templates..."
+    
+    # Regenerate configs for installed web UIs
+    if is_mainsail_installed; then
+        local mainsail_port=$(get_webui_port "mainsail")
+        setup_nginx "mainsail" "$mainsail_port" || warn_msg "Failed to regenerate Mainsail nginx config"
+    fi
+    
+    if is_fluidd_installed; then
+        local fluidd_port=$(get_webui_port "fluidd")
+        setup_nginx "fluidd" "$fluidd_port" || warn_msg "Failed to regenerate Fluidd nginx config"
+    fi
+    
+    # Final test
+    if sudo nginx -t; then
+        sudo systemctl restart nginx
+        ok_msg "Nginx configuration fixed"
+        return 0
+    else
+        error_msg "Nginx configuration still has errors. Check: sudo nginx -t"
+        return 1
+    fi
+}
+
 # Add update manager entry to moonraker.conf
 # Usage: add_update_manager_entry "name" "type" "path" ["extra_lines"]
 # path should use ~ notation (e.g. ~/crowsnest) for Moonraker compatibility

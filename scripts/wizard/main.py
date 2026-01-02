@@ -1604,10 +1604,20 @@ class GschpooziWizard:
             "path": None,
         }
 
+        # Derive instance-specific service names
+        instance_suffix = ""
+        instance_display = os.environ.get("GSCHPOOZI_INSTANCE", "")
+        if instance_display and "printer_data-" in instance_display:
+            # Extract instance ID from display like "VzBot330blue (~/printer_data-VzBot330blue)"
+            import re
+            match = re.search(r'printer_data-([a-zA-Z0-9_-]+)', instance_display)
+            if match:
+                instance_suffix = f"-{match.group(1)}"
+        
         # Component paths and service names
         component_info = {
-            "klipper": {"path": Path.home() / "klipper", "service": "klipper"},
-            "moonraker": {"path": Path.home() / "moonraker", "service": "moonraker"},
+            "klipper": {"path": Path.home() / "klipper", "service": f"klipper{instance_suffix}"},
+            "moonraker": {"path": Path.home() / "moonraker", "service": f"moonraker{instance_suffix}"},
             "mainsail": {"path": Path.home() / "mainsail", "service": None},  # nginx-served
             "fluidd": {"path": Path.home() / "fluidd", "service": None},  # nginx-served
             "crowsnest": {"path": Path.home() / "crowsnest", "service": "crowsnest"},

@@ -2509,12 +2509,12 @@ do_remove_klipper() {
 
     # Stop and disable all Klipper services (default + all instances)
     status_msg "Stopping and disabling Klipper service(s)..."
-    
+
     # Stop default service
     sudo systemctl stop klipper 2>/dev/null || true
     sudo systemctl disable klipper 2>/dev/null || true
     sudo rm -f "${SYSTEMD_DIR}/klipper.service"
-    
+
     # Stop all instance services (klipper-*.service)
     for svc in "${SYSTEMD_DIR}"/klipper-*.service; do
         if [[ -f "$svc" ]]; then
@@ -2526,7 +2526,7 @@ do_remove_klipper() {
             sudo rm -f "$svc"
         fi
     done
-    
+
     sudo systemctl daemon-reload
 
     # Remove directories
@@ -2576,12 +2576,12 @@ do_remove_moonraker() {
 
     # Stop and disable all Moonraker services (default + all instances)
     status_msg "Stopping and disabling Moonraker service(s)..."
-    
+
     # Stop default service
     sudo systemctl stop moonraker 2>/dev/null || true
     sudo systemctl disable moonraker 2>/dev/null || true
     sudo rm -f "${SYSTEMD_DIR}/moonraker.service"
-    
+
     # Stop all instance services (moonraker-*.service)
     for svc in "${SYSTEMD_DIR}"/moonraker-*.service; do
         if [[ -f "$svc" ]]; then
@@ -2593,7 +2593,7 @@ do_remove_moonraker() {
             sudo rm -f "$svc"
         fi
     done
-    
+
     sudo systemctl daemon-reload
 
     # Remove directories

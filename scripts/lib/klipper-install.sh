@@ -706,6 +706,79 @@ is_port_in_use() {
     grep -rq "listen ${port}" /etc/nginx/sites-enabled/ 2>/dev/null
 }
 
+# Prompt user for port selection when installing second web UI
+# Returns: port number (validated)
+prompt_webui_port() {
+    local ui_name="$1"  # mainsail or fluidd
+    local other_ui=""
+    local other_port=""
+    
+    # Determine the other UI
+    if [[ "$ui_name" == "mainsail" ]]; then
+        other_ui="fluidd"
+    else
+        other_ui="mainsail"
+    fi
+    
+    # Get the other UI's port if installed
+    if [[ -f "/etc/nginx/sites-enabled/${other_ui}" ]]; then
+        other_port=$(grep -oP 'listen \K[0-9]+' "/etc/nginx/sites-available/${other_ui}" 2>/dev/null | head -1)
+    fi
+    
+    local port=""
+    local valid=false
+    
+    while [[ "$valid" == "false" ]]; do
+        echo ""
+        echo -e "${YELLOW}Port selection for ${ui_name^}:${NC}"
+        if [[ -n "$other_port" ]]; then
+            echo -e "  ${other_ui^} is already installed on port ${CYAN}${other_port}${NC}"
+        fi
+        echo -e "  Enter port number (default: 80 if ${other_ui^} not installed, 81 otherwise):"
+        read -p "  Port: " port
+        
+        # Use default if empty
+        if [[ -z "$port" ]]; then
+            if [[ -n "$other_port" ]] && [[ "$other_port" == "80" ]]; then
+                port="81"
+            else
+                port="80"
+            fi
+            echo -e "  ${GREEN}Using default port: ${port}${NC}"
+            valid=true
+            break
+        fi
+        
+        # Validate port is a number
+        if ! [[ "$port" =~ ^[0-9]+$ ]]; then
+            error_msg "Port must be a number"
+            continue
+        fi
+        
+        # Validate port range
+        if [[ "$port" -lt 1 ]] || [[ "$port" -gt 65535 ]]; then
+            error_msg "Port must be between 1 and 65535"
+            continue
+        fi
+        
+        # Check if port is already in use
+        if is_port_in_use "$port"; then
+            error_msg "Port ${port} is already in use by another nginx site"
+            continue
+        fi
+        
+        # Check if port conflicts with other UI
+        if [[ -n "$other_port" ]] && [[ "$port" == "$other_port" ]]; then
+            error_msg "Port ${port} is already used by ${other_ui^}"
+            continue
+        fi
+        
+        valid=true
+    done
+    
+    echo "$port"
+}
+
 # Ensure nginx (www-data) can read web UI files under ~/mainsail or ~/fluidd.
 #
 # Some installers (and some OS defaults) set the user's home directory to 700.
@@ -845,26 +918,26 @@ setup_nginx() {
 # This fixes issues with line endings or template updates
 fix_nginx_after_pull() {
     status_msg "Validating nginx configuration..."
-    
+
     if sudo nginx -t >/dev/null 2>&1; then
         ok_msg "Nginx configuration is valid"
         return 0
     fi
-    
+
     warn_msg "Nginx configuration has errors. Regenerating from templates..."
-    
+
     # Regenerate configs for installed web UIs
     # Process Mainsail first if both are installed (so it gets default_server if on port 80)
     if is_mainsail_installed; then
         local mainsail_port=$(get_webui_port "mainsail")
         setup_nginx "mainsail" "$mainsail_port" || warn_msg "Failed to regenerate Mainsail nginx config"
     fi
-    
+
     if is_fluidd_installed; then
         local fluidd_port=$(get_webui_port "fluidd")
         setup_nginx "fluidd" "$fluidd_port" || warn_msg "Failed to regenerate Fluidd nginx config"
     fi
-    
+
     # Final test
     if sudo nginx -t; then
         sudo systemctl restart nginx
@@ -1191,7 +1264,13 @@ do_install_mainsail() {
     print_header "Installing Mainsail"
 
     # Determine which port will be used
-    local port=$(get_webui_port "mainsail")
+    # If Fluidd is installed, prompt for port; otherwise use default (80)
+    local port=""
+    if is_fluidd_installed; then
+        port=$(prompt_webui_port "mainsail")
+    else
+        port=$(get_webui_port "mainsail")
+    fi
 
     echo -e "${BCYAN}${BOX_V}${NC}"
     echo -e "${BCYAN}${BOX_V}${NC}  This will install:"
@@ -1205,8 +1284,9 @@ do_install_mainsail() {
     fi
 
     if is_fluidd_installed; then
-        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Note: Fluidd is already installed on port 80.${NC}"
-        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Mainsail will be installed on port ${port} (side-by-side).${NC}"
+        local fluidd_port=$(grep -oP 'listen \K[0-9]+' "/etc/nginx/sites-available/fluidd" 2>/dev/null | head -1 || echo "80")
+        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Note: Fluidd is already installed on port ${fluidd_port}.${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Mainsail will be installed on port ${CYAN}${port}${NC} (side-by-side).${NC}"
     else
         echo -e "${BCYAN}${BOX_V}${NC}  Will be available on port ${CYAN}${port}${NC}"
     fi
@@ -1279,7 +1359,13 @@ do_install_fluidd() {
     print_header "Installing Fluidd"
 
     # Determine which port will be used
-    local port=$(get_webui_port "fluidd")
+    # If Mainsail is installed, prompt for port; otherwise use default (80)
+    local port=""
+    if is_mainsail_installed; then
+        port=$(prompt_webui_port "fluidd")
+    else
+        port=$(get_webui_port "fluidd")
+    fi
 
     echo -e "${BCYAN}${BOX_V}${NC}"
     echo -e "${BCYAN}${BOX_V}${NC}  This will install:"
@@ -1293,8 +1379,9 @@ do_install_fluidd() {
     fi
 
     if is_mainsail_installed; then
-        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Note: Mainsail is already installed on port 80.${NC}"
-        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Fluidd will be installed on port ${port} (side-by-side).${NC}"
+        local mainsail_port=$(grep -oP 'listen \K[0-9]+' "/etc/nginx/sites-available/mainsail" 2>/dev/null | head -1 || echo "80")
+        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Note: Mainsail is already installed on port ${mainsail_port}.${NC}"
+        echo -e "${BCYAN}${BOX_V}${NC}  ${GREEN}Fluidd will be installed on port ${CYAN}${port}${NC} (side-by-side).${NC}"
     else
         echo -e "${BCYAN}${BOX_V}${NC}  Will be available on port ${CYAN}${port}${NC}"
     fi

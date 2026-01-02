@@ -780,9 +780,22 @@ setup_nginx() {
     fi
 
     # Determine if this should be default_server
+    # Only set default_server if port 80 AND no other site already has default_server on port 80
     local default_server=""
     if [[ "$port" == "80" ]]; then
-        default_server="default_server"
+        # Check if any existing site config already has default_server on port 80
+        local has_default=false
+        for site_config in /etc/nginx/sites-enabled/*; do
+            if [[ -f "$site_config" ]] && [[ "$site_config" != "/etc/nginx/sites-enabled/${ui_name}" ]]; then
+                if grep -q "listen.*80.*default_server" "$site_config" 2>/dev/null; then
+                    has_default=true
+                    break
+                fi
+            fi
+        done
+        if [[ "$has_default" == "false" ]]; then
+            default_server="default_server"
+        fi
     fi
 
     status_msg "Configuring nginx for $ui_name on port $port..."
@@ -832,25 +845,26 @@ setup_nginx() {
 # This fixes issues with line endings or template updates
 fix_nginx_after_pull() {
     status_msg "Validating nginx configuration..."
-
+    
     if sudo nginx -t >/dev/null 2>&1; then
         ok_msg "Nginx configuration is valid"
         return 0
     fi
-
+    
     warn_msg "Nginx configuration has errors. Regenerating from templates..."
-
+    
     # Regenerate configs for installed web UIs
+    # Process Mainsail first if both are installed (so it gets default_server if on port 80)
     if is_mainsail_installed; then
         local mainsail_port=$(get_webui_port "mainsail")
         setup_nginx "mainsail" "$mainsail_port" || warn_msg "Failed to regenerate Mainsail nginx config"
     fi
-
+    
     if is_fluidd_installed; then
         local fluidd_port=$(get_webui_port "fluidd")
         setup_nginx "fluidd" "$fluidd_port" || warn_msg "Failed to regenerate Fluidd nginx config"
     fi
-
+    
     # Final test
     if sudo nginx -t; then
         sudo systemctl restart nginx

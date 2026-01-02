@@ -872,41 +872,24 @@ EOF
 # Create printer_data directory structure for a specific instance
 create_printer_data_dirs_for_instance() {
     local printer_data_path="$1"
-    
+
     if [[ -z "$printer_data_path" ]]; then
         error_msg "printer_data_path is required"
         return 1
     fi
-    
+
     status_msg "Creating printer_data directory structure at $printer_data_path..."
-    
+
     mkdir -p "${printer_data_path}/config"
     mkdir -p "${printer_data_path}/gcodes"
     mkdir -p "${printer_data_path}/logs"
     mkdir -p "${printer_data_path}/systemd"
     mkdir -p "${printer_data_path}/comms"
-    
+
     ok_msg "Directory structure created at ${printer_data_path}"
     return 0
 }
 
-# Create instance-specific moonraker.conf with custom port
-create_moonraker_conf_for_instance() {
-    local printer_data_path="$1"
-    local moonraker_port="$2"
-    
-    if [[ -z "$printer_data_path" ]] || [[ -z "$moonraker_port" ]]; then
-        error_msg "printer_data_path and moonraker_port are required"
-        return 1
-    fi
-    
-    local conf_file="${printer_data_path}/config/moonraker.conf"
-    
-    if [[ -f "$conf_file" ]]; then
-        warn_msg "moonraker.conf already exists at $conf_file"
-        return 0
-    fi
-    
     status_msg "Creating moonraker.conf for instance (port ${moonraker_port})..."
     
     # Compute relative path to comms directory from config directory
@@ -929,17 +912,6 @@ host: 0.0.0.0
 port: ${moonraker_port}
 klippy_uds_address: ${relative_comms}
 
-# Instance identification (displayed in Mainsail/Fluidd)
-[announcements]
-dev_mode: False
-
-[webcam]
-
-[machine]
-provider: systemd_dbus
-# Instance name displayed in web UI
-sudo_password:
-
 [authorization]
 trusted_clients:
     10.0.0.0/8
@@ -957,6 +929,11 @@ cors_domains:
     *://my.mainsail.xyz
     *://app.fluidd.xyz
 
+[announcements]
+dev_mode: False
+
+[webcam]
+
 [octoprint_compat]
 
 [history]
@@ -972,8 +949,22 @@ provider: systemd_dbus
 [update_manager]
 refresh_interval: 168
 enable_auto_refresh: True
+
+[update_manager mainsail]
+type: web
+channel: stable
+repo: mainsail-crew/mainsail
+path: ~/mainsail
+
+[update_manager gschpoozi]
+type: git_repo
+channel: dev
+path: ~/gschpoozi
+origin: https://github.com/gm-tc-collaborators/gschpoozi.git
+primary_branch: main
+is_system_service: False
 EOF
-    
+
     ok_msg "Created $conf_file"
     return 0
 }
@@ -983,28 +974,28 @@ create_systemd_service_for_instance() {
     local service_name="$1"        # e.g. "klipper-vzbot1"
     local template_file="$2"       # e.g. ".../klipper.service"
     local printer_data_path="$3"   # e.g. "/home/pi/printer_data-vzbot1"
-    
+
     if [[ ! -f "$template_file" ]]; then
         error_msg "Service template not found: $template_file"
         return 1
     fi
-    
+
     local service_file="${SYSTEMD_DIR}/${service_name}.service"
-    
+
     status_msg "Creating systemd service: $service_name"
-    
+
     # Replace placeholders in template
     local temp_file=$(mktemp)
     sed -e "s|%USER%|${USER}|g" \
         -e "s|%HOME%|${HOME}|g" \
         -e "s|%PRINTER_DATA%|${printer_data_path}|g" \
         "$template_file" > "$temp_file"
-    
+
     sudo cp "$temp_file" "$service_file"
     rm "$temp_file"
-    
+
     sudo systemctl daemon-reload
-    
+
     ok_msg "Service file created: $service_file"
     return 0
 }
@@ -1015,22 +1006,22 @@ setup_nginx_for_instance() {
     local site_name="$2"            # e.g. "mainsail-vzbot1"
     local listen_port="$3"          # e.g. 80 or 81
     local moonraker_port="$4"       # e.g. 7125 or 7126
-    
+
     local template_file="${NGINX_TEMPLATES}/${ui_name}.conf"
-    
+
     if [[ ! -f "$template_file" ]]; then
         error_msg "Nginx template not found: $template_file"
         return 1
     fi
-    
+
     # Determine if this should be default_server
     local default_server=""
     if [[ "$listen_port" == "80" ]]; then
         default_server="default_server"
     fi
-    
+
     status_msg "Configuring nginx site ${site_name} (listen ${listen_port}, proxy ${moonraker_port})..."
-    
+
     # Create site config with placeholders replaced
     local temp_file=$(mktemp)
     sed -e "s|%HOME%|${HOME}|g" \
@@ -1038,16 +1029,16 @@ setup_nginx_for_instance() {
         -e "s|%DEFAULT_SERVER%|${default_server}|g" \
         -e "s|%MOONRAKER_PORT%|${moonraker_port}|g" \
         "$template_file" > "$temp_file"
-    
+
     # Install site config
     sudo cp "$temp_file" "/etc/nginx/sites-available/${site_name}"
     rm "$temp_file"
-    
+
     # Enable site
     if [[ ! -L "/etc/nginx/sites-enabled/${site_name}" ]]; then
         sudo ln -s "/etc/nginx/sites-available/${site_name}" "/etc/nginx/sites-enabled/${site_name}"
     fi
-    
+
     # Test and restart nginx
     if sudo nginx -t; then
         sudo systemctl restart nginx

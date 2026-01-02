@@ -1012,7 +1012,7 @@ class ConfigGenerator:
     def _generate_printer_cfg(self) -> str:
         """Generate main printer.cfg with includes."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         # Derive instance name from output_dir for display in Mainsail
         instance_name = "Klipper"
         try:
@@ -1058,6 +1058,14 @@ class ConfigGenerator:
             lines.append(f"[include {inc}]")
         for include in includes:
             lines.append(f"[include {include}]")
+        
+        # Add instance identification macro (displayed in Mainsail UI title)
+        if instance_name != "Klipper":
+            lines.append("")
+            lines.append(f"# Instance: {instance_name}")
+            lines.append("[gcode_macro _INSTANCE_VARS]")
+            lines.append(f"variable_instance_name: '{instance_name}'")
+            lines.append("gcode:")
 
         lines.append("")
         lines.append("# ═══════════════════════════════════════════════════════════════════════════════")

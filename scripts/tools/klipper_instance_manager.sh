@@ -211,7 +211,7 @@ do_create_instance() {
     # Preflight checks
     check_not_root || return 1
     check_sudo_access || return 1
-    
+
     # Ensure Klipper is installed (shared by all instances)
     if ! is_klipper_installed; then
         warn_msg "Klipper not installed - installing shared Klipper first..."
@@ -229,7 +229,7 @@ do_create_instance() {
         }
         echo ""
     fi
-    
+
     # Ensure Moonraker is installed (shared by all instances)
     if ! is_moonraker_installed; then
         warn_msg "Moonraker not installed - installing shared Moonraker first..."
@@ -247,7 +247,7 @@ do_create_instance() {
         }
         echo ""
     fi
-    
+
     # Ensure web UI is installed (shared by all instances)
     if [[ "$webui_kind" == "mainsail" ]] && ! is_mainsail_installed; then
         warn_msg "Mainsail not installed - installing shared Mainsail first..."
@@ -494,12 +494,12 @@ do_restart_instance() {
 
 do_remove_instance() {
     local instance_id="$1"
-    
+
     if [[ -z "$instance_id" ]]; then
         error_msg "Usage: $0 remove <instance_id>"
         return 1
     fi
-    
+
     # Allow removing default instance, but validate non-default IDs
     if [[ "$instance_id" != "default" ]]; then
         validate_instance_id "$instance_id" || return 1

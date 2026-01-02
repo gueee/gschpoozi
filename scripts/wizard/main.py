@@ -1303,9 +1303,13 @@ class GschpooziWizard:
         """Display the main menu."""
         while True:
             status = self._get_status_text()
+            
+            # Show current instance prominently
+            instance_info = os.environ.get("GSCHPOOZI_INSTANCE", "default (~/printer_data)")
+            instance_banner = f"═══ Active Instance: {instance_info} ═══"
 
             choice = self.ui.menu(
-                f"Welcome to gschpoozi!\n\n{status}\n\nSelect a category:",
+                f"Welcome to gschpoozi!\n\n{instance_banner}\n\n{status}\n\nSelect a category:",
                 [
                     ("1", "Klipper Setup         (Installation & verification)"),
                     ("2", "Hardware Setup        (Configure your printer)"),

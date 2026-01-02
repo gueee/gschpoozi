@@ -10068,14 +10068,15 @@ read -r _
                 [
                     ("LIST", "List all instances"),
                     ("CREATE", "Create new instance"),
-                    ("START", "Start instance"),
-                    ("STOP", "Stop instance"),
-                    ("RESTART", "Restart instance"),
+                    ("SWITCH", "Switch to different instance"),
+                    ("START", "Start instance services"),
+                    ("STOP", "Stop instance services"),
+                    ("RESTART", "Restart instance services"),
                     ("REMOVE", "Remove instance"),
                     ("B", "Back"),
                 ],
                 title="Manage Instances",
-                height=24,
+                height=26,
                 width=100,
             )
 
@@ -10144,28 +10145,93 @@ read -r _
                 ])
                 
                 if exit_code == 0:
-                    self.ui.msgbox(
+                    # Instance created successfully - offer to switch to it
+                    if self.ui.yesno(
                         f"Instance '{instance_id}' created successfully!\n\n"
                         f"Services: klipper-{instance_id}.service, moonraker-{instance_id}.service\n"
                         f"Web UI: http://localhost:{webui_port}\n"
                         f"Config: ~/printer_data-{instance_id}/config/\n\n"
-                        f"Configure it with:\n"
-                        f"  ~/gschpoozi/scripts/configure.sh --instance {instance_id}",
+                        f"Switch to this instance now to configure it?\n\n"
+                        f"(The wizard will reload targeting this instance)",
                         title="Instance Created",
-                        height=16,
+                        height=18,
                         width=80,
-                    )
+                        default_no=False,
+                    ):
+                        # Switch to the new instance by reloading state
+                        config_dir = Path.home() / f"printer_data-{instance_id}" / "config"
+                        from wizard.state import set_default_state_dir, reset_state
+                        set_default_state_dir(config_dir)
+                        self.state = reset_state()
+                        
+                        # Update environment variable for menu display
+                        os.environ["GSCHPOOZI_INSTANCE"] = f"{instance_id} (~/printer_data-{instance_id})"
+                        
+                        self.ui.msgbox(
+                            f"Switched to instance '{instance_id}'!\n\n"
+                            f"You can now configure this instance from the main menu.\n"
+                            f"When you're done, run the wizard again (no flags) to manage\n"
+                            f"other instances or return to the default.",
+                            title="Instance Switched",
+                            height=14,
+                            width=75,
+                        )
+                        return  # Exit instance menu back to main menu
                 else:
                     self.ui.msgbox(
                         f"Instance creation failed (exit code {exit_code}).\n\n"
                         f"Check the console output for details.\n\n"
-                        f"You may need to install Klipper/Moonraker first from:\n"
-                        f"Main menu → Klipper Setup → Manage Components",
+                        f"The instance manager will auto-install Klipper/Moonraker if missing.",
                         title="Creation Failed",
-                        height=14,
+                        height=12,
                         width=70,
                     )
-
+            
+            elif choice == "SWITCH":
+                # Let user pick from existing instances
+                import subprocess
+                
+                # Parse instances from home directory
+                instances = []
+                if (Path.home() / "printer_data").exists():
+                    instances.append(("default", "Default (~/printer_data)", True))
+                
+                for d in Path.home().glob("printer_data-*"):
+                    if d.is_dir():
+                        inst_id = d.name.replace("printer_data-", "")
+                        instances.append((inst_id, f"{inst_id} (~/{d.name})", False))
+                
+                if not instances:
+                    self.ui.msgbox("No instances found. Create one first.", title="No Instances")
+                    continue
+                
+                selected = self.ui.radiolist(
+                    "Select instance to switch to:",
+                    instances,
+                    title="Switch Instance"
+                )
+                
+                if selected:
+                    # Switch to selected instance
+                    if selected == "default":
+                        config_dir = Path.home() / "printer_data" / "config"
+                        display = "default (~/printer_data)"
+                    else:
+                        config_dir = Path.home() / f"printer_data-{selected}" / "config"
+                        display = f"{selected} (~/printer_data-{selected})"
+                    
+                    from wizard.state import set_default_state_dir, reset_state
+                    set_default_state_dir(config_dir)
+                    self.state = reset_state()
+                    os.environ["GSCHPOOZI_INSTANCE"] = display
+                    
+                    self.ui.msgbox(
+                        f"Switched to instance: {display}\n\n"
+                        f"You can now configure this instance from the main menu.",
+                        title="Instance Switched"
+                    )
+                    return  # Exit to main menu
+            
             elif choice == "START":
                 instance_id = self.ui.inputbox(
                     "Enter instance ID to start:",

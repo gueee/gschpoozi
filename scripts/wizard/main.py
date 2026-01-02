@@ -4254,10 +4254,15 @@ class GschpooziWizard:
         if z_count_int >= 2:
             self._configure_z_motor_ports(z_count_int)
 
+        drive_line = (
+            f"Drive: leadscrew ({pitch}mm)\n"
+            if drive_type == "leadscrew"
+            else f"Drive: belt ({belt_pitch}mm × {pulley_teeth}T)\n"
+        )
         self.ui.msgbox(
             f"Z Axis configured!\n\n"
             f"Motors: {z_count}\n"
-            + (f"Drive: leadscrew ({pitch}mm)\n" if drive_type == "leadscrew" else f"Drive: belt ({belt_pitch}mm × {pulley_teeth}T)\n")
+            f"{drive_line}"
             f"Endstop: {endstop_type}\n"
             f"Height: {position_max}mm\n"
             f"Current: {run_current}A",

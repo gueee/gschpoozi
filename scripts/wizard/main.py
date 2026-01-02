@@ -10104,36 +10104,36 @@ read -r _
 
     def _pick_instance(self, title: str = "Select Instance", allow_cancel: bool = True) -> Optional[str]:
         """Show instance picker and return selected instance ID.
-        
+
         Returns instance ID or None if cancelled/no instances.
         """
         instances = []
-        
+
         if (Path.home() / "printer_data").exists():
             instances.append(("default", "Default (~/printer_data)", False))
-        
+
         for d in sorted(Path.home().glob("printer_data-*")):
             if d.is_dir():
                 inst_id = d.name.replace("printer_data-", "")
                 instances.append((inst_id, f"{inst_id} (~/{d.name})", False))
-        
+
         if not instances:
             self.ui.msgbox("No instances found. Create one first!", title="No Instances")
             return None
-        
+
         return self.ui.radiolist(
             "Select instance:",
             instances,
             title=title
         )
-    
+
     def _manage_instances_menu(self) -> None:
         """Multi-instance management menu."""
         tool = REPO_ROOT / "scripts" / "tools" / "klipper_instance_manager.sh"
         if not tool.exists():
             self.ui.msgbox(f"Missing tool: {tool}", title="Error")
             return
-        
+
         while True:
             choice = self.ui.menu(
                 "Manage Klipper Instances\n\n"
@@ -10148,11 +10148,12 @@ read -r _
                     ("STOP", "Stop instance services"),
                     ("RESTART", "Restart instance services"),
                     ("STATUS", "Check instance status (services + web)"),
+                    ("FIXNGINX", "Fix/restart nginx"),
                     ("REMOVE", "Remove instance"),
                     ("B", "Back"),
                 ],
                 title="Manage Instances",
-                height=26,
+                height=28,
                 width=100,
             )
 
@@ -10444,9 +10445,70 @@ read -r _
                         width=70,
                     )
 
+            elif choice == "FIXNGINX":
+                # Fix nginx configuration and restart
+                import subprocess
+                
+                # Test nginx config
+                self.ui.infobox("Testing nginx configuration...", title="Nginx Fix")
+                
+                test_result = subprocess.run(
+                    ["sudo", "nginx", "-t"],
+                    capture_output=True,
+                    text=True,
+                )
+                
+                if test_result.returncode != 0:
+                    # Config has errors
+                    self.ui.msgbox(
+                        f"Nginx configuration has errors:\n\n{test_result.stderr}\n\n"
+                        f"This usually means a site config is malformed.\n"
+                        f"You may need to recreate the instance.",
+                        title="Nginx Config Error",
+                        height=18,
+                        width=90,
+                    )
+                else:
+                    # Config is OK, try to start/restart nginx
+                    start_result = subprocess.run(
+                        ["sudo", "systemctl", "restart", "nginx"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    
+                    # Check if nginx is now running
+                    status_result = subprocess.run(
+                        ["systemctl", "is-active", "nginx"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    
+                    if status_result.stdout.strip() == "active":
+                        self.ui.msgbox(
+                            "Nginx restarted successfully!\n\n"
+                            "Your Mainsail/Fluidd web UI should now be accessible.",
+                            title="Nginx Fixed",
+                            height=10,
+                            width=60,
+                        )
+                    else:
+                        self.ui.msgbox(
+                            f"Nginx failed to start:\n\n{start_result.stderr}\n\n"
+                            f"Check logs: sudo journalctl -u nginx -n 50",
+                            title="Nginx Start Failed",
+                            height=14,
+                            width=80,
+                        )
+            
             elif choice == "REMOVE":
-                instance_id = self._pick_instance("Remove Instance (WARNING: Destructive!)")
-                if instance_id:
+                instance_id = self._pick_instance("Remove Instance (WARNING)")
+                if instance_id and self.ui.yesno(
+                    f"WARNING: Remove instance '{instance_id}'?\n\n"
+                    f"This will stop services, remove systemd units,\n"
+                    f"remove nginx sites, and optionally delete all data.",
+                    title="Confirm Removal",
+                    default_no=True,
+                ):                
                     self._run_tty_command(["bash", str(tool), "remove", instance_id])
 
     # -------------------------------------------------------------------------

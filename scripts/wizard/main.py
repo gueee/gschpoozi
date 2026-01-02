@@ -10126,15 +10126,15 @@ read -r _
             if choice == "LIST":
                 # Build instance list directly in Python (avoid UTF-8 decode issues)
                 instances_info = []
-                
+
                 if (Path.home() / "printer_data").exists():
                     instances_info.append("default - ~/printer_data")
-                
+
                 for d in sorted(Path.home().glob("printer_data-*")):
                     if d.is_dir():
                         inst_id = d.name.replace("printer_data-", "")
                         instances_info.append(f"{inst_id} - ~/{d.name}")
-                
+
                 if not instances_info:
                     self.ui.msgbox(
                         "No instances found.\n\n"
@@ -10146,7 +10146,7 @@ read -r _
                 else:
                     instances_text = "\n".join(f"• {info}" for info in instances_info)
                     current = os.environ.get("GSCHPOOZI_INSTANCE", "default (~/printer_data)")
-                    
+
                     self.ui.msgbox(
                         f"Instances found:\n\n{instances_text}\n\n"
                         f"Currently active: {current}\n\n"
@@ -10308,7 +10308,23 @@ read -r _
                     title="Start Instance"
                 )
                 if instance_id:
-                    self._run_tty_command(["bash", str(tool), "start", instance_id])
+                    exit_code = self._run_tty_command(["bash", str(tool), "start", instance_id])
+                    if exit_code == 0:
+                        self.ui.msgbox(
+                            f"Instance '{instance_id}' started successfully!\n\n"
+                            f"Services: klipper-{instance_id}, moonraker-{instance_id}",
+                            title="Services Started",
+                            height=10,
+                            width=60,
+                        )
+                    else:
+                        self.ui.msgbox(
+                            f"Failed to start instance '{instance_id}'.\n\n"
+                            f"Check the console output for details.",
+                            title="Start Failed",
+                            height=10,
+                            width=60,
+                        )
 
             elif choice == "STOP":
                 instance_id = self.ui.inputbox(
@@ -10316,7 +10332,22 @@ read -r _
                     title="Stop Instance"
                 )
                 if instance_id:
-                    self._run_tty_command(["bash", str(tool), "stop", instance_id])
+                    exit_code = self._run_tty_command(["bash", str(tool), "stop", instance_id])
+                    if exit_code == 0:
+                        self.ui.msgbox(
+                            f"Instance '{instance_id}' stopped.",
+                            title="Services Stopped",
+                            height=8,
+                            width=50,
+                        )
+                    else:
+                        self.ui.msgbox(
+                            f"Failed to stop instance '{instance_id}'.\n\n"
+                            f"Check the console output.",
+                            title="Stop Failed",
+                            height=10,
+                            width=60,
+                        )
 
             elif choice == "RESTART":
                 instance_id = self.ui.inputbox(
@@ -10324,7 +10355,22 @@ read -r _
                     title="Restart Instance"
                 )
                 if instance_id:
-                    self._run_tty_command(["bash", str(tool), "restart", instance_id])
+                    exit_code = self._run_tty_command(["bash", str(tool), "restart", instance_id])
+                    if exit_code == 0:
+                        self.ui.msgbox(
+                            f"Instance '{instance_id}' restarted successfully!",
+                            title="Services Restarted",
+                            height=8,
+                            width=60,
+                        )
+                    else:
+                        self.ui.msgbox(
+                            f"Failed to restart instance '{instance_id}'.\n\n"
+                            f"Check the console output.",
+                            title="Restart Failed",
+                            height=10,
+                            width=60,
+                        )
 
             elif choice == "REMOVE":
                 instance_id = self.ui.inputbox(

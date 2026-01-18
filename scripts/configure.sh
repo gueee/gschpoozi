@@ -93,6 +93,21 @@ check_wizard_files() {
     fi
 }
 
+check_python_deps() {
+    if ! python3 -c "import jinja2" 2>/dev/null; then
+        print_warning "jinja2 not found - installing..."
+        if pip3 install jinja2 --quiet; then
+            print_status "jinja2 installed successfully"
+        else
+            print_error "Failed to install jinja2"
+            echo "       Try manually: pip3 install jinja2"
+            return 1
+        fi
+    else
+        print_status "Python dependencies satisfied"
+    fi
+}
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -126,6 +141,7 @@ check_dependencies() {
     echo ""
 
     check_python || ((errors++))
+    check_python_deps || ((errors++))
     check_whiptail || ((errors++))
     check_wizard_files || ((errors++))
 

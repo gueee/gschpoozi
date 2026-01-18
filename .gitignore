@@ -20,6 +20,7 @@ __pycache__/
 # State files (user-specific)
 .wizard-state
 .hardware-state.json
+.gschpoozi_state.json
 
 # Generated configs (user output)
 output/

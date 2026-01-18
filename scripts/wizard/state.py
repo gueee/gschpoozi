@@ -14,7 +14,8 @@ from datetime import datetime
 class WizardState:
     """Manages wizard configuration state."""
 
-    DEFAULT_STATE_DIR = Path.home() / "printer_data" / "config"
+    # State lives in the repo root (travels with repo, not in printer_data)
+    DEFAULT_STATE_DIR = Path(__file__).parent.parent.parent  # scripts/wizard -> scripts -> repo root
     STATE_FILENAME = ".gschpoozi_state.json"
 
     def __init__(self, state_dir: Path = None):

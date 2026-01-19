@@ -81,6 +81,7 @@ class ConfigGenerator:
             'beacon': 'gschpoozi/probe.cfg',
             'cartographer': 'gschpoozi/probe.cfg',
             'btt_eddy': 'gschpoozi/probe.cfg',
+            'sensorless_homing_override': 'gschpoozi/homing.cfg',
             'safe_z_home': 'gschpoozi/homing.cfg',
             'bed_mesh': 'gschpoozi/leveling.cfg',
             'z_tilt': 'gschpoozi/leveling.cfg',

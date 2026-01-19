@@ -648,9 +648,10 @@ btt_eddy:
 # Homing
 # -----------------------------------------------------------------------------
 safe_z_home:
-  # CRITICAL: Do NOT generate safe_z_home when eddy probes use contact/touch mode
-  # Beacon/Cartographer handle homing internally via home_xy_position in their sections
-  condition: "homing.homing_method == 'safe_z_home' and not (probe.probe_type == 'beacon' and probe.homing_mode == 'contact') and not (probe.probe_type == 'cartographer' and probe.homing_mode == 'touch')"
+  # CRITICAL: Do NOT generate safe_z_home when:
+  # - Eddy probes use contact/touch mode (they handle homing internally)
+  # - Sensorless homing with homing_current is enabled (homing_override handles it)
+  condition: "homing.homing_method == 'safe_z_home' and not (probe.probe_type == 'beacon' and probe.homing_mode == 'contact') and not (probe.probe_type == 'cartographer' and probe.homing_mode == 'touch') and not ((stepper_x.endstop_type == 'sensorless' and stepper_x.homing_current) or (stepper_y.endstop_type == 'sensorless' and stepper_y.homing_current))"
   template: |
     [safe_z_home]
     {% if homing.home_xy_position is not defined or not homing.home_xy_position or homing.home_xy_position == 'bed_center' %}
@@ -672,37 +673,25 @@ sensorless_homing_override:
     gcode:
         G90
         G0 Z{{ homing.z_hop | default(10) }} F{{ (homing.z_hop_speed | default(15)) * 60 }}
-        {% raw %}{% set home_all = 'X' not in params and 'Y' not in params and 'Z' not in params %}{% endraw %}
-        {% if stepper_x.endstop_type == 'sensorless' and stepper_x.homing_current %}
-        {% raw %}{% if home_all or 'X' in params %}{% endraw %}
+        {{ '{%' }} set home_all = 'X' not in params and 'Y' not in params and 'Z' not in params {{ '%}' }}
+        {{ '{%' }} if home_all or 'X' in params {{ '%}' }}
         SET_TMC_CURRENT STEPPER=stepper_x CURRENT={{ stepper_x.homing_current }}
         G28 X0
         SET_TMC_CURRENT STEPPER=stepper_x CURRENT={{ stepper_x.run_current }}
         G4 P500
-        {% raw %}{% endif %}{% endraw %}
-        {% else %}
-        {% raw %}{% if home_all or 'X' in params %}{% endraw %}
-        G28 X0
-        {% raw %}{% endif %}{% endraw %}
-        {% endif %}
-        {% if stepper_y.endstop_type == 'sensorless' and stepper_y.homing_current %}
-        {% raw %}{% if home_all or 'Y' in params %}{% endraw %}
+        {{ '{%' }} endif {{ '%}' }}
+        {{ '{%' }} if home_all or 'Y' in params {{ '%}' }}
         SET_TMC_CURRENT STEPPER=stepper_y CURRENT={{ stepper_y.homing_current }}
         G28 Y0
         SET_TMC_CURRENT STEPPER=stepper_y CURRENT={{ stepper_y.run_current }}
         G4 P500
-        {% raw %}{% endif %}{% endraw %}
-        {% else %}
-        {% raw %}{% if home_all or 'Y' in params %}{% endraw %}
-        G28 Y0
-        {% raw %}{% endif %}{% endraw %}
-        {% endif %}
-        {% raw %}{% if home_all or 'Z' in params %}{% endraw %}
+        {{ '{%' }} endif {{ '%}' }}
+        {{ '{%' }} if home_all or 'Z' in params {{ '%}' }}
         G90
         G0 X{{ (printer.bed_size_x / 2) | int }} Y{{ (printer.bed_size_y / 2) | int }} F{{ (homing.speed | default(100)) * 60 }}
         G28 Z0
         G0 Z{{ homing.z_hop | default(10) }} F{{ (homing.z_hop_speed | default(15)) * 60 }}
-        {% raw %}{% endif %}{% endraw %}
+        {{ '{%' }} endif {{ '%}' }}
 
 # -----------------------------------------------------------------------------
 # Bed Mesh (in Probe section - mesh is probe-dependent)

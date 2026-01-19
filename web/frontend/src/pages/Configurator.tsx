@@ -17,6 +17,7 @@ import {
   HomingPanel,
   BedLevelingPanel,
 } from '../components/panels';
+import { MacrosPanel } from '../components/panels/MacrosPanel';
 import { ConfigPreview } from '../components/preview/ConfigPreview';
 import {
   Cpu,
@@ -40,6 +41,7 @@ import {
   AlertCircle,
   Home,
   Layers,
+  Play,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -70,6 +72,9 @@ const BASE_SIDEBAR_ITEMS: SidebarItem[] = [
 
   // Cooling
   { id: 'fans', name: 'Fans', icon: Fan, color: 'text-sky-400', section: 'Cooling' },
+
+  // Workflow
+  { id: 'macros', name: 'Macros', icon: Play, color: 'text-purple-400', section: 'Workflow' },
 ];
 
 // Build sidebar items based on kinematics
@@ -183,6 +188,8 @@ export function Configurator() {
         return <BedLevelingPanel />;
       case 'fans':
         return <FanPanel />;
+      case 'macros':
+        return <MacrosPanel />;
       default:
         return null;
     }

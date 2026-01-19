@@ -54,10 +54,10 @@ function useInteractive(
 }
 
 // Panels that show the board schematic (should hide model labels)
-const BOARD_SCHEMATIC_PANELS = [
+const BOARD_SCHEMATIC_PANELS = new Set([
   'stepper_x', 'stepper_y', 'stepper_z', 'stepper_z1', 'stepper_z2', 'stepper_z3',
   'stepper_x1', 'stepper_y1', 'extruder', 'fans', 'heater_bed', 'hotend', 'probe'
-];
+]);
 
 // Label component for hover/selected state
 function ModelLabel({
@@ -73,10 +73,13 @@ function ModelLabel({
 }) {
   const activePanel = useWizardStore((state) => state.activePanel);
   
-  // Hide labels when board schematic is shown (to avoid overlapping labels)
-  const isBoardSchematicVisible = activePanel && BOARD_SCHEMATIC_PANELS.includes(activePanel);
+  // Hide ALL model labels when board schematic is visible
+  // The board schematic zooms in and overlaps with 3D model labels
+  if (activePanel && BOARD_SCHEMATIC_PANELS.has(activePanel)) {
+    return null;
+  }
   
-  if (!show || isBoardSchematicVisible) return null;
+  if (!show) return null;
 
   return (
     <Html position={position} center distanceFactor={4}>

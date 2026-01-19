@@ -2531,10 +2531,11 @@ common:
           # Purge line
           G1 Y{START_Y + LINE_LENGTH} E{AMOUNT} F1500
 
-          # Small wipe
+          # Retract, wipe, then prime back
           G1 E-0.5 F3000
           G0 Z2 F3000
           G0 X{START_X + 5} F6000
+          G1 E0.4 F1500      ; Prime back (slightly less than retract to avoid blob)
 
           G92 E0
 
@@ -2554,12 +2555,15 @@ common:
           # Slow purge to form blob
           G1 E{AMOUNT} F150
 
-          # Quick retract
-          G1 E-2 F3000
+          # Quick retract to detach blob
+          G1 E-1.5 F3000
           G4 P1000  ; Wait for blob to detach
 
           # Lift
           G0 Z{cfg.bucket_z + 10} F3000
+
+          # Prime back so nozzle isn't empty for print start
+          G1 E1.2 F1500
 
           G92 E0
 
@@ -2589,6 +2593,7 @@ common:
               G1 Y{START_Y + 30} E{AMOUNT} F1500
               G1 E-0.5 F3000
               G0 Z2 F3000
+              G1 E0.4 F1500      ; Prime back
 
               G92 E0
           {% else %}

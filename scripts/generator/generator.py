@@ -1010,6 +1010,8 @@ class ConfigGenerator:
         pre_includes = []
         if self.state.get("includes.mainsail.enabled", False):
             pre_includes.append("mainsail.cfg")
+        elif self.state.get("includes.fluidd.enabled", False):
+            pre_includes.append("fluidd.cfg")
         if self.state.get("includes.timelapse.enabled", False):
             pre_includes.append("timelapse.cfg")
 

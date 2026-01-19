@@ -1414,6 +1414,7 @@ class GschpooziWizard:
                     ("1.2", "CAN Interface Setup       (can0 / can-utils / systemd)"),
                     ("1.3", "Katapult / Flashing       (DFU + CAN firmware flash)"),
                     ("1.4", "Update Manager Fix        (Git fetch workaround)"),
+                    ("1.5", "Klipper-PLR              (Power Loss Recovery)"),
                     ("B", "Back to Main Menu"),
                 ],
                 title="1. Klipper Setup",
@@ -1431,6 +1432,8 @@ class GschpooziWizard:
                 self._katapult_setup()
             elif choice == "1.4":
                 self._update_manager_git_fetch_workaround()
+            elif choice == "1.5":
+                self._install_klipper_plr()
 
     def _configure_klipper_variant(self) -> None:
         """Configure Klipper variant selection (Standard vs Kalico)."""
@@ -1681,6 +1684,177 @@ class GschpooziWizard:
                 parts.append("disabled")
 
         return f"{component:<14} [ {' | '.join(parts)} ]"
+
+    def _install_klipper_plr(self) -> None:
+        """Install or manage BTT Klipper-PLR (Power Loss Recovery)."""
+        import subprocess
+
+        plr_dir = Path.home() / "KlipperPLR"
+
+        def _check_plr_installed() -> bool:
+            return plr_dir.exists() and (plr_dir / "plr.py").exists()
+
+        def _check_plr_service() -> bool:
+            try:
+                result = subprocess.run(
+                    ["systemctl", "is-active", "plr"],
+                    capture_output=True, text=True
+                )
+                return result.stdout.strip() == "active"
+            except Exception:
+                return False
+
+        is_installed = _check_plr_installed()
+        service_active = _check_plr_service() if is_installed else False
+
+        if is_installed:
+            status = "running" if service_active else "installed (service stopped)"
+            choice = self.ui.menu(
+                f"Klipper-PLR Status: {status}\n\n"
+                "BTT Power Loss Recovery is installed.\n\n"
+                "What would you like to do?",
+                [
+                    ("1", "Update PLR              (git pull + reinstall)"),
+                    ("2", "Restart PLR Service"),
+                    ("3", "View Slicer Setup       (required G-code changes)"),
+                    ("4", "Uninstall PLR"),
+                    ("B", "Back"),
+                ],
+                title="Klipper-PLR Management",
+            )
+
+            if choice is None or choice == "B":
+                return
+            elif choice == "1":
+                # Update
+                self.ui.infobox("Updating Klipper-PLR...", title="Please wait")
+                try:
+                    subprocess.run(["git", "pull"], cwd=str(plr_dir), check=True, capture_output=True)
+                    subprocess.run(["./install.sh"], cwd=str(plr_dir), check=True, capture_output=True)
+                    self.ui.msgbox("Klipper-PLR updated successfully!", title="Update Complete")
+                except subprocess.CalledProcessError as e:
+                    self.ui.msgbox(f"Update failed:\n\n{e}", title="Error")
+            elif choice == "2":
+                # Restart service
+                try:
+                    subprocess.run(["sudo", "systemctl", "restart", "plr"], check=True, capture_output=True)
+                    self.ui.msgbox("PLR service restarted.", title="Done")
+                except subprocess.CalledProcessError as e:
+                    self.ui.msgbox(f"Failed to restart service:\n\n{e}", title="Error")
+            elif choice == "3":
+                self._show_plr_slicer_setup()
+            elif choice == "4":
+                # Uninstall
+                if self.ui.yesno(
+                    "Uninstall Klipper-PLR?\n\n"
+                    "This will:\n"
+                    "- Stop and disable the PLR service\n"
+                    "- Remove ~/KlipperPLR directory\n"
+                    "- Remove moonraker update_manager entry\n\n"
+                    "Continue?",
+                    title="Confirm Uninstall",
+                    default_no=True,
+                ):
+                    self.ui.infobox("Uninstalling Klipper-PLR...", title="Please wait")
+                    try:
+                        # Run uninstall script if exists
+                        uninstall_script = plr_dir / "uninstall.sh"
+                        if uninstall_script.exists():
+                            subprocess.run(["./uninstall.sh"], cwd=str(plr_dir), capture_output=True)
+                        else:
+                            # Manual cleanup
+                            subprocess.run(["sudo", "systemctl", "stop", "plr"], capture_output=True)
+                            subprocess.run(["sudo", "systemctl", "disable", "plr"], capture_output=True)
+
+                        import shutil
+                        shutil.rmtree(plr_dir, ignore_errors=True)
+                        self.ui.msgbox("Klipper-PLR uninstalled.\n\nRemember to remove PLR G-code from your slicer.", title="Uninstalled")
+                    except Exception as e:
+                        self.ui.msgbox(f"Uninstall error:\n\n{e}", title="Error")
+        else:
+            # Not installed - offer to install
+            if not self.ui.yesno(
+                "Install Klipper-PLR (Power Loss Recovery)?\n\n"
+                "BTT's Klipper-PLR saves print state during power loss,\n"
+                "allowing you to resume prints after power is restored.\n\n"
+                "Requirements:\n"
+                "- UPS or battery backup (to save state during outage)\n"
+                "- GPIO pin connected to power detection circuit\n"
+                "- Slicer G-code modifications (will show after install)\n\n"
+                "This will:\n"
+                "- Clone https://github.com/bigtreetech/KlipperPLR\n"
+                "- Run the install script\n"
+                "- Add moonraker update_manager entry\n\n"
+                "Install now?",
+                title="Install Klipper-PLR",
+                default_no=False,
+                height=22,
+                width=70,
+            ):
+                return
+
+            self.ui.infobox("Cloning KlipperPLR repository...", title="Installing")
+
+            try:
+                # Clone repository
+                result = subprocess.run(
+                    ["git", "clone", "https://github.com/bigtreetech/KlipperPLR.git", str(plr_dir)],
+                    capture_output=True, text=True
+                )
+                if result.returncode != 0:
+                    self.ui.msgbox(f"Failed to clone repository:\n\n{result.stderr}", title="Error")
+                    return
+
+                self.ui.infobox("Running PLR install script...", title="Installing")
+
+                # Run install script
+                result = subprocess.run(
+                    ["./install.sh"],
+                    cwd=str(plr_dir),
+                    capture_output=True, text=True
+                )
+                if result.returncode != 0:
+                    self.ui.msgbox(f"Install script failed:\n\n{result.stderr}", title="Error")
+                    return
+
+                self.ui.msgbox(
+                    "Klipper-PLR installed successfully!\n\n"
+                    "Next steps:\n"
+                    "1. Configure PLR in ~/printer_data/config/plr.cfg\n"
+                    "2. Add required G-code to your slicer (shown next)\n"
+                    "3. Connect power detection GPIO to your Pi\n\n"
+                    "Press OK to see slicer setup instructions.",
+                    title="Installation Complete",
+                    height=16,
+                    width=60,
+                )
+
+                self._show_plr_slicer_setup()
+
+            except Exception as e:
+                self.ui.msgbox(f"Installation failed:\n\n{e}", title="Error")
+                # Cleanup on failure
+                if plr_dir.exists():
+                    import shutil
+                    shutil.rmtree(plr_dir, ignore_errors=True)
+
+    def _show_plr_slicer_setup(self) -> None:
+        """Show PLR slicer G-code setup instructions."""
+        self.ui.msgbox(
+            "Slicer G-code Setup for PLR\n\n"
+            "Add to your slicer's START G-CODE (after heating):\n"
+            "  POWER_LOSS_RECOVERY\n\n"
+            "Add to your slicer's END G-CODE (at the beginning):\n"
+            "  CLEAR_POWER_LOSS\n\n"
+            "Add to your slicer's LAYER CHANGE G-CODE:\n"
+            "  SAVE_LAYER_STATE LAYER=[layer_num]\n\n"
+            "For OrcaSlicer/PrusaSlicer, use:\n"
+            "  SAVE_LAYER_STATE LAYER={layer_num}\n\n"
+            "See ~/KlipperPLR/README.md for detailed setup.",
+            title="PLR Slicer Setup",
+            height=20,
+            width=65,
+        )
 
     def _manage_klipper_components(self) -> None:
         """
@@ -7663,14 +7837,58 @@ class GschpooziWizard:
         except Exception:
             pass
 
-        current_mainsail = self.state.get("includes.mainsail.enabled", detected_mainsail)
+        # Auto-detect web UI installation
+        mainsail_installed = (Path.home() / "mainsail").exists()
+        fluidd_installed = (Path.home() / "fluidd").exists()
+
+        # Check for fluidd.cfg include in printer.cfg
+        detected_fluidd = False
+        try:
+            cfg_path = Path.home() / "printer_data" / "config" / "printer.cfg"
+            if cfg_path.exists():
+                txt = cfg_path.read_text(encoding="utf-8", errors="ignore")
+                detected_fluidd = "[include fluidd.cfg]" in txt
+        except Exception:
+            pass
+
+        # Auto-enable based on installation if not explicitly set
+        current_mainsail = self.state.get("includes.mainsail.enabled")
+        if current_mainsail is None:
+            current_mainsail = detected_mainsail or mainsail_installed
+
+        current_fluidd = self.state.get("includes.fluidd.enabled")
+        if current_fluidd is None:
+            current_fluidd = detected_fluidd or (fluidd_installed and not mainsail_installed)
+
         current_timelapse = self.state.get("includes.timelapse.enabled", detected_timelapse)
 
-        mainsail = self.ui.yesno(
-            "Include mainsail.cfg in printer.cfg?",
-            title="printer.cfg includes - Mainsail",
-            default_no=not bool(current_mainsail),
-        )
+        # Show appropriate web UI option based on what's installed
+        if mainsail_installed and fluidd_installed:
+            webui = self.ui.radiolist(
+                "Select web UI config to include:",
+                [
+                    ("mainsail", "mainsail.cfg", bool(current_mainsail)),
+                    ("fluidd", "fluidd.cfg", bool(current_fluidd)),
+                    ("none", "Neither", not current_mainsail and not current_fluidd),
+                ],
+                title="printer.cfg includes - Web UI",
+            )
+            mainsail = webui == "mainsail"
+            fluidd = webui == "fluidd"
+        elif fluidd_installed:
+            fluidd = self.ui.yesno(
+                "Include fluidd.cfg in printer.cfg?",
+                title="printer.cfg includes - Fluidd",
+                default_no=not bool(current_fluidd),
+            )
+            mainsail = False
+        else:
+            mainsail = self.ui.yesno(
+                "Include mainsail.cfg in printer.cfg?",
+                title="printer.cfg includes - Mainsail",
+                default_no=not bool(current_mainsail),
+            )
+            fluidd = False
         timelapse = self.ui.yesno(
             "Include timelapse.cfg in printer.cfg?",
             title="printer.cfg includes - Timelapse",
@@ -7678,12 +7896,14 @@ class GschpooziWizard:
         )
 
         self.state.set("includes.mainsail.enabled", bool(mainsail))
+        self.state.set("includes.fluidd.enabled", bool(fluidd))
         self.state.set("includes.timelapse.enabled", bool(timelapse))
         self.state.save()
 
+        webui_status = "mainsail.cfg" if mainsail else ("fluidd.cfg" if fluidd else "None")
         self.ui.msgbox(
             "printer.cfg includes saved!\n\n"
-            f"mainsail.cfg: {'Enabled' if mainsail else 'Disabled'}\n"
+            f"Web UI: {webui_status}\n"
             f"timelapse.cfg: {'Enabled' if timelapse else 'Disabled'}",
             title="Configuration Saved",
         )

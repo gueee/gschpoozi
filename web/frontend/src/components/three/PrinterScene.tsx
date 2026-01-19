@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import type { ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, Html, Grid, Environment, Float, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
@@ -408,8 +408,10 @@ function MCUBoard({
 
 // Camera controller - disabled for now to not fight with user orbit controls
 // TODO: Add "Focus on Board" button that triggers one-time camera animation
-function CameraController({ targetPosition, enabled }: { targetPosition: THREE.Vector3 | null; enabled: boolean }) {
+function CameraController({ targetPosition: _targetPosition, enabled: _enabled }: { targetPosition: THREE.Vector3 | null; enabled: boolean }) {
   // Disabled - let user control camera freely
+  void _targetPosition;
+  void _enabled;
   return null;
 }
 

@@ -93,19 +93,78 @@ check_wizard_files() {
     fi
 }
 
+install_pip_package() {
+    local package="$1"
+    local apt_package="${2:-python3-$package}"
+
+    # Try multiple installation methods in order of preference
+    # 1. User-level install (safest, no sudo needed)
+    if pip3 install --user "$package" --quiet 2>/dev/null; then
+        if python3 -c "import $package" 2>/dev/null; then
+            print_status "$package installed successfully (user)"
+            return 0
+        fi
+    fi
+
+    # 2. Try with --break-system-packages (Debian 12+ / Ubuntu 23.04+)
+    if pip3 install "$package" --quiet --break-system-packages 2>/dev/null; then
+        if python3 -c "import $package" 2>/dev/null; then
+            print_status "$package installed successfully"
+            return 0
+        fi
+    fi
+
+    # 3. Try system-wide with sudo (like whiptail install)
+    print_warning "Trying system-wide install with sudo..."
+    if sudo pip3 install "$package" --quiet --break-system-packages 2>/dev/null || \
+       sudo pip3 install "$package" --quiet 2>/dev/null; then
+        if python3 -c "import $package" 2>/dev/null; then
+            print_status "$package installed successfully (system)"
+            return 0
+        fi
+    fi
+
+    # 4. Last resort: apt package
+    print_warning "Trying apt package..."
+    if sudo apt-get update -qq && sudo apt-get install -y -qq "$apt_package" 2>/dev/null; then
+        if python3 -c "import $package" 2>/dev/null; then
+            print_status "$package installed successfully (apt)"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
 check_python_deps() {
+    local errors=0
+
+    # Check jinja2
     if ! python3 -c "import jinja2" 2>/dev/null; then
         print_warning "jinja2 not found - installing..."
-        if pip3 install jinja2 --quiet; then
-            print_status "jinja2 installed successfully"
-        else
+        if ! install_pip_package "jinja2" "python3-jinja2"; then
             print_error "Failed to install jinja2"
-            echo "       Try manually: pip3 install jinja2"
-            return 1
+            echo "       Try: pip3 install --user jinja2"
+            ((errors++))
         fi
-    else
-        print_status "Python dependencies satisfied"
     fi
+
+    # Check yaml (pyyaml)
+    if ! python3 -c "import yaml" 2>/dev/null; then
+        print_warning "pyyaml not found - installing..."
+        if ! install_pip_package "pyyaml" "python3-yaml"; then
+            print_error "Failed to install pyyaml"
+            echo "       Try: pip3 install --user pyyaml"
+            ((errors++))
+        fi
+    fi
+
+    if [[ $errors -gt 0 ]]; then
+        return 1
+    fi
+
+    print_status "Python dependencies satisfied"
+    return 0
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════

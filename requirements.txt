@@ -1,1 +1,6 @@
+# gschpoozi Python dependencies
+# Auto-installed by scripts/configure.sh
+# Manual: pip3 install -r requirements.txt
+
 jinja2>=3.0
+pyyaml>=5.0

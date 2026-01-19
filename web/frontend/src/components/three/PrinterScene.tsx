@@ -1,10 +1,12 @@
-import { useRef, useState, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import type { ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, Html, Grid, Environment, Float, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 import useWizardStore from '../../stores/wizardStore';
 import { StepperMotorModel, ExtruderModel, HotendModel, preloadModels } from './models';
+import { BoardSchematic } from './BoardSchematic';
+import { useBoard } from '../../hooks/useTemplates';
 
 interface PrinterSceneProps {
   modelType: string;
@@ -337,8 +339,43 @@ function Stepper({
   );
 }
 
-// MCU Board representation - upright on back wall
-function MCU({ position, onClick }: { position: [number, number, number]; onClick: () => void }) {
+// MCU Board with interactive schematic
+function MCUBoard({ 
+  position, 
+  boardData,
+  onMcuClick,
+  onPortClick 
+}: { 
+  position: [number, number, number]; 
+  boardData: any;
+  onMcuClick: () => void;
+  onPortClick: (portType: string, portId: string, portData: any) => void;
+}) {
+  const activePanel = useWizardStore((state) => state.activePanel);
+  
+  // Determine if we should show expanded board view
+  const shouldShowBoard = activePanel && (
+    activePanel.startsWith('stepper_') ||
+    activePanel === 'fans' ||
+    activePanel === 'heater_bed' ||
+    activePanel === 'hotend' ||
+    activePanel === 'probe' ||
+    activePanel === 'extruder'
+  );
+
+  if (shouldShowBoard && boardData) {
+    // Show expanded board schematic
+    return (
+      <BoardSchematic
+        position={position}
+        boardData={boardData}
+        onPortClick={onPortClick}
+        scale={1.2}
+      />
+    );
+  }
+
+  // Show simple MCU representation when not in port-assignment mode
   return (
     <group position={position}>
       {/* Board - upright against back wall */}
@@ -350,7 +387,7 @@ function MCU({ position, onClick }: { position: [number, number, number]; onClic
         color="#065f46"
         hoverColor="#10b981"
         selectedColor="#34d399"
-        onClick={onClick}
+        onClick={onMcuClick}
       />
       {/* USB port indicator */}
       <mesh position={[-0.05, -0.04, 0.015]}>
@@ -369,8 +406,35 @@ function MCU({ position, onClick }: { position: [number, number, number]; onClic
           <meshStandardMaterial color="#1f2937" metalness={0.5} roughness={0.5} />
         </mesh>
       ))}
+      
+      {/* Board name label if available */}
+      {boardData && (
+        <Html position={[0, 0.08, 0.02]} center distanceFactor={4}>
+          <div className="text-[8px] text-cyan-400 bg-slate-900/80 px-1 rounded whitespace-nowrap">
+            {boardData.name}
+          </div>
+        </Html>
+      )}
     </group>
   );
+}
+
+// Camera controller for smooth transitions
+function CameraController({ targetPosition, enabled }: { targetPosition: THREE.Vector3 | null; enabled: boolean }) {
+  const { camera } = useThree();
+  const defaultPosition = useRef(new THREE.Vector3(2, 1.5, 2));
+  
+  useFrame(() => {
+    if (!enabled || !targetPosition) {
+      // Lerp back to default position
+      camera.position.lerp(defaultPosition.current, 0.02);
+    } else {
+      // Lerp to target position
+      camera.position.lerp(targetPosition, 0.05);
+    }
+  });
+  
+  return null;
 }
 
 // Dynamic Z-motors based on count from state
@@ -475,7 +539,14 @@ function ZMotors({
 // Main scene content
 function SceneContent({ modelType }: { modelType: string }) {
   const setActivePanel = useWizardStore((state) => state.setActivePanel);
-  const zMotorCount = useWizardStore((state) => state.state['z_config.motor_count'] ?? 1);
+  const setField = useWizardStore((state) => state.setField);
+  const activePanel = useWizardStore((state) => state.activePanel);
+  const state = useWizardStore((state) => state.state);
+  const zMotorCount = state['z_config.motor_count'] ?? 1;
+  
+  // Get board data for schematic
+  const selectedBoard = state['mcu.main.board_type'];
+  const { data: boardData } = useBoard(selectedBoard);
 
   // Preload models on mount
   useEffect(() => {
@@ -485,6 +556,76 @@ function SceneContent({ modelType }: { modelType: string }) {
   const handleClick = (componentName: string) => {
     setActivePanel(componentName);
   };
+  
+  // Handle port click from board schematic
+  const handlePortClick = useCallback((portType: string, portId: string, portData: any) => {
+    // Determine which component to assign based on active panel
+    if (!activePanel) return;
+    
+    let prefix = '';
+    
+    if (activePanel.startsWith('stepper_') && portType === 'motor') {
+      prefix = activePanel;
+      setField(`${prefix}.motor_port`, portId);
+      // Auto-fill pins
+      if (portData.step_pin) {
+        setField(`${prefix}.step_pin`, portData.step_pin);
+        setField(`${prefix}.dir_pin`, portData.dir_pin);
+        setField(`${prefix}.enable_pin`, '!' + portData.enable_pin);
+        if (portData.uart_pin) setField(`${prefix}.uart_pin`, portData.uart_pin);
+        if (portData.cs_pin) setField(`${prefix}.cs_pin`, portData.cs_pin);
+        if (portData.diag_pin) setField(`${prefix}.diag_pin`, portData.diag_pin);
+      }
+    } else if (activePanel === 'extruder' && portType === 'motor') {
+      prefix = 'extruder';
+      setField(`${prefix}.motor_port`, portId);
+      if (portData.step_pin) {
+        setField(`${prefix}.step_pin`, portData.step_pin);
+        setField(`${prefix}.dir_pin`, portData.dir_pin);
+        setField(`${prefix}.enable_pin`, '!' + portData.enable_pin);
+        if (portData.uart_pin) setField(`${prefix}.uart_pin`, portData.uart_pin);
+      }
+    } else if (activePanel === 'heater_bed' && portType === 'heater') {
+      setField('heater_bed.heater_port', portId);
+      if (portData.pin) setField('heater_bed.heater_pin', portData.pin);
+    } else if (activePanel === 'heater_bed' && portType === 'thermistor') {
+      setField('heater_bed.thermistor_port', portId);
+      if (portData.pin) setField('heater_bed.sensor_pin', portData.pin);
+    } else if (activePanel === 'hotend' && portType === 'heater') {
+      setField('hotend.heater_port', portId);
+      if (portData.pin) setField('hotend.heater_pin', portData.pin);
+    } else if (activePanel === 'hotend' && portType === 'thermistor') {
+      setField('hotend.thermistor_port', portId);
+      if (portData.pin) setField('hotend.sensor_pin', portData.pin);
+    } else if (activePanel === 'fans' && portType === 'fan') {
+      // For fans, we'd need to know which fan - for now assign to part cooling
+      setField('fans.part_cooling.port', portId);
+      if (portData.pin) setField('fans.part_cooling.pin', portData.pin);
+    } else if (activePanel === 'probe' && portType === 'probe') {
+      setField('probe.port', portId);
+      if (portData.signal_pin) setField('probe.pin', portData.signal_pin);
+      if (portData.servo_pin) setField('probe.servo_pin', portData.servo_pin);
+    } else if (portType === 'endstop' && activePanel.startsWith('stepper_')) {
+      prefix = activePanel;
+      setField(`${prefix}.endstop_port`, portId);
+      if (portData.pin) setField(`${prefix}.endstop_pin`, `^${portData.pin}`);
+    }
+  }, [activePanel, setField]);
+  
+  // Determine if camera should zoom to board
+  const shouldZoomToBoard = activePanel && (
+    activePanel.startsWith('stepper_') ||
+    activePanel === 'fans' ||
+    activePanel === 'heater_bed' ||
+    activePanel === 'hotend' ||
+    activePanel === 'probe' ||
+    activePanel === 'extruder'
+  );
+  
+  // Camera target position when zoomed to board
+  const boardCameraPosition = useMemo(() => {
+    return new THREE.Vector3(0, 0.5, 0.8);
+  }, []);
 
   // Printer dimensions (scaled for visualization)
   const size = { x: 1.2, y: 1.2, z: 1.0 };
@@ -509,8 +650,13 @@ function SceneContent({ modelType }: { modelType: string }) {
             {/* Dynamic Z Motors */}
             <ZMotors size={size} zMotorCount={zMotorCount} onClick={handleClick} />
 
-            {/* MCU - upright on back wall */}
-            <MCU position={[0, size.z * 0.4, -size.y / 2 + 0.03]} onClick={() => handleClick('mcu')} />
+            {/* MCU Board - upright on back wall */}
+            <MCUBoard 
+              position={[0, size.z * 0.4, -size.y / 2 + 0.03]} 
+              boardData={boardData}
+              onMcuClick={() => handleClick('mcu')} 
+              onPortClick={handlePortClick}
+            />
           </group>
         );
 
@@ -534,8 +680,13 @@ function SceneContent({ modelType }: { modelType: string }) {
             {/* Dynamic Z Motors */}
             <ZMotors size={size} zMotorCount={zMotorCount} onClick={handleClick} />
 
-            {/* MCU - upright on back wall */}
-            <MCU position={[0, size.z * 0.4, -size.y / 2 + 0.03]} onClick={() => handleClick('mcu')} />
+            {/* MCU Board - upright on back wall */}
+            <MCUBoard 
+              position={[0, size.z * 0.4, -size.y / 2 + 0.03]} 
+              boardData={boardData}
+              onMcuClick={() => handleClick('mcu')} 
+              onPortClick={handlePortClick}
+            />
           </group>
         );
 
@@ -582,8 +733,13 @@ function SceneContent({ modelType }: { modelType: string }) {
               );
             })}
 
-            {/* MCU - upright on back */}
-            <MCU position={[0, size.z * 0.3, -0.55]} onClick={() => handleClick('mcu')} />
+            {/* MCU Board - upright on back */}
+            <MCUBoard 
+              position={[0, size.z * 0.3, -0.55]} 
+              boardData={boardData}
+              onMcuClick={() => handleClick('mcu')} 
+              onPortClick={handlePortClick}
+            />
           </group>
         );
 
@@ -627,8 +783,13 @@ function SceneContent({ modelType }: { modelType: string }) {
             {/* Dynamic Z Motors */}
             <ZMotors size={size} zMotorCount={zMotorCount} onClick={handleClick} />
 
-            {/* MCU - upright on back wall */}
-            <MCU position={[0, size.z * 0.4, -size.y / 2 + 0.03]} onClick={() => handleClick('mcu')} />
+            {/* MCU Board - upright on back wall */}
+            <MCUBoard 
+              position={[0, size.z * 0.4, -size.y / 2 + 0.03]} 
+              boardData={boardData}
+              onMcuClick={() => handleClick('mcu')} 
+              onPortClick={handlePortClick}
+            />
           </group>
         );
 
@@ -670,6 +831,12 @@ function SceneContent({ modelType }: { modelType: string }) {
 
       {/* The printer model */}
       {renderModel()}
+      
+      {/* Camera animation controller */}
+      <CameraController 
+        targetPosition={shouldZoomToBoard ? boardCameraPosition : null} 
+        enabled={!!shouldZoomToBoard} 
+      />
 
       {/* Controls */}
       <OrbitControls

@@ -4560,12 +4560,25 @@ class GschpooziWizard:
         if z_motor_port is None:
             return
 
+        # Direction pin inversion
+        current_dir_inverted = self.state.get("stepper_z.dir_pin_inverted", False)
+        dir_inverted = self.ui.yesno(
+            "Invert Z direction pin?\n\n"
+            "Select Yes if the Z axis moves in the wrong direction.\n"
+            "This adds '!' prefix to the dir_pin in the config.",
+            title="Z Axis - Direction",
+            default_no=not current_dir_inverted
+        )
+        if dir_inverted is None:
+            dir_inverted = current_dir_inverted
+
         # Save basic Z config
         z_count_int = int(z_count or 4)
         self.state.set("stepper_z.z_motor_count", z_count_int)
         self.state.set("stepper_z.driver_type", driver_type)
         self.state.set("stepper_z.driver_protocol", driver_protocol)
         self.state.set("stepper_z.drive_type", drive_type)
+        self.state.set("stepper_z.dir_pin_inverted", dir_inverted)
         if drive_type == "leadscrew":
             self.state.set("stepper_z.leadscrew_pitch", int(pitch or 8))
         else:

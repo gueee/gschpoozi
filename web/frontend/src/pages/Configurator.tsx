@@ -14,6 +14,8 @@ import {
   FanPanel,
   ZConfigPanel,
   ToolingPanel,
+  HomingPanel,
+  BedLevelingPanel,
 } from '../components/panels';
 import { ConfigPreview } from '../components/preview/ConfigPreview';
 import {
@@ -36,6 +38,8 @@ import {
   Loader2,
   Check,
   AlertCircle,
+  Home,
+  Layers,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -63,9 +67,13 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { id: 'hotend', name: 'Hotend', icon: Flame, color: 'text-orange-400', section: 'Heating' },
   { id: 'heater_bed', name: 'Heated Bed', icon: Thermometer, color: 'text-red-400', section: 'Heating' },
 
-  // Sensors & Cooling
-  { id: 'probe', name: 'Probe', icon: Crosshair, color: 'text-violet-400', section: 'Sensors' },
-  { id: 'fans', name: 'Fans', icon: Fan, color: 'text-sky-400', section: 'Sensors' },
+  // Sensors & Leveling
+  { id: 'probe', name: 'Probe', icon: Crosshair, color: 'text-violet-400', section: 'Leveling' },
+  { id: 'homing', name: 'Homing', icon: Home, color: 'text-indigo-400', section: 'Leveling' },
+  { id: 'bed_leveling', name: 'Bed Leveling', icon: Layers, color: 'text-teal-400', section: 'Leveling' },
+
+  // Cooling
+  { id: 'fans', name: 'Fans', icon: Fan, color: 'text-sky-400', section: 'Cooling' },
 ];
 
 export function Configurator() {
@@ -144,6 +152,10 @@ export function Configurator() {
         return <HeaterBedPanel />;
       case 'probe':
         return <ProbePanel />;
+      case 'homing':
+        return <HomingPanel />;
+      case 'bed_leveling':
+        return <BedLevelingPanel />;
       case 'fans':
         return <FanPanel />;
       default:

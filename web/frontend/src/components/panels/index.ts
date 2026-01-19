@@ -9,3 +9,5 @@ export * from './ProbePanel';
 export * from './FanPanel';
 export * from './ZConfigPanel';
 export * from './ToolingPanel';
+export * from './HomingPanel';
+export * from './BedLevelingPanel';

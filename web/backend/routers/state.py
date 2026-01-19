@@ -3,6 +3,7 @@ API endpoints for wizard state management.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -11,9 +12,33 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
-# Default state directory (can be overridden)
-DEFAULT_STATE_DIR = Path.home() / "printer_data" / "config"
+# State filename (same as CLI wizard)
 STATE_FILENAME = ".gschpoozi_state.json"
+
+
+def get_default_state_dir() -> Path:
+    """
+    Get the default state directory.
+
+    Priority:
+    1. GSCHPOOZI_STATE_DIR environment variable
+    2. Repo root (to match CLI wizard behavior)
+
+    The CLI wizard stores state in the repo root, so we align with that
+    to allow seamless state transfer between web and CLI wizards.
+    """
+    # Check environment variable first
+    env_dir = os.environ.get("GSCHPOOZI_STATE_DIR")
+    if env_dir:
+        return Path(env_dir)
+
+    # Default to repo root (web/backend/routers -> web/backend -> web -> repo root)
+    repo_root = Path(__file__).parent.parent.parent.parent
+    return repo_root
+
+
+# Computed default - use function to allow runtime override via env var
+DEFAULT_STATE_DIR = get_default_state_dir()
 
 
 class StateResponse(BaseModel):

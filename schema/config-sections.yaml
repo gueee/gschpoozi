@@ -961,6 +961,7 @@ common:
 
   # Shell command to run the Python chopper analyzer
   chopper_shell_command:
+    condition: "tuning.chopper_tuning_enabled"
     render: raw
     template: |
       [gcode_shell_command chopper_analyze]
@@ -992,6 +993,7 @@ common:
 
   # Chopper tuning state and macros
   chopper_tuning_macros:
+    condition: "tuning.chopper_tuning_enabled"
     render: raw
     template: |
       # ═══════════════════════════════════════════════════════════════════════════════
@@ -1556,7 +1558,7 @@ common:
   # AWD (All Wheel Drive) Chopper Tuning
   # Additional macros for printers with stepper_x1 and stepper_y1
   chopper_tuning_awd:
-    condition: "printer.awd_enabled"
+    condition: "printer.awd_enabled and tuning.chopper_tuning_enabled"
     render: raw
     template: |
       # ═══════════════════════════════════════════════════════════════════════════════

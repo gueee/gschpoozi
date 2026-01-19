@@ -6400,13 +6400,13 @@ class GschpooziWizard:
                 default_z = str(current_z_offset) if current_z_offset is not None else "0"
                 z_offset = self.ui.inputbox(
                     "Probe Z offset (mm):\n\n"
-                    "Distance from probe trigger to nozzle tip.\n"
-                    "Use NEGATIVE values (probe triggers above nozzle).\n\n"
+                    "Height of nozzle above bed when probe triggers.\n"
+                    "Use POSITIVE values.\n\n"
                     "Typical values:\n"
-                    "• BLTouch: -2.0 to -3.0\n"
-                    "• Inductive: -0.5 to -2.0\n"
-                    "• Klicky: -1.0 to -2.0\n\n"
-                    "Example: Enter -2.5 for BLTouch\n"
+                    "• BLTouch: 1.5 to 3.0\n"
+                    "• Inductive: 0.5 to 2.0\n"
+                    "• Klicky: 1.0 to 2.0\n\n"
+                    "Example: Enter 2.5 for BLTouch\n"
                     "Fine-tune later with PROBE_CALIBRATE.",
                     default=default_z,
                     title="Probe - Z Offset"

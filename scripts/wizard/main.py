@@ -6584,10 +6584,47 @@ class GschpooziWizard:
                 if probe_pin is None:
                     return
 
+        # Probe samples (for non-eddy probes)
+        # Higher samples = more accurate but slower (especially on BLTouch)
+        samples = None
+        samples_tolerance = None
+        if probe_type not in eddy_probes:
+            current_samples = self.state.get("probe.samples", 3)
+            samples = self.ui.inputbox(
+                "Probe samples per point:\n\n"
+                "How many times to probe at each point.\n"
+                "Higher = more accurate but slower.\n\n"
+                "• 1 = Fast (good for BLTouch)\n"
+                "• 2-3 = Balanced\n"
+                "• 5 = High precision (inductive probes)",
+                default=str(current_samples),
+                title="Probe - Samples"
+            )
+            if samples is None:
+                return
+
+            current_tolerance = self.state.get("probe.samples_tolerance", 0.006)
+            samples_tolerance = self.ui.inputbox(
+                "Samples tolerance (mm):\n\n"
+                "Max deviation between samples before retry.\n"
+                "Smaller = stricter (may retry more often).\n\n"
+                "Typical: 0.006 (6 microns)",
+                default=str(current_tolerance),
+                title="Probe - Tolerance"
+            )
+            if samples_tolerance is None:
+                return
+
         # Save
         self.state.set("probe.probe_type", probe_type)
         self.state.set("probe.x_offset", float(x_offset or 0))
         self.state.set("probe.y_offset", float(y_offset or 0))
+
+        # Save samples configuration (non-eddy probes only)
+        if samples:
+            self.state.set("probe.samples", int(samples))
+        if samples_tolerance:
+            self.state.set("probe.samples_tolerance", float(samples_tolerance))
 
         if serial:
             self.state.set("probe.serial", serial)
@@ -6635,6 +6672,8 @@ class GschpooziWizard:
             summary += f"\nSerial: {Path(serial).name if '/' in serial else serial}"
         if homing_mode:
             summary += f"\nHoming: {homing_mode}"
+        if samples:
+            summary += f"\nSamples: {samples} (tolerance: {samples_tolerance}mm)"
         if probe_type in eddy_probes:
             summary += f"\nMesh: {mesh_main_direction} direction, {mesh_runs} run(s)"
 

@@ -131,6 +131,12 @@ class ConfigGenerator:
         """Get context for template rendering from wizard state."""
         context = self.state.export_for_generator()
 
+        # DEBUG: Write context to file for troubleshooting
+        import json
+        debug_file = Path.home() / "gschpoozi_debug_context.json"
+        with open(debug_file, 'w') as f:
+            json.dump(context, f, indent=2, default=str)
+
         def _has_klipper_tmc_autotune() -> bool:
             """
             Detect whether the optional klipper_tmc_autotune plugin is installed.

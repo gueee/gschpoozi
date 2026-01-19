@@ -2175,8 +2175,8 @@ common:
 
           # Calculate preheat temperature using scale factor or fixed temp
           # preheat_scale: 0.0 = no preheat, 0.5 = half temp, 1.0 = full temp
-          {% if cfg.preheat_scale > 0 %}
-              {% set EXTRUDER_PREHEAT = [(EXTRUDER_TEMP * cfg.preheat_scale)|int, cfg.extruder_preheat_temp]|min %}
+          {% if cfg.preheat_scale|float > 0 %}
+              {% set EXTRUDER_PREHEAT = [(EXTRUDER_TEMP * cfg.preheat_scale|float)|int, cfg.extruder_preheat_temp|int]|min %}
           {% else %}
               {% set EXTRUDER_PREHEAT = 0 %}
           {% endif %}
@@ -2524,6 +2524,7 @@ common:
           {% set START_Y = cfg.purge_y %}
 
           G92 E0
+          M83            ; Relative extrusion mode
           G0 Z5 F3000
           G0 X{START_X} Y{START_Y} F6000
           G0 Z0.3 F1000
@@ -2538,6 +2539,7 @@ common:
           G1 E0.4 F1500      ; Prime back (slightly less than retract to avoid blob)
 
           G92 E0
+          M82            ; Back to absolute extrusion mode
 
       [gcode_macro _PURGE_BLOB]
       description: Purge blob into bucket
@@ -2551,6 +2553,7 @@ common:
           G0 Z{cfg.bucket_z} F1000
 
           G92 E0
+          M83            ; Relative extrusion mode
 
           # Slow purge to form blob
           G1 E{AMOUNT} F150
@@ -2566,6 +2569,7 @@ common:
           G1 E1.2 F1500
 
           G92 E0
+          M82            ; Back to absolute extrusion mode
 
       [gcode_macro _PURGE_ADAPTIVE]
       description: Adaptive purge near print area
@@ -2585,6 +2589,7 @@ common:
               {% set START_Y = [START_Y, 5]|max %}
 
               G92 E0
+              M83            ; Relative extrusion mode
               G0 Z5 F3000
               G0 X{START_X} Y{START_Y} F6000
               G0 Z0.3 F1000
@@ -2596,6 +2601,7 @@ common:
               G1 E0.4 F1500      ; Prime back
 
               G92 E0
+              M82            ; Back to absolute extrusion mode
           {% else %}
               _PURGE_LINE AMOUNT={AMOUNT}
           {% endif %}

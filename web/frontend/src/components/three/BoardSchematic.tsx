@@ -2,7 +2,43 @@ import { useRef, useState, useMemo } from 'react';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import useWizardStore from '../../stores/wizardStore';
-import type { BoardData } from '../../hooks/useTemplates';
+
+// Board data structure (matches API response)
+interface BoardData {
+  id: string;
+  name: string;
+  manufacturer: string;
+  mcu?: string;
+  motor_ports?: Record<string, MotorPort>;
+  fan_ports?: Record<string, SimplePort>;
+  heater_ports?: Record<string, SimplePort>;
+  thermistor_ports?: Record<string, SimplePort>;
+  endstop_ports?: Record<string, SimplePort>;
+  probe_ports?: Record<string, ProbePort>;
+  misc_ports?: Record<string, any>;
+}
+
+interface MotorPort {
+  label: string;
+  step_pin: string;
+  dir_pin: string;
+  enable_pin: string;
+  uart_pin?: string;
+  cs_pin?: string;
+  diag_pin?: string;
+}
+
+interface SimplePort {
+  label: string;
+  pin: string;
+}
+
+interface ProbePort {
+  label: string;
+  signal_pin?: string;
+  servo_pin?: string;
+  pin?: string;
+}
 
 interface BoardSchematicProps {
   position: [number, number, number];

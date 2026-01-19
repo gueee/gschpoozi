@@ -2182,7 +2182,7 @@ common:
           {% endif %}
 
           # ───────────────────────────────────────────────────────────────────────────
-          # Phase 1: Start heating and home
+          # Phase 1: Start heating and home X/Y
           # ───────────────────────────────────────────────────────────────────────────
           M117 Heating bed...
           {% if cfg.led_enabled %}
@@ -2198,14 +2198,26 @@ common:
           M104 S{EXTRUDER_PREHEAT}
           {% endif %}
 
-          # Home if needed
-          _HOME_IF_NEEDED
+          # Home strategy depends on level_bed_at_temp setting
+          {% if cfg.level_bed_at_temp %}
+              # For temperature-sensitive probes: Home X/Y first, then Z after bed is hot
+              {% if "xy" not in printer.toolhead.homed_axes %}
+                  {% if cfg.led_enabled %}
+                  _STATUS_LED STATUS=homing
+                  {% endif %}
+                  M117 Homing X/Y...
+                  G28 X Y
+              {% endif %}
+          {% else %}
+              # Not using level_bed_at_temp: full home now is fine
+              _HOME_IF_NEEDED
+          {% endif %}
 
           # ───────────────────────────────────────────────────────────────────────────
           # Phase 2: Wait for bed and optional heat soak
           # ───────────────────────────────────────────────────────────────────────────
           {% if cfg.level_bed_at_temp %}
-              # Wait for bed to reach probe temperature before leveling
+              # Wait for bed to reach probe temperature before Z home and leveling
               M117 Waiting for bed...
               M190 S{PROBE_TEMP}
 
@@ -2213,6 +2225,16 @@ common:
               # Optional dwell time for thermal equilibrium
               M117 Stabilizing bed temp...
               G4 P{cfg.bed_stabilize_dwell * 1000}
+              {% endif %}
+
+              # Now home Z with bed at temperature (critical for temp-sensitive probes)
+              # Always re-home Z here since bed temp affects probe accuracy
+              {% if "z" not in printer.toolhead.homed_axes or cfg.always_home_z %}
+                  {% if cfg.led_enabled %}
+                  _STATUS_LED STATUS=homing
+                  {% endif %}
+                  M117 Homing Z (bed at temp)...
+                  G28 Z
               {% endif %}
           {% endif %}
 

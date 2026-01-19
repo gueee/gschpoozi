@@ -351,31 +351,20 @@ function MCUBoard({
   onMcuClick: () => void;
   onPortClick: (portType: string, portId: string, portData: any) => void;
 }) {
-  const activePanel = useWizardStore((state) => state.activePanel);
-  
-  // Determine if we should show expanded board view
-  const shouldShowBoard = activePanel && (
-    activePanel.startsWith('stepper_') ||
-    activePanel === 'fans' ||
-    activePanel === 'heater_bed' ||
-    activePanel === 'hotend' ||
-    activePanel === 'probe' ||
-    activePanel === 'extruder'
-  );
-
-  if (shouldShowBoard && boardData) {
-    // Show expanded board schematic
+  // Always show the board schematic if board data is available
+  // This keeps the board visible as context while configuring
+  if (boardData) {
     return (
       <BoardSchematic
         position={position}
         boardData={boardData}
         onPortClick={onPortClick}
-        scale={1.2}
+        scale={1.0}
       />
     );
   }
 
-  // Show simple MCU representation when not in port-assignment mode
+  // Show simple MCU representation when no board is selected
   return (
     <group position={position}>
       {/* Board - upright against back wall */}
@@ -407,33 +396,20 @@ function MCUBoard({
         </mesh>
       ))}
       
-      {/* Board name label if available */}
-      {boardData && (
-        <Html position={[0, 0.08, 0.02]} center distanceFactor={4}>
-          <div className="text-[8px] text-cyan-400 bg-slate-900/80 px-1 rounded whitespace-nowrap">
-            {boardData.name}
-          </div>
-        </Html>
-      )}
+      {/* Prompt to select board */}
+      <Html position={[0, 0.08, 0.02]} center distanceFactor={4}>
+        <div className="text-[8px] text-slate-400 bg-slate-900/80 px-1 rounded whitespace-nowrap">
+          Select a mainboard
+        </div>
+      </Html>
     </group>
   );
 }
 
-// Camera controller for smooth transitions
+// Camera controller - disabled for now to not fight with user orbit controls
+// TODO: Add "Focus on Board" button that triggers one-time camera animation
 function CameraController({ targetPosition, enabled }: { targetPosition: THREE.Vector3 | null; enabled: boolean }) {
-  const { camera } = useThree();
-  const defaultPosition = useRef(new THREE.Vector3(2, 1.5, 2));
-  
-  useFrame(() => {
-    if (!enabled || !targetPosition) {
-      // Lerp back to default position
-      camera.position.lerp(defaultPosition.current, 0.02);
-    } else {
-      // Lerp to target position
-      camera.position.lerp(targetPosition, 0.05);
-    }
-  });
-  
+  // Disabled - let user control camera freely
   return null;
 }
 

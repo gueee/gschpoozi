@@ -234,9 +234,6 @@ tmc_stepper_x:
     uart_pin: {{ pins.stepper_x.uart }}
     {% endif %}
     run_current: {{ stepper_x.run_current }}
-    {% if stepper_x.homing_current %}
-    homing_current: {{ stepper_x.homing_current }}
-    {% endif %}
     interpolate: {{ stepper_x.interpolate | default(false) | lower }}
     {% if stepper_x.driver_protocol == 'spi' %}
     sense_resistor: {{ stepper_x.sense_resistor | default(0.075) }}
@@ -270,9 +267,6 @@ tmc_stepper_y:
     uart_pin: {{ pins.stepper_y.uart }}
     {% endif %}
     run_current: {{ stepper_y.run_current }}
-    {% if stepper_y.homing_current %}
-    homing_current: {{ stepper_y.homing_current }}
-    {% endif %}
     interpolate: {{ stepper_y.interpolate | default(false) | lower }}
     {% if stepper_y.driver_protocol == 'spi' %}
     sense_resistor: {{ stepper_y.sense_resistor | default(0.075) }}
@@ -667,6 +661,48 @@ safe_z_home:
     speed: {{ homing.speed | default(100) }}
     z_hop: {{ homing.z_hop | default(10) }}
     z_hop_speed: {{ homing.z_hop_speed | default(15) }}
+
+# Sensorless homing with reduced current
+sensorless_homing_override:
+  condition: "(stepper_x.endstop_type == 'sensorless' and stepper_x.homing_current) or (stepper_y.endstop_type == 'sensorless' and stepper_y.homing_current)"
+  template: |
+    [homing_override]
+    axes: xyz
+    set_position_z: 0
+    gcode:
+        G90
+        G0 Z{{ homing.z_hop | default(10) }} F{{ (homing.z_hop_speed | default(15)) * 60 }}
+        {% raw %}{% set home_all = 'X' not in params and 'Y' not in params and 'Z' not in params %}{% endraw %}
+        {% if stepper_x.endstop_type == 'sensorless' and stepper_x.homing_current %}
+        {% raw %}{% if home_all or 'X' in params %}{% endraw %}
+        SET_TMC_CURRENT STEPPER=stepper_x CURRENT={{ stepper_x.homing_current }}
+        G28 X0
+        SET_TMC_CURRENT STEPPER=stepper_x CURRENT={{ stepper_x.run_current }}
+        G4 P500
+        {% raw %}{% endif %}{% endraw %}
+        {% else %}
+        {% raw %}{% if home_all or 'X' in params %}{% endraw %}
+        G28 X0
+        {% raw %}{% endif %}{% endraw %}
+        {% endif %}
+        {% if stepper_y.endstop_type == 'sensorless' and stepper_y.homing_current %}
+        {% raw %}{% if home_all or 'Y' in params %}{% endraw %}
+        SET_TMC_CURRENT STEPPER=stepper_y CURRENT={{ stepper_y.homing_current }}
+        G28 Y0
+        SET_TMC_CURRENT STEPPER=stepper_y CURRENT={{ stepper_y.run_current }}
+        G4 P500
+        {% raw %}{% endif %}{% endraw %}
+        {% else %}
+        {% raw %}{% if home_all or 'Y' in params %}{% endraw %}
+        G28 Y0
+        {% raw %}{% endif %}{% endraw %}
+        {% endif %}
+        {% raw %}{% if home_all or 'Z' in params %}{% endraw %}
+        G90
+        G0 X{{ (printer.bed_size_x / 2) | int }} Y{{ (printer.bed_size_y / 2) | int }} F{{ (homing.speed | default(100)) * 60 }}
+        G28 Z0
+        G0 Z{{ homing.z_hop | default(10) }} F{{ (homing.z_hop_speed | default(15)) * 60 }}
+        {% raw %}{% endif %}{% endraw %}
 
 # -----------------------------------------------------------------------------
 # Bed Mesh (in Probe section - mesh is probe-dependent)

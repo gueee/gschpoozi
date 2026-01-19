@@ -50,17 +50,13 @@ interface SidebarItem {
   section?: string;
 }
 
-const SIDEBAR_ITEMS: SidebarItem[] = [
+// Base sidebar items (always shown)
+const BASE_SIDEBAR_ITEMS: SidebarItem[] = [
   // Core Components
   { id: 'mcu', name: 'Mainboard', icon: Cpu, color: 'text-cyan-400', section: 'Core' },
   { id: 'toolboard', name: 'Toolboard', icon: CircuitBoard, color: 'text-emerald-400', section: 'Core' },
   { id: 'z_config', name: 'Z Config', icon: ArrowDown, color: 'text-indigo-400', section: 'Core' },
   { id: 'tooling', name: 'Tooling', icon: Wrench, color: 'text-amber-400', section: 'Core' },
-
-  // Motion
-  { id: 'stepper_x', name: 'Stepper X', icon: Settings, color: 'text-blue-400', section: 'Motion' },
-  { id: 'stepper_y', name: 'Stepper Y', icon: Settings, color: 'text-blue-400', section: 'Motion' },
-  { id: 'stepper_z', name: 'Stepper Z', icon: Settings, color: 'text-blue-400', section: 'Motion' },
 
   // Heating
   { id: 'extruder', name: 'Extruder', icon: Settings, color: 'text-purple-400', section: 'Heating' },
@@ -75,6 +71,35 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   // Cooling
   { id: 'fans', name: 'Fans', icon: Fan, color: 'text-sky-400', section: 'Cooling' },
 ];
+
+// Build sidebar items based on kinematics
+function getSidebarItems(kinematics: string): SidebarItem[] {
+  const isAWD = kinematics === 'hybrid_corexy';
+  
+  // Motion items depend on kinematics
+  const motionItems: SidebarItem[] = [
+    { id: 'stepper_x', name: 'Stepper X', icon: Settings, color: 'text-blue-400', section: 'Motion' },
+    { id: 'stepper_y', name: 'Stepper Y', icon: Settings, color: 'text-blue-400', section: 'Motion' },
+  ];
+  
+  // Add X1 and Y1 for AWD
+  if (isAWD) {
+    motionItems.push(
+      { id: 'stepper_x1', name: 'Stepper X1', icon: Settings, color: 'text-blue-400', section: 'Motion' },
+      { id: 'stepper_y1', name: 'Stepper Y1', icon: Settings, color: 'text-blue-400', section: 'Motion' },
+    );
+  }
+  
+  motionItems.push(
+    { id: 'stepper_z', name: 'Stepper Z', icon: Settings, color: 'text-blue-400', section: 'Motion' },
+  );
+  
+  // Insert motion items after Core section
+  const coreItems = BASE_SIDEBAR_ITEMS.filter(item => item.section === 'Core');
+  const otherItems = BASE_SIDEBAR_ITEMS.filter(item => item.section !== 'Core');
+  
+  return [...coreItems, ...motionItems, ...otherItems];
+}
 
 export function Configurator() {
   const navigate = useNavigate();
@@ -278,8 +303,11 @@ export function Configurator() {
     }
   };
 
+  // Get dynamic sidebar items based on kinematics
+  const sidebarItems = getSidebarItems(kinematics);
+  
   // Group sidebar items by section
-  const sections = SIDEBAR_ITEMS.reduce((acc, item) => {
+  const sections = sidebarItems.reduce((acc, item) => {
     const section = item.section || 'Other';
     if (!acc[section]) acc[section] = [];
     acc[section].push(item);

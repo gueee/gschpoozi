@@ -58,6 +58,8 @@ export function KinematicsSelect() {
   const handleSelectKinematics = (option: KinematicsOption) => {
     setField('printer.kinematics', option.id);
     setField('printer.model', option.model);
+    // Enable AWD flag for hybrid_corexy (needed for stepper X1/Y1 config generation)
+    setField('printer.awd_enabled', option.id === 'hybrid_corexy');
     navigate('/configurator');
   };
 

@@ -6391,9 +6391,31 @@ class GschpooziWizard:
             )
             if x_offset is None or y_offset is None:
                 return
+
+            # Z offset (for non-eddy probes)
+            # Eddy probes calibrate z_offset differently
+            if probe_type not in eddy_probes:
+                current_z_offset = self.state.get("probe.z_offset", 0.0)
+                z_offset = self.ui.inputbox(
+                    "Probe Z offset (mm):\n\n"
+                    "Distance from probe trigger to nozzle tip.\n"
+                    "Negative = probe triggers ABOVE nozzle.\n\n"
+                    "Typical values:\n"
+                    "• BLTouch: -2.0 to -3.0\n"
+                    "• Inductive: -0.5 to -2.0\n"
+                    "• Klicky: -1.0 to -2.0\n\n"
+                    "Fine-tune later with PROBE_CALIBRATE.",
+                    default=str(current_z_offset) if current_z_offset else "0",
+                    title="Probe - Z Offset"
+                )
+                if z_offset is None:
+                    return
+            else:
+                z_offset = "0"
         else:
             x_offset = "0"
             y_offset = "0"
+            z_offset = "0"
 
         # Eddy probe specific settings
         serial = None
@@ -6666,6 +6688,8 @@ class GschpooziWizard:
         self.state.set("probe.probe_type", probe_type)
         self.state.set("probe.x_offset", float(x_offset or 0))
         self.state.set("probe.y_offset", float(y_offset or 0))
+        if z_offset:
+            self.state.set("probe.z_offset", float(z_offset))
 
         # Save samples configuration (non-eddy probes only)
         if samples:
@@ -6714,7 +6738,7 @@ class GschpooziWizard:
         self.state.save()
 
         # Build summary
-        summary = f"Type: {probe_type}\nOffset: X={x_offset}, Y={y_offset}"
+        summary = f"Type: {probe_type}\nOffset: X={x_offset}, Y={y_offset}, Z={z_offset}"
         if serial:
             summary += f"\nSerial: {Path(serial).name if '/' in serial else serial}"
         if homing_mode:

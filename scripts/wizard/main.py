@@ -3750,9 +3750,17 @@ class GschpooziWizard:
                 # Homing settings
                 current_homing_speed = self.state.get(f"{state_key}.homing_speed", 50)
                 homing_speed = self.ui.inputbox(
-                    f"Homing speed for {axis_upper} (mm/s):",
+                    f"Homing speed for {axis_upper} (mm/s):\n\n"
+                    "Speed at which axis moves toward endstop.\n\n"
+                    "By endstop type:\n"
+                    "• Physical switch: 50-100 mm/s (safe)\n"
+                    "• Sensorless: 40-80 mm/s (needs tuning)\n\n"
+                    "Too fast: may damage switch or miss trigger\n"
+                    "Too slow: homing takes forever",
                     default=str(current_homing_speed),
-                    title=f"Stepper {axis_upper} - Homing Speed"
+                    title=f"Stepper {axis_upper} - Homing Speed",
+                    height=14,
+                    width=55
                 )
                 if homing_speed is None:
                     return
@@ -3766,9 +3774,16 @@ class GschpooziWizard:
                 current_retract = self.state.get(f"{state_key}.homing_retract_dist", 5.0 if endstop_type == "physical" else 0.0)
                 default_retract = "0" if endstop_type == "sensorless" else str(int(current_retract))
                 homing_retract_dist = self.ui.inputbox(
-                    f"Homing retract distance for {axis_upper} (mm):",
+                    f"Homing retract distance for {axis_upper} (mm):\n\n"
+                    "Distance to back off after first homing touch.\n"
+                    "Allows second, slower homing for precision.\n\n"
+                    "• Physical endstop: 5mm (typical)\n"
+                    "• Sensorless homing: 0mm (no second touch)\n\n"
+                    "0 = no retract (single touch homing)",
                     default=default_retract,
-                    title=f"Stepper {axis_upper} - Homing Retract"
+                    title=f"Stepper {axis_upper} - Homing Retract",
+                    height=14,
+                    width=55
                 )
                 if homing_retract_dist is None:
                     return
@@ -3782,15 +3797,23 @@ class GschpooziWizard:
                 second_homing_speed = None
                 current_has_second = self.state.get(f"{state_key}.second_homing_speed") is not None
                 if self.ui.yesno(
-                    f"Use second (slower) homing speed for {axis_upper}?",
+                    f"Use second (slower) homing speed for {axis_upper}?\n\n"
+                    "After first touch, back off and home again slowly\n"
+                    "for more accurate position. Recommended for switches.",
                     title=f"Stepper {axis_upper} - Second Homing Speed",
                     default_no=not current_has_second
                 ):
                     current_second = self.state.get(f"{state_key}.second_homing_speed", 10)
                     second_homing_speed = self.ui.inputbox(
-                        f"Second homing speed for {axis_upper} (mm/s):",
+                        f"Second homing speed for {axis_upper} (mm/s):\n\n"
+                        "Slower speed for the second homing move.\n"
+                        "Used after retract for precise positioning.\n\n"
+                        "Typical: 10-25 mm/s (1/4 to 1/2 of first speed)\n"
+                        "Lower = more precise but slower homing",
                         default=str(current_second),
-                        title=f"Stepper {axis_upper} - Second Homing Speed"
+                        title=f"Stepper {axis_upper} - Second Homing Speed",
+                        height=12,
+                        width=55
                     )
                     if second_homing_speed is None:
                         return
@@ -3978,10 +4001,19 @@ class GschpooziWizard:
         default_current = "1.7" if driver_type == "TMC5160" else str(current_current)
         run_current = self.ui.inputbox(
             f"TMC run current for {axis_upper} (A):\n\n"
-            "Check your motor datasheet for max current.\n"
-            "Rule of thumb: 70-85% of rated current.",
+            "Motor current during movement. Higher = more torque\n"
+            "but also more heat. Use 70-85% of motor's rated current.\n\n"
+            "Common X/Y motors:\n"
+            "• NEMA17 (slim): 0.8-1.0A\n"
+            "• NEMA17 (standard): 1.0-1.4A\n"
+            "• NEMA17 (high torque): 1.4-1.8A\n"
+            "• NEMA23: 1.5-2.5A (requires TMC5160)\n\n"
+            "Too low: skipped steps, layer shifts\n"
+            "Too high: motor overheating, driver shutdown",
             default=default_current,
-            title=f"Stepper {axis_upper} - Run Current"
+            title=f"Stepper {axis_upper} - Run Current",
+            height=20,
+            width=60
         )
         if run_current is None:
             return
@@ -3996,10 +4028,19 @@ class GschpooziWizard:
         current_hold = self.state.get(f"{state_key}.hold_current", "")
         hold_current = self.ui.inputbox(
             f"TMC hold current for {axis_upper} (A):\n\n"
-            "Current when motor is idle. Leave empty to use run_current.\n"
-            "Typical: 50-70% of run_current (reduces heat).",
+            "Current when motor is stationary (holding position).\n"
+            "Lower = less heat, but may allow slight drift.\n\n"
+            "Leave empty to use run_current (full holding power).\n\n"
+            "Typical values:\n"
+            "• Empty = same as run_current (safest)\n"
+            "• 0.5-0.7 = reduced heat, still holds well\n"
+            "• 0.3-0.5 = minimal heat (CoreXY only)\n\n"
+            "Note: For bed-slingers, X may need higher hold\n"
+            "to prevent bed drift during Y-only moves.",
             default=str(current_hold) if current_hold else "",
-            title=f"Stepper {axis_upper} - Hold Current"
+            title=f"Stepper {axis_upper} - Hold Current",
+            height=18,
+            width=60
         )
         if hold_current is None:
             return
@@ -4018,15 +4059,19 @@ class GschpooziWizard:
         current_stealth = self.state.get(f"{state_key}.stealthchop_threshold", "")
         stealthchop = self.ui.inputbox(
             f"StealthChop threshold for {axis_upper} (mm/s):\n\n"
-            "Velocity below which stealthChop (quiet) is used.\n"
-            "Above this velocity, spreadCycle (more torque) is used.\n\n"
-            "Common values:\n"
-            "• 0 = always spreadCycle (noisy, max torque)\n"
-            "• 100-200 = quiet at low speed, torque at high speed\n"
-            "• 999999 = always stealthChop (quietest)\n\n"
-            "Leave empty to disable (spreadCycle only).",
+            "Speed below which stealthChop (quiet mode) is active.\n"
+            "Above this speed, spreadCycle (torque mode) kicks in.\n\n"
+            "Recommendations:\n"
+            "• Empty/0 = spreadCycle only (max torque, louder)\n"
+            "• 100 = quiet homing/slow moves, torque for prints\n"
+            "• 200 = good balance for most printers\n"
+            "• 999999 = always quiet (may lose steps at high speed)\n\n"
+            "For sensorless homing: use 0 or low value to ensure\n"
+            "spreadCycle is active during homing (better StallGuard).",
             default=str(current_stealth) if current_stealth else "",
-            title=f"Stepper {axis_upper} - StealthChop"
+            title=f"Stepper {axis_upper} - StealthChop",
+            height=18,
+            width=65
         )
         if stealthchop is None:
             return
@@ -4336,9 +4381,16 @@ class GschpooziWizard:
             current_homing_speed = self.state.get(f"{state_key}.homing_speed", 50)
             homing_speed = self.ui.inputbox(
                 f"Homing speed for {axis_upper} (mm/s):\n\n"
-                "(Default: 50-80 for X/Y)",
+                "Speed at which axis moves toward endstop.\n\n"
+                "By endstop type:\n"
+                "• Physical switch: 50-100 mm/s (safe)\n"
+                "• Sensorless: 40-80 mm/s (needs tuning)\n\n"
+                "Too fast: may damage switch or miss trigger\n"
+                "Too slow: homing takes forever",
                 default=str(current_homing_speed),
-                title=f"Stepper {axis_upper} - Homing Speed"
+                title=f"Stepper {axis_upper} - Homing Speed",
+                height=14,
+                width=55
             )
             if homing_speed is None:
                 return
@@ -4353,9 +4405,15 @@ class GschpooziWizard:
             default_retract = "0" if endstop_type == "sensorless" else "5"
             homing_retract_dist = self.ui.inputbox(
                 f"Homing retract distance for {axis_upper} (mm):\n\n"
-                f"(0 for sensorless, 5 for physical - default: {default_retract})",
+                "Distance to back off after first homing touch.\n"
+                "Allows second, slower homing for precision.\n\n"
+                "• Physical endstop: 5mm (typical)\n"
+                "• Sensorless homing: 0mm (no second touch)\n\n"
+                "0 = no retract (single touch homing)",
                 default=str(current_retract),
-                title=f"Stepper {axis_upper} - Homing Retract"
+                title=f"Stepper {axis_upper} - Homing Retract",
+                height=14,
+                width=55
             )
             if homing_retract_dist is None:
                 return
@@ -4369,16 +4427,23 @@ class GschpooziWizard:
             # Optional second homing speed - check if already configured
             current_has_second = self.state.get(f"{state_key}.second_homing_speed") is not None
             if self.ui.yesno(
-                f"Use second (slower) homing speed for {axis_upper}?",
+                f"Use second (slower) homing speed for {axis_upper}?\n\n"
+                "After first touch, back off and home again slowly\n"
+                "for more accurate position. Recommended for switches.",
                 title=f"Stepper {axis_upper} - Second Homing Speed",
                 default_no=not current_has_second
             ):
                 current_second = self.state.get(f"{state_key}.second_homing_speed", 10)
                 second_homing_speed = self.ui.inputbox(
                     f"Second homing speed for {axis_upper} (mm/s):\n\n"
-                    "(Default: 10-20)",
+                    "Slower speed for the second homing move.\n"
+                    "Used after retract for precise positioning.\n\n"
+                    "Typical: 10-25 mm/s (1/4 to 1/2 of first speed)\n"
+                    "Lower = more precise but slower homing",
                     default=str(current_second),
-                    title=f"Stepper {axis_upper} - Second Homing Speed"
+                    title=f"Stepper {axis_upper} - Second Homing Speed",
+                    height=12,
+                    width=55
                 )
                 if second_homing_speed is None:
                     return
@@ -4586,9 +4651,19 @@ class GschpooziWizard:
 
         # Current
         run_current = self.ui.inputbox(
-            "TMC run current for Z (A):",
+            "TMC run current for Z (A):\n\n"
+            "Z motors often need less current than X/Y because\n"
+            "they fight gravity, not inertia.\n\n"
+            "Typical Z motors:\n"
+            "• NEMA17 (leadscrew): 0.6-1.0A\n"
+            "• NEMA17 (belted Z): 0.8-1.2A\n"
+            "• Multi-Z setups: same current for all Z motors\n\n"
+            "Too low: Z drops when power is cut\n"
+            "Too high: excessive heat, no benefit",
             default=str(current_run_current),
-            title="Z Axis - Driver"
+            title="Z Axis - Driver",
+            height=16,
+            width=55
         )
         if run_current is None:
             return
@@ -4597,10 +4672,15 @@ class GschpooziWizard:
         current_hold = self.state.get("stepper_z.hold_current", "")
         hold_current = self.ui.inputbox(
             "TMC hold current for Z (A):\n\n"
-            "Current when motor is idle. Leave empty to use run_current.\n"
-            "Typical: 50-70% of run_current (reduces heat).",
+            "Important for Z: prevents bed from dropping!\n\n"
+            "• Leadscrew Z: can use lower hold (screw is self-locking)\n"
+            "• Belted Z: needs higher hold (no self-locking)\n\n"
+            "Leave empty = use run_current (safest for belted Z)\n"
+            "0.4-0.6A = OK for leadscrew Z (reduces heat)",
             default=str(current_hold) if current_hold else "",
-            title="Z Axis - Hold Current"
+            title="Z Axis - Hold Current",
+            height=14,
+            width=60
         )
         if hold_current is None:
             return
@@ -4615,15 +4695,19 @@ class GschpooziWizard:
         current_stealth = self.state.get("stepper_z.stealthchop_threshold", "")
         stealthchop = self.ui.inputbox(
             "StealthChop threshold for Z (mm/s):\n\n"
-            "Velocity below which stealthChop (quiet) is used.\n"
-            "Above this velocity, spreadCycle (more torque) is used.\n\n"
-            "Common values:\n"
-            "• 0 = always spreadCycle (noisy, max torque)\n"
-            "• 100-200 = quiet at low speed, torque at high speed\n"
-            "• 999999 = always stealthChop (quietest)\n\n"
-            "Leave empty to disable (spreadCycle only).",
+            "Z axis typically benefits from stealthChop:\n"
+            "• Z moves are slow (bed mesh, z-hop)\n"
+            "• Noise reduction is very noticeable\n"
+            "• Less torque demand than X/Y\n\n"
+            "Recommended:\n"
+            "• 999999 = always quiet (safe for most Z setups)\n"
+            "• 30-50 = quiet during mesh, torque for fast travel\n"
+            "• Empty/0 = spreadCycle only (max torque)\n\n"
+            "Note: Z typically doesn't need sensorless homing.",
             default=str(current_stealth) if current_stealth else "",
-            title="Z Axis - StealthChop"
+            title="Z Axis - StealthChop",
+            height=18,
+            width=60
         )
         if stealthchop is None:
             return
@@ -4974,9 +5058,20 @@ class GschpooziWizard:
         current_run = self.state.get("extruder.run_current", 0.6)
         run_current = self.ui.inputbox(
             "TMC run current for extruder (A):\n\n"
-            "Typical: 0.4-0.8A for most extruder motors.",
+            "Extruder motors are typically small pancake motors\n"
+            "that require less current than X/Y/Z.\n\n"
+            "Common extruders:\n"
+            "• Bondtech LGX/LGX Lite: 0.5-0.65A\n"
+            "• Orbiter v2: 0.5-0.6A\n"
+            "• Sherpa Mini: 0.35-0.5A\n"
+            "• BMG/Titan: 0.6-0.8A\n"
+            "• Standard NEMA17: 0.6-0.8A\n\n"
+            "Too high: motor and driver overheat\n"
+            "Too low: skipped steps, under-extrusion",
             default=str(current_run),
-            title="Extruder Motor - Run Current"
+            title="Extruder Motor - Run Current",
+            height=18,
+            width=55
         )
         if run_current is None:
             return
@@ -4989,10 +5084,18 @@ class GschpooziWizard:
         current_hold = self.state.get("extruder.hold_current", "")
         hold_current = self.ui.inputbox(
             "TMC hold current for extruder (A):\n\n"
-            "Current when motor is idle. Leave empty to use run_current.\n"
-            "Typical: 50-70% of run_current (reduces heat).",
+            "Current when extruder is idle (not extruding).\n"
+            "Extruders often don't need much hold current.\n\n"
+            "Recommendations:\n"
+            "• Empty = same as run_current\n"
+            "• 0.2-0.3A = good for most setups (reduces heat)\n"
+            "• 0A not recommended (filament can slip)\n\n"
+            "Note: Geared extruders (Orbiter, LGX) can use lower\n"
+            "hold current due to gear reduction providing grip.",
             default=str(current_hold) if current_hold else "",
-            title="Extruder Motor - Hold Current"
+            title="Extruder Motor - Hold Current",
+            height=16,
+            width=60
         )
         if hold_current is None:
             return
@@ -5007,13 +5110,19 @@ class GschpooziWizard:
         current_stealth = self.state.get("extruder.stealthchop_threshold", "")
         stealthchop = self.ui.inputbox(
             "StealthChop threshold for extruder (mm/s):\n\n"
-            "Velocity below which stealthChop (quiet) is used.\n\n"
-            "Common values:\n"
-            "• 0 = always spreadCycle (noisy, max torque)\n"
-            "• 999999 = always stealthChop (quietest)\n\n"
-            "Leave empty to disable (spreadCycle only).",
+            "StealthChop can be tricky for extruders:\n"
+            "• Quieter operation during retractions\n"
+            "• But may cause extrusion inconsistencies\n\n"
+            "Recommendations:\n"
+            "• Empty/0 = spreadCycle only (most reliable)\n"
+            "• 30-60 = quiet during slow extrusion\n"
+            "• 999999 = always quiet (test for artifacts!)\n\n"
+            "If you notice inconsistent extrusion, banding, or\n"
+            "poor layer adhesion, try disabling stealthChop.",
             default=str(current_stealth) if current_stealth else "",
-            title="Extruder Motor - StealthChop"
+            title="Extruder Motor - StealthChop",
+            height=18,
+            width=60
         )
         if stealthchop is None:
             return
@@ -5165,17 +5274,34 @@ class GschpooziWizard:
 
         # Temperature settings
         min_temp = self.ui.inputbox(
-            "Minimum hotend temperature (°C):",
+            "Minimum hotend temperature (°C):\n\n"
+            "Thermistor fault detection threshold.\n"
+            "Klipper errors if reading below this value.\n\n"
+            "• 0 = Standard (recommended)\n"
+            "• -10 to -20 = For cold environments\n\n"
+            "Warning: Setting too low disables thermal runaway\n"
+            "protection. Keep at 0 unless you have a reason.",
             default=str(current_min_temp),
-            title="Hotend - Min Temp"
+            title="Hotend - Min Temp",
+            height=14,
+            width=55
         )
         if min_temp is None:
             return
 
         max_temp = self.ui.inputbox(
-            "Maximum hotend temperature (°C):",
+            "Maximum hotend temperature (°C):\n\n"
+            "SAFETY CRITICAL - Do not exceed hardware limits!\n\n"
+            "Based on your heatbreak/hotend type:\n"
+            "• PTFE-lined (Creality stock): 240-260°C MAX\n"
+            "• All-metal (Rapido, Dragon): 285-300°C\n"
+            "• High-temp (Mosquito): 450°C (PT1000 needed)\n\n"
+            "Setting too high can melt PTFE, release toxic fumes,\n"
+            "or damage the hotend. Check your hotend specs!",
             default=str(current_max_temp),
-            title="Hotend - Max Temp"
+            title="Hotend - Max Temp",
+            height=16,
+            width=60
         )
         if max_temp is None:
             return
@@ -5655,18 +5781,34 @@ class GschpooziWizard:
 
         # === 2.7.3: Temperature Settings ===
         min_temp = self.ui.inputbox(
-            "Minimum bed temperature (°C):",
+            "Minimum bed temperature (°C):\n\n"
+            "Thermistor fault detection threshold.\n"
+            "Klipper errors if reading below this value.\n\n"
+            "• 0 = Standard (recommended)\n"
+            "• -10 = For cold environments/garages\n\n"
+            "Don't go lower than needed - it's a safety feature.",
             default=str(current_min_temp),
-            title="Heated Bed - Min Temp"
+            title="Heated Bed - Min Temp",
+            height=14,
+            width=55
         )
         if min_temp is None:
             return
 
         max_temp = self.ui.inputbox(
             "Maximum bed temperature (°C):\n\n"
-            "(Typical max for heated beds is 120°C)",
+            "Based on your bed heater and surface:\n"
+            "• Creality stock bed: 100-110°C\n"
+            "• Silicone heater pad: 110-120°C\n"
+            "• Keenovo/high-power: 120-130°C\n"
+            "• Garolite/high-temp: up to 150°C\n\n"
+            "Common printing temps:\n"
+            "• PLA: 50-60°C  • PETG: 70-85°C\n"
+            "• ABS: 100-110°C  • Nylon: 80-100°C",
             default=str(current_max_temp),
-            title="Heated Bed - Max Temp"
+            title="Heated Bed - Max Temp",
+            height=16,
+            width=55
         )
         if max_temp is None:
             return
@@ -6664,13 +6806,18 @@ class GschpooziWizard:
             current_samples = self.state.get("probe.samples", 3)
             samples = self.ui.inputbox(
                 "Probe samples per point:\n\n"
-                "How many times to probe at each point.\n"
-                "Higher = more accurate but slower.\n\n"
-                "• 1 = Fast (good for BLTouch)\n"
-                "• 2-3 = Balanced\n"
-                "• 5 = High precision (inductive probes)",
+                "How many times to probe at each mesh point.\n"
+                "Result is averaged for better accuracy.\n\n"
+                "By probe type:\n"
+                "• BLTouch: 1 (it's slow, and quite consistent)\n"
+                "• Inductive: 2-3 (fast, slight variation)\n"
+                "• Klicky/Tap: 2-3 (very consistent)\n\n"
+                "For a 49-point mesh (7x7):\n"
+                "  1 sample = 49 probes, 3 samples = 147 probes",
                 default=str(current_samples),
-                title="Probe - Samples"
+                title="Probe - Samples",
+                height=16,
+                width=55
             )
             if samples is None:
                 return
@@ -6678,11 +6825,18 @@ class GschpooziWizard:
             current_tolerance = self.state.get("probe.samples_tolerance", 0.006)
             samples_tolerance = self.ui.inputbox(
                 "Samples tolerance (mm):\n\n"
-                "Max deviation between samples before retry.\n"
-                "Smaller = stricter (may retry more often).\n\n"
-                "Typical: 0.006 (6 microns)",
+                "If samples differ by more than this, Klipper retries.\n"
+                "Catches bad readings from probe bounce or noise.\n\n"
+                "Recommended:\n"
+                "• 0.006 = Strict (default, retries for 6 micron diff)\n"
+                "• 0.01 = Relaxed (for less consistent probes)\n"
+                "• 0.02 = Loose (rarely retries)\n\n"
+                "Too strict: constant retries, slow meshing\n"
+                "Too loose: inconsistent mesh data",
                 default=str(current_tolerance),
-                title="Probe - Tolerance"
+                title="Probe - Tolerance",
+                height=16,
+                width=60
             )
             if samples_tolerance is None:
                 return
@@ -6819,10 +6973,17 @@ class GschpooziWizard:
         current_probe_count = self.state.get("probe.bed_mesh.probe_count", default_probe_count) or default_probe_count
         probe_count = self.ui.inputbox(
             f"Mesh probe count (X, Y):\n\n"
-            f"{'Eddy probes are fast - higher counts recommended.' if is_eddy_probe else 'Higher values = more accurate but slower.'}\n"
-            f"Default for {probe_type}: {default_probe_count}",
+            "Grid size for bed mesh (points in X and Y direction).\n"
+            "Total points = X × Y (e.g., 5,5 = 25 points)\n\n"
+            f"{'Eddy probes scan continuously - use high counts!' if is_eddy_probe else 'By probe speed:'}\n"
+            f"{'• Eddy/Beacon: 9,9 to 20,20 (fast scanning)' if is_eddy_probe else '• BLTouch: 3,3 to 5,5 (slow per-point)'}\n"
+            f"{'• Higher = smoother mesh' if is_eddy_probe else '• Inductive: 5,5 to 7,7'}\n\n"
+            "More points = better compensation but longer mesh time.\n"
+            f"Suggested for {probe_type}: {default_probe_count}",
             default=current_probe_count,
-            title="Bed Mesh - Probe Count"
+            title="Bed Mesh - Probe Count",
+            height=18,
+            width=60
         )
         if probe_count is None:
             return
@@ -6835,20 +6996,32 @@ class GschpooziWizard:
             # Eddy probes: prompt for mesh boundaries since rapid scanning needs precise bounds
             mesh_min = self.ui.inputbox(
                 "Mesh minimum (X, Y):\n\n"
-                "Start of scan area. Use 'auto' for calculated bounds.\n"
-                f"Auto would be: {default_mesh_min}",
+                "Lower-left corner of the mesh area (in mm).\n"
+                "Must account for probe offset from nozzle!\n\n"
+                "The auto-calculated value includes:\n"
+                "• Probe X/Y offset + 10mm safety margin\n\n"
+                f"Calculated: {default_mesh_min}\n"
+                "(Adjust if you want to probe closer to bed edges)",
                 default=current_mesh_min if current_mesh_min != "auto" else default_mesh_min,
-                title="Bed Mesh - Mesh Min"
+                title="Bed Mesh - Mesh Min",
+                height=14,
+                width=55
             )
             if mesh_min is None:
                 return
 
             mesh_max = self.ui.inputbox(
                 "Mesh maximum (X, Y):\n\n"
-                "End of scan area. Use 'auto' for calculated bounds.\n"
-                f"Auto would be: {default_mesh_max}",
+                "Upper-right corner of the mesh area (in mm).\n"
+                "Must stay within bed minus probe offset!\n\n"
+                "The auto-calculated value includes:\n"
+                "• Bed size - probe offset - 10mm safety margin\n\n"
+                f"Calculated: {default_mesh_max}\n"
+                "(Adjust if you want to probe closer to bed edges)",
                 default=current_mesh_max if current_mesh_max != "auto" else default_mesh_max,
-                title="Bed Mesh - Mesh Max"
+                title="Bed Mesh - Mesh Max",
+                height=14,
+                width=55
             )
             if mesh_max is None:
                 return
@@ -10652,9 +10825,17 @@ read -r _
                             pass
                     ll = self.ui.inputbox(
                         "Load length (mm):\n\n"
-                        "Bowden: 100+, Direct drive: 50-80",
+                        "Distance to move filament from extruder entry\n"
+                        "to just before the melt zone.\n\n"
+                        "By setup type:\n"
+                        "• Direct drive: 50-80mm\n"
+                        "• Short bowden (Voron): 80-120mm\n"
+                        "• Full bowden (Ender 3): 400-600mm\n\n"
+                        "Measure your bowden tube length if unsure.",
                         default=str(load_len),
                         title="Load Length",
+                        height=16,
+                        width=55
                     )
                     if ll:
                         try:
@@ -10663,9 +10844,15 @@ read -r _
                             pass
                     ls = self.ui.inputbox(
                         "Load speed (mm/s):\n\n"
-                        "Speed for loading move. Typical: 5",
+                        "Speed for the fast load move (before priming).\n\n"
+                        "• 3-5 mm/s = Safe for most setups\n"
+                        "• 10 mm/s = Fast (may skip if extruder weak)\n\n"
+                        "This is the fast move through the bowden,\n"
+                        "not the slow priming into the hotend.",
                         default=str(load_speed_mm_s),
                         title="Load Speed",
+                        height=14,
+                        width=55
                     )
                     if ls:
                         try:
@@ -10676,10 +10863,17 @@ read -r _
 
                     lp = self.ui.inputbox(
                         "Load prime length (mm):\n\n"
-                        "Slow extrusion after fast load to prime nozzle.\n"
-                        "Direct drive: 20-30mm, Bowden: 30-50mm",
+                        "SLOW extrusion through the hotend to prime.\n"
+                        "This is ADDED to load length (total = load + prime).\n\n"
+                        "By setup type:\n"
+                        "• Direct drive: 20-30mm\n"
+                        "• Bowden: 30-50mm (more ooze to clear)\n\n"
+                        "Too short: filament not primed, first lines fail\n"
+                        "Too long: wastes filament, long wait time",
                         default=str(load_prime),
                         title="Load Prime",
+                        height=16,
+                        width=60
                     )
                     if lp:
                         try:
@@ -10689,9 +10883,15 @@ read -r _
 
                     lps = self.ui.inputbox(
                         "Load prime speed (mm/s):\n\n"
-                        "Slow speed for priming. Typical: 2.5",
+                        "Speed for the slow priming extrusion.\n"
+                        "Must be slow enough for plastic to melt!\n\n"
+                        "• 2-3 mm/s = Standard\n"
+                        "• 1-2 mm/s = High-flow or fast-melt hotend\n\n"
+                        "Too fast: grinding, clogs, unmelted filament",
                         default=str(load_prime_speed),
                         title="Load Prime Speed",
+                        height=14,
+                        width=55
                     )
                     if lps:
                         try:
@@ -10705,9 +10905,15 @@ read -r _
 
                 elif choice == "unload":
                     ul = self.ui.inputbox(
-                        "Unload length (mm):\n\nShould match load length.",
+                        "Unload length (mm):\n\n"
+                        "Distance to retract filament out of extruder.\n"
+                        "Should match load_length + a bit extra.\n\n"
+                        "Same as your load length typically works.\n"
+                        "Add 10-20mm if filament doesn't fully exit.",
                         default=str(unload_len),
                         title="Unload Length",
+                        height=12,
+                        width=55
                     )
                     if ul:
                         try:
@@ -10716,9 +10922,15 @@ read -r _
                             pass
                     us = self.ui.inputbox(
                         "Unload speed (mm/s):\n\n"
-                        "Speed for unload move. Typical: 30",
+                        "Speed for retracting filament out.\n"
+                        "Can be faster than load (pulling is easier).\n\n"
+                        "• 20-30 mm/s = Standard\n"
+                        "• 40-60 mm/s = Fast (may stretch filament)\n\n"
+                        "Too fast: stretched filament, grinding",
                         default=str(unload_speed_mm_s),
                         title="Unload Speed",
+                        height=14,
+                        width=55
                     )
                     if us:
                         try:

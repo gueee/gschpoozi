@@ -567,7 +567,7 @@ probe:
     pin: {{ pins.probe.pin }}
     x_offset: {{ probe.x_offset | default(0) }}
     y_offset: {{ probe.y_offset | default(0) }}
-    #z_offset: 0  # Calibrate with PROBE_CALIBRATE
+    z_offset: 0  # Calibrate with PROBE_CALIBRATE, stored in SAVE_CONFIG
     speed: {{ probe.speed | default(5) }}
     samples: {{ probe.samples | default(3) }}
     sample_retract_dist: {{ probe.sample_retract_dist | default(2) }}
@@ -583,7 +583,7 @@ bltouch:
     control_pin: {{ pins.probe.control }}
     x_offset: {{ probe.x_offset | default(0) }}
     y_offset: {{ probe.y_offset | default(0) }}
-    #z_offset: 0  # Calibrate with PROBE_CALIBRATE
+    z_offset: 0  # Calibrate with PROBE_CALIBRATE, stored in SAVE_CONFIG
     speed: {{ probe.speed | default(5) }}
     samples: {{ probe.samples | default(3) }}
     sample_retract_dist: {{ probe.sample_retract_dist | default(3) }}

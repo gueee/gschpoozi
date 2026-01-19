@@ -276,7 +276,6 @@ export function BoardSchematic({ position, boardData, onPortClick, scale = 1 }: 
           className="bg-slate-900/95 border border-slate-700 rounded-lg p-2 shadow-xl"
           style={{ 
             fontSize: `${10 * scale}px`,
-            transform: 'rotateY(180deg)', // Flip to face camera
           }}
         >
           {/* Board title */}

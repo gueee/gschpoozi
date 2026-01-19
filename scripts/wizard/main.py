@@ -6015,6 +6015,52 @@ class GschpooziWizard:
             else:
                 location = "mainboard"
 
+        # Pin configuration for non-eddy probes
+        sensor_pin = None
+        control_pin = None
+        probe_pin = None
+
+        if probe_type not in eddy_probes and location:
+            if probe_type == "bltouch":
+                # BLTouch needs sensor_pin and control_pin
+                current_sensor = self.state.get("probe.sensor_pin", "")
+                sensor_pin = self._pick_pin_from_known_ports(
+                    location=location,
+                    default_pin=current_sensor,
+                    title="BLTouch - Sensor Pin",
+                    prompt="Select BLTouch sensor pin (probe signal):",
+                    preferred_groups=["probe_ports", "endstop_ports", "misc_ports"],
+                )
+                if sensor_pin is None:
+                    return
+
+                current_control = self.state.get("probe.control_pin", "")
+                control_pin = self._pick_pin_from_known_ports(
+                    location=location,
+                    default_pin=current_control,
+                    title="BLTouch - Control Pin",
+                    prompt="Select BLTouch control pin (servo signal):",
+                    preferred_groups=["misc_ports", "probe_ports"],
+                )
+                if control_pin is None:
+                    return
+
+            elif probe_type in ["inductive", "klicky", "tap"]:
+                # Single probe pin - check location-specific key
+                if location == "toolboard":
+                    current_probe_pin = self.state.get("probe.probe_pin_toolboard", "")
+                else:
+                    current_probe_pin = self.state.get("probe.probe_pin_mainboard", "")
+                probe_pin = self._pick_pin_from_known_ports(
+                    location=location,
+                    default_pin=current_probe_pin,
+                    title="Probe - Pin",
+                    prompt=f"Select {probe_type} probe pin:",
+                    preferred_groups=["probe_ports", "endstop_ports", "misc_ports"],
+                )
+                if probe_pin is None:
+                    return
+
         # Save
         self.state.set("probe.probe_type", probe_type)
         self.state.set("probe.x_offset", float(x_offset or 0))
@@ -6043,6 +6089,20 @@ class GschpooziWizard:
             self.state.set("probe.bed_mesh.mesh_runs", int(mesh_runs))
         if location:
             self.state.set("probe.location", location)
+
+        # Save probe pins
+        if sensor_pin:
+            self.state.set("probe.sensor_pin", sensor_pin)
+        if control_pin:
+            self.state.set("probe.control_pin", control_pin)
+        if probe_pin:
+            # Generator expects probe_pin_mainboard or probe_pin_toolboard
+            if location == "toolboard":
+                self.state.set("probe.probe_pin_toolboard", probe_pin)
+                self.state.delete("probe.probe_pin_mainboard")
+            else:
+                self.state.set("probe.probe_pin_mainboard", probe_pin)
+                self.state.delete("probe.probe_pin_toolboard")
 
         self.state.save()
 
@@ -8567,7 +8627,7 @@ read -r _
         # Check for gcode_shell_command extension (required for shaper graph commands)
         def _gcode_shell_command_install_status() -> Tuple[bool, str]:
             """Check if gcode_shell_command extension is installed.
-            
+
             Always uses extras/ directory (standard location).
             Also checks for duplicates in plugins/ and automatically removes them.
             """
@@ -8577,18 +8637,18 @@ read -r _
                 plugins_dir = base / "plugins"
                 extras_file = extras_dir / "gcode_shell_command.py"
                 plugins_file = plugins_dir / "gcode_shell_command.py"
-                
+
                 # Auto-fix: Remove duplicate from plugins/ if it exists (prevents "found in both" error)
                 if plugins_file.exists():
                     try:
                         plugins_file.unlink()
                     except Exception:
                         pass  # Best effort, continue even if removal fails
-                
+
                 # Standard location: extras/
                 if extras_file.exists():
                     return True, str(extras_dir)
-                
+
                 return False, str(extras_dir)
             except Exception:
                 return False, str(Path.home() / "klipper" / "klippy" / "extras")

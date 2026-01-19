@@ -27,8 +27,10 @@ python3 .cursor/scripts/validate-movement.py path/to/config.cfg
 bash .cursor/scripts/validate-pins.sh path/to/config.cfg
 
 # Run tests
-python3 scripts/wizard/test_state.py
-python3 scripts/generator/test_gen.py
+python3 test_state.py              # Test wizard state management
+python3 test_gen.py                # Test config generation
+python3 test_pin_parity.py         # Test pin assignment parity
+python3 -m pytest tests/           # Run full test suite
 ```
 
 ## Architecture
@@ -39,7 +41,7 @@ User → [configure.sh] → [setup-hardware.py] → [generate-config.py] → Out
     .wizard-state      .hardware-state.json      templates/*.json
 ```
 
-- **configure.sh** - KIAUH-style interactive menu, stores selections in state files
+- **configure.sh** - Bootstrap script that checks dependencies and launches Python wizard
 - **setup-hardware.py** - Port/pin assignment with conflict detection
 - **generate-config.py** - Merges templates to produce Klipper configs
 - **templates/** - JSON definitions for boards (28), toolboards (17), probes (9), extruders, kinematics
@@ -66,7 +68,17 @@ User → [configure.sh] → [setup-hardware.py] → [generate-config.py] → Out
 
 **Python modules:**
 - `scripts/wizard/` - Interactive UI (WizardUI, WizardState, PinManager classes)
+  - `main.py` - Entry point, `GschpooziWizard` class
+  - `ui.py` - Whiptail-based terminal UI
+  - `state.py` - Persistent wizard state management
+  - `pins.py` - Pin conflict detection and capability filtering
 - `scripts/generator/` - Config generation (ConfigGenerator, TemplateRenderer classes)
+  - `generator.py` - Main config file generator
+  - `templates.py` - Template loading and rendering
+
+**Template system:**
+- `schema/config-sections.yaml` - Jinja2 templates for all Klipper config sections
+- Template variables come from wizard state and are rendered with Jinja2
 
 ## Critical Klipper Syntax Rules
 

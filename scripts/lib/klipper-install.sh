@@ -712,22 +712,22 @@ prompt_webui_port() {
     local ui_name="$1"  # mainsail or fluidd
     local other_ui=""
     local other_port=""
-    
+
     # Determine the other UI
     if [[ "$ui_name" == "mainsail" ]]; then
         other_ui="fluidd"
     else
         other_ui="mainsail"
     fi
-    
+
     # Get the other UI's port if installed
     if [[ -f "/etc/nginx/sites-enabled/${other_ui}" ]]; then
         other_port=$(grep -oP 'listen \K[0-9]+' "/etc/nginx/sites-available/${other_ui}" 2>/dev/null | head -1)
     fi
-    
+
     local port=""
     local valid=false
-    
+
     while [[ "$valid" == "false" ]]; do
         echo ""
         echo -e "${YELLOW}Port selection for ${ui_name^}:${NC}"
@@ -736,7 +736,7 @@ prompt_webui_port() {
         fi
         echo -e "  Enter port number (default: 80 if ${other_ui^} not installed, 81 otherwise):"
         read -p "  Port: " port
-        
+
         # Use default if empty
         if [[ -z "$port" ]]; then
             if [[ -n "$other_port" ]] && [[ "$other_port" == "80" ]]; then
@@ -748,34 +748,34 @@ prompt_webui_port() {
             valid=true
             break
         fi
-        
+
         # Validate port is a number
         if ! [[ "$port" =~ ^[0-9]+$ ]]; then
             error_msg "Port must be a number"
             continue
         fi
-        
+
         # Validate port range
         if [[ "$port" -lt 1 ]] || [[ "$port" -gt 65535 ]]; then
             error_msg "Port must be between 1 and 65535"
             continue
         fi
-        
+
         # Check if port is already in use
         if is_port_in_use "$port"; then
             error_msg "Port ${port} is already in use by another nginx site"
             continue
         fi
-        
+
         # Check if port conflicts with other UI
         if [[ -n "$other_port" ]] && [[ "$port" == "$other_port" ]]; then
             error_msg "Port ${port} is already used by ${other_ui^}"
             continue
         fi
-        
+
         valid=true
     done
-    
+
     echo "$port"
 }
 
